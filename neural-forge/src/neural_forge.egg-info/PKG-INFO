@@ -1,0 +1,140 @@
+Metadata-Version: 2.4
+Name: neural-forge
+Version: 0.1.0
+Summary: A modular deep-learning training and inference framework built on PyTorch
+Author: Neural Forge Contributors
+License: MIT
+Keywords: deep-learning,pytorch,training,inference
+Classifier: Development Status :: 3 - Alpha
+Classifier: Intended Audience :: Science/Research
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Topic :: Scientific/Engineering :: Artificial Intelligence
+Requires-Python: >=3.10
+Description-Content-Type: text/markdown
+Requires-Dist: torch>=2.2.0
+Requires-Dist: torchvision>=0.17.0
+Requires-Dist: torchaudio>=2.2.0
+Requires-Dist: numpy>=1.26.0
+Requires-Dist: pandas>=2.2.0
+Requires-Dist: scikit-learn>=1.4.0
+Requires-Dist: pyyaml>=6.0
+Requires-Dist: omegaconf>=2.3.0
+Requires-Dist: tqdm>=4.66.0
+Requires-Dist: tensorboard>=2.16.0
+Requires-Dist: fastapi>=0.110.0
+Requires-Dist: uvicorn[standard]>=0.29.0
+Requires-Dist: pydantic>=2.6.0
+Requires-Dist: python-multipart>=0.0.9
+Requires-Dist: httpx>=0.27.0
+Requires-Dist: pillow>=10.3.0
+Requires-Dist: matplotlib>=3.8.0
+Provides-Extra: dev
+Requires-Dist: pytest>=8.1.0; extra == "dev"
+Requires-Dist: pytest-cov>=5.0.0; extra == "dev"
+Requires-Dist: pytest-asyncio>=0.23.0; extra == "dev"
+Requires-Dist: ruff>=0.4.0; extra == "dev"
+Requires-Dist: mypy>=1.9.0; extra == "dev"
+Provides-Extra: distributed
+Requires-Dist: deepspeed>=0.14.0; extra == "distributed"
+
+# Neural Forge
+
+A modular deep-learning training and inference framework built on PyTorch.  Neural Forge lets you
+define models, configure training pipelines, and serve predictions through a REST API — all from
+a single cohesive project.
+
+---
+
+## Project layout
+
+```
+neural-forge/
+├── src/
+│   ├── models/        # Network architectures (MLP, CNN, Transformer, …)
+│   ├── data/          # Dataset classes and data-loading utilities
+│   ├── training/      # Trainer, optimiser helpers, LR schedulers
+│   ├── inference/     # Predictor and batch-inference pipeline
+│   ├── evaluation/    # Metrics (accuracy, F1, AUROC, …) and reports
+│   └── utils/         # Logging, seeding, checkpoint I/O, config helpers
+├── api/               # FastAPI application and route handlers
+├── configs/           # YAML experiment configuration files
+├── docker/            # Dockerfile and docker-compose
+├── tests/             # Unit and integration tests
+├── pyproject.toml
+├── README.md
+└── run_training.sh
+```
+
+---
+
+## Quick start
+
+### 1 — Install
+
+```bash
+# Create and activate a virtual environment first
+python -m venv .venv && source .venv/bin/activate
+
+# Editable install with dev extras
+pip install -e ".[dev]"
+```
+
+### 2 — Train a model
+
+```bash
+# Using the shell wrapper
+bash run_training.sh --config configs/default.yaml
+
+# Or call the module directly
+python -m neural_forge.training.trainer --config configs/default.yaml
+```
+
+### 3 — Serve predictions
+
+```bash
+uvicorn neural_forge.api.app:app --host 0.0.0.0 --port 8000 --reload
+```
+
+Then POST to `http://localhost:8000/predict` with a JSON body.
+
+### 4 — Run tests
+
+```bash
+pytest
+```
+
+---
+
+## Configuration
+
+Experiment settings live in `configs/`.  The default configuration is
+`configs/default.yaml`.  Override any value from the command line using
+[OmegaConf](https://omegaconf.readthedocs.io/) dot-notation syntax:
+
+```bash
+python -m neural_forge.training.trainer \
+    --config configs/default.yaml \
+    training.epochs=50 \
+    training.lr=3e-4
+```
+
+---
+
+## Docker
+
+```bash
+cd docker
+docker compose up --build
+```
+
+This starts the training service and the API server as separate containers.
+
+---
+
+## License
+
+MIT

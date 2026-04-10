@@ -1,0 +1,32 @@
+services:
+  train:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+      target: train
+    volumes:
+      - ../data:/app/data
+      - ../checkpoints:/app/checkpoints
+      - ../runs:/app/runs
+    environment:
+      - PYTHONPATH=/app/src
+    command: ["--config", "configs/default.yaml"]
+
+  api:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+      target: api
+    ports:
+      - "8000:8000"
+    volumes:
+      - ../checkpoints:/app/checkpoints
+    environment:
+      - PYTHONPATH=/app/src
+    depends_on:
+      - train
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3

@@ -1,0 +1,37 @@
+# resnet_cifar10.yaml — example config for training on CIFAR-10
+# Inherits defaults and overrides specific keys.
+
+seed: 0
+
+data:
+  dataset: "cifar10"
+  data_dir: "data/cifar10"
+  val_split: 0.1
+  test_split: 0.1
+  batch_size: 128
+  num_workers: 8
+  image_size: 32
+  augment: true
+
+model:
+  name: "simple_cnn"
+  in_channels: 3
+  num_classes: 10
+  base_filters: 64
+
+training:
+  epochs: 100
+  lr: 1.0e-3
+  weight_decay: 5.0e-4
+  optimizer: "adamw"
+  scheduler: "cosine"
+  scheduler_kwargs:
+    T_max: 100
+
+checkpoints:
+  dir: "checkpoints/cifar10/"
+  save_every: 10
+
+logging:
+  log_every: 100
+  tensorboard_dir: "runs/cifar10/"

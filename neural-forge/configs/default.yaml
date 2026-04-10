@@ -1,0 +1,51 @@
+# default.yaml — Neural Forge default experiment configuration
+
+seed: 42
+
+# ---------------------------------------------------------------------------
+# Data
+# ---------------------------------------------------------------------------
+data:
+  dataset: "custom"          # dataset name understood by the data loader
+  data_dir: "data/"
+  val_split: 0.1
+  test_split: 0.1
+  batch_size: 64
+  num_workers: 4
+  image_size: 224
+  augment: true
+
+# ---------------------------------------------------------------------------
+# Model
+# ---------------------------------------------------------------------------
+model:
+  name: "simple_cnn"         # registered name in ModelRegistry
+  in_channels: 3
+  num_classes: 10
+  base_filters: 32
+
+# ---------------------------------------------------------------------------
+# Training
+# ---------------------------------------------------------------------------
+training:
+  epochs: 30
+  lr: 1.0e-3
+  weight_decay: 1.0e-4
+  optimizer: "adamw"
+  scheduler: "cosine"
+  scheduler_kwargs:
+    T_max: 30
+
+# ---------------------------------------------------------------------------
+# Checkpointing
+# ---------------------------------------------------------------------------
+checkpoints:
+  dir: "checkpoints/"
+  save_every: 5              # save every N epochs (in addition to best)
+
+# ---------------------------------------------------------------------------
+# Logging
+# ---------------------------------------------------------------------------
+logging:
+  log_every: 50              # log loss every N steps
+  tensorboard_dir: "runs/"

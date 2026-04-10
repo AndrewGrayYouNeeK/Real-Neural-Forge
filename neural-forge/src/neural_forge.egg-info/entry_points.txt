@@ -1,0 +1,3 @@
+[console_scripts]
+neural-forge-serve = neural_forge.api.app:main
+neural-forge-train = neural_forge.training.trainer:main
