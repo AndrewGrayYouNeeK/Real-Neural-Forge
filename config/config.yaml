@@ -1,0 +1,21 @@
+model:
+  input_dim: 1          # number of input features per time step
+  output_dim: 1         # number of output values per prediction
+  d_model: 64           # transformer embedding dimension
+  nhead: 4              # number of attention heads
+  num_encoder_layers: 3 # number of transformer encoder layers
+  dim_feedforward: 256  # feedforward network dimension
+  dropout: 0.1          # dropout probability
+  max_seq_len: 512      # maximum sequence length for positional encoding
+
+training:
+  batch_size: 32
+  learning_rate: 0.001
+  epochs: 50
+  device: cpu           # set to "cuda" to use GPU
+  checkpoint_dir: checkpoints
+  log_interval: 10
+
+inference:
+  device: cpu           # set to "cuda" to use GPU
+  checkpoint_path: checkpoints/best_model.pt
