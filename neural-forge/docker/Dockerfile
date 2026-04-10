@@ -23,8 +23,6 @@ RUN chmod +x run_training.sh
 # ── API / Serve image ───────────────────────────────────────────────────────
 FROM base AS api
 
-COPY api/ ./api/
-
 EXPOSE 8000
 
 CMD ["uvicorn", "neural_forge.api.app:app", "--host", "0.0.0.0", "--port", "8000"]
