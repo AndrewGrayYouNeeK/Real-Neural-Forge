@@ -107,9 +107,47 @@ Returns `{"status": "ok"}` when the service is running.
 
 Interactive docs are available at <http://localhost:8000/docs>.
 
-## Tests
+## Development
+
+### Running Tests
 
 ```bash
-pip install pytest
+# Install dev dependencies
+pip install -r requirements-dev.txt
+
+# Run tests
 pytest
+
+# Run tests with coverage
+pytest --cov=src --cov-report=html
 ```
+
+### Code Quality
+
+This project uses automated code quality tools:
+
+```bash
+# Install pre-commit hooks (optional but recommended)
+pip install pre-commit
+pre-commit install
+
+# Run linting
+ruff check src/ tests/
+
+# Auto-fix linting issues
+ruff check --fix src/ tests/
+
+# Run type checking
+mypy src/
+```
+
+### CI/CD
+
+The project includes a GitHub Actions workflow that automatically:
+- Runs tests on Python 3.10, 3.11, and 3.12
+- Performs linting with Ruff
+- Type checks with mypy
+- Generates test coverage reports
+- Builds and tests the Docker image
+
+All pull requests are automatically checked against these quality standards.
