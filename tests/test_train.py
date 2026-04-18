@@ -2,6 +2,7 @@
 
 import os
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 import torch
@@ -98,3 +99,108 @@ class TestTrain:
             assert "epoch" in ckpt
         finally:
             os.unlink(tmp_config)
+
+    @patch("torch.cuda.is_available")
+    def test_training_cuda_fallback(self, mock_cuda_available, tmp_path):
+        """Test CUDA fallback when CUDA is requested but not available."""
+        mock_cuda_available.return_value = False
+
+        cfg = load_config("config/config.yaml")
+        cfg["training"]["epochs"] = 1
+        cfg["training"]["batch_size"] = 8
+        cfg["training"]["device"] = "cuda"
+        cfg["training"]["checkpoint_dir"] = str(tmp_path)
+
+        import tempfile
+        import yaml
+
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".yaml", delete=False
+        ) as fh:
+            yaml.dump(cfg, fh)
+            tmp_config = fh.name
+
+        try:
+            # Should complete without error, falling back to CPU
+            train(tmp_config)
+            assert (tmp_path / "best_model.pt").exists()
+        finally:
+            os.unlink(tmp_config)
+
+    def test_training_with_different_batch_sizes(self, tmp_path):
+        """Test training with different batch sizes."""
+        cfg = load_config("config/config.yaml")
+        cfg["training"]["epochs"] = 1
+        cfg["training"]["batch_size"] = 4
+        cfg["training"]["device"] = "cpu"
+        cfg["training"]["checkpoint_dir"] = str(tmp_path)
+
+        import tempfile
+        import yaml
+
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".yaml", delete=False
+        ) as fh:
+            yaml.dump(cfg, fh)
+            tmp_config = fh.name
+
+        try:
+            train(tmp_config)
+            assert (tmp_path / "best_model.pt").exists()
+        finally:
+            os.unlink(tmp_config)
+
+
+class TestMakeSineDatasetEdgeCases:
+    def test_large_dataset(self):
+        """Test generating a large dataset."""
+        n, seq_len = 1000, 50
+        inputs, targets = make_sine_dataset(n_samples=n, seq_len=seq_len)
+        assert inputs.shape == (n, seq_len, 1)
+        assert targets.shape == (n, 1)
+
+    def test_small_sequence(self):
+        """Test generating a dataset with very small sequence length."""
+        n, seq_len = 10, 2
+        inputs, targets = make_sine_dataset(n_samples=n, seq_len=seq_len)
+        assert inputs.shape == (n, seq_len, 1)
+        assert targets.shape == (n, 1)
+
+    def test_high_noise(self):
+        """Test generating a dataset with high noise."""
+        inputs, targets = make_sine_dataset(n_samples=50, seq_len=20, noise=0.5)
+        assert inputs.shape == (50, 20, 1)
+        assert targets.shape == (50, 1)
+        # With high noise, values should be more spread out
+        assert inputs.std().item() > 0.3
+
+
+class TestBuildModelEdgeCases:
+    def test_different_model_sizes(self):
+        """Test building models with different configurations."""
+        cfg = load_config("config/config.yaml")
+        cfg["model"]["d_model"] = 32
+        cfg["model"]["nhead"] = 2
+        cfg["model"]["num_encoder_layers"] = 2
+
+        model = build_model(cfg, torch.device("cpu"))
+        assert isinstance(model, torch.nn.Module)
+
+        # Verify the model has parameters
+        param_count = sum(p.numel() for p in model.parameters())
+        assert param_count > 0
+
+    def test_multi_dimensional_io(self):
+        """Test building a model with multi-dimensional input/output."""
+        cfg = load_config("config/config.yaml")
+        cfg["model"]["input_dim"] = 3
+        cfg["model"]["output_dim"] = 2
+
+        model = build_model(cfg, torch.device("cpu"))
+        assert isinstance(model, torch.nn.Module)
+
+        # Test forward pass
+        batch, seq_len = 4, 10
+        x = torch.randn(batch, seq_len, 3)
+        out = model(x)
+        assert out.shape == (batch, 2)
