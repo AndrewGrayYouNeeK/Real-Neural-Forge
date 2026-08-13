@@ -6,42 +6,27 @@ from pathlib import Path
 from typing import Any
 
 import torch
-import yaml
-from fastapi import FastAPI, HTTPException
+from fastapi import BackgroundTasks, FastAPI, HTTPException
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from src.model import TimeSeriesTransformer
+from src.inference.predictor import Predictor
+from src.models.registry import ModelRegistry, build_model
+from src.storage.experiments import ExperimentStore
+from src.training.trainer import TimeSeriesTrainer
+from src.utils.config import load_config
 
 logger = logging.getLogger("uvicorn.error")
 
-# ---------------------------------------------------------------------------
-# Global model state
-# ---------------------------------------------------------------------------
 _state: dict[str, Any] = {}
-
-
-def _load_config(config_path: str = "config/config.yaml") -> dict:
-    with open(config_path) as f:
-        return yaml.safe_load(f)
-
-
-def _build_model_from_config(cfg: dict) -> TimeSeriesTransformer:
-    m_cfg = cfg["model"]
-    return TimeSeriesTransformer(
-        input_dim=m_cfg["input_dim"],
-        output_dim=m_cfg["output_dim"],
-        d_model=m_cfg["d_model"],
-        nhead=m_cfg["nhead"],
-        num_encoder_layers=m_cfg["num_encoder_layers"],
-        dim_feedforward=m_cfg["dim_feedforward"],
-        dropout=m_cfg["dropout"],
-        max_seq_len=m_cfg["max_seq_len"],
-    )
+_store = ExperimentStore()
+FRONTEND_DIR = Path(__file__).resolve().parent.parent / "frontend"
 
 
 def load_model(config_path: str = "config/config.yaml") -> None:
     """Load (or lazily initialise) the model into the global state dict."""
-    cfg = _load_config(config_path)
+    cfg = load_config(config_path)
     i_cfg = cfg["inference"]
 
     device_str = i_cfg.get("device", "cpu")
@@ -50,29 +35,27 @@ def load_model(config_path: str = "config/config.yaml") -> None:
         device_str = "cpu"
     device = torch.device(device_str)
 
-    model = _build_model_from_config(cfg)
+    model = build_model(cfg)
     checkpoint_path = Path(i_cfg.get("checkpoint_path", ""))
 
     if checkpoint_path.exists():
-        checkpoint = torch.load(checkpoint_path, map_location=device, weights_only=True)
-        model.load_state_dict(checkpoint["model_state_dict"])
+        predictor = Predictor.from_checkpoint(model, checkpoint_path, device=device)
         logger.info("Loaded checkpoint from %s", checkpoint_path)
+        _state["predictor"] = predictor
+        _state["model"] = predictor.model
     else:
         logger.warning(
             "Checkpoint not found at '%s'. Using untrained model.", checkpoint_path
         )
+        model.to(device)
+        model.eval()
+        _state["predictor"] = Predictor(model, device=device)
+        _state["model"] = model
 
-    model.to(device)
-    model.eval()
-
-    _state["model"] = model
     _state["device"] = device
     _state["config"] = cfg
+    _state["training"] = {"status": "idle", "result": None}
 
-
-# ---------------------------------------------------------------------------
-# Lifespan
-# ---------------------------------------------------------------------------
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):  # noqa: ARG001
@@ -81,71 +64,124 @@ async def lifespan(app: FastAPI):  # noqa: ARG001
     _state.clear()
 
 
-# ---------------------------------------------------------------------------
-# Application
-# ---------------------------------------------------------------------------
-
 app = FastAPI(
     title="Neural Forge",
     description="Production-ready transformer pipeline for time-series prediction.",
-    version="1.0.0",
+    version="2.0.0",
     lifespan=lifespan,
 )
 
+if FRONTEND_DIR.exists():
+    app.mount("/assets", StaticFiles(directory=FRONTEND_DIR), name="assets")
 
-# ---------------------------------------------------------------------------
-# Schemas
-# ---------------------------------------------------------------------------
 
 class PredictRequest(BaseModel):
-    """Input payload for the /predict endpoint."""
-
     sequence: list[list[float]] = Field(
         ...,
-        description=(
-            "Time-series input as a 2-D list of shape [seq_len, input_dim]. "
-            "Each inner list is one time step."
-        ),
+        description="Time-series input as a 2-D list of shape [seq_len, input_dim].",
         examples=[[[0.0], [0.1], [0.2]]],
     )
 
 
 class PredictResponse(BaseModel):
-    """Output payload for the /predict endpoint."""
-
-    prediction: list[float] = Field(
-        ...,
-        description="Model output of shape [output_dim].",
-    )
+    prediction: list[float]
 
 
-# ---------------------------------------------------------------------------
-# Routes
-# ---------------------------------------------------------------------------
+class TrainRequest(BaseModel):
+    config_path: str = "config/config.yaml"
+
+
+class TrainResponse(BaseModel):
+    status: str
+    message: str
+
+
+def _run_training(config_path: str) -> None:
+    _state["training"] = {"status": "running", "result": None}
+    try:
+        result = TimeSeriesTrainer(config_path).train()
+        load_model(config_path)
+        _state["training"] = {"status": "completed", "result": result}
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("Training failed")
+        _state["training"] = {"status": "failed", "result": {"error": str(exc)}}
+
+
+@app.get("/", include_in_schema=False)
+def dashboard() -> FileResponse:
+    index = FRONTEND_DIR / "index.html"
+    if not index.exists():
+        raise HTTPException(status_code=404, detail="Dashboard not found.")
+    return FileResponse(index)
+
 
 @app.get("/health", tags=["monitoring"])
 def health() -> dict[str, str]:
-    """Return service liveness status."""
     return {"status": "ok"}
+
+
+@app.get("/model/info", tags=["model"])
+def model_info() -> dict[str, Any]:
+    model = _state.get("model")
+    cfg = _state.get("config", {})
+    if model is None:
+        raise HTTPException(status_code=503, detail="Model not loaded.")
+
+    param_count = sum(p.numel() for p in model.parameters())
+    checkpoint_path = Path(cfg.get("inference", {}).get("checkpoint_path", ""))
+    return {
+        "architecture": cfg.get("model", {}).get("name", "time_series_transformer"),
+        "available_models": ModelRegistry.list_models(),
+        "parameters": param_count,
+        "device": str(_state.get("device")),
+        "checkpoint_loaded": checkpoint_path.exists(),
+        "checkpoint_path": str(checkpoint_path),
+        "input_dim": cfg.get("model", {}).get("input_dim"),
+        "output_dim": cfg.get("model", {}).get("output_dim"),
+    }
+
+
+@app.get("/experiments", tags=["experiments"])
+def list_experiments(limit: int = 20) -> dict[str, Any]:
+    return {"experiments": _store.list_experiments(limit=limit)}
+
+
+@app.get("/experiments/{experiment_id}", tags=["experiments"])
+def get_experiment(experiment_id: int) -> dict[str, Any]:
+    experiment = _store.get_experiment(experiment_id)
+    if experiment is None:
+        raise HTTPException(status_code=404, detail="Experiment not found.")
+    experiment["metric_history"] = _store.get_metrics(experiment_id)
+    return experiment
+
+
+@app.get("/training/status", tags=["training"])
+def training_status() -> dict[str, Any]:
+    return _state.get("training", {"status": "idle", "result": None})
+
+
+@app.post("/train", response_model=TrainResponse, tags=["training"])
+def start_training(
+    body: TrainRequest,
+    background_tasks: BackgroundTasks,
+) -> TrainResponse:
+    if _state.get("training", {}).get("status") == "running":
+        raise HTTPException(status_code=409, detail="Training already in progress.")
+
+    background_tasks.add_task(_run_training, body.config_path)
+    _state["training"] = {"status": "running", "result": None}
+    return TrainResponse(status="running", message="Training started in background.")
 
 
 @app.post("/predict", response_model=PredictResponse, tags=["inference"])
 def predict(body: PredictRequest) -> PredictResponse:
-    """
-    Run inference on a time-series sequence.
-
-    The *sequence* field must be a 2-D list of shape ``[seq_len, input_dim]``
-    where ``input_dim`` matches the value configured in ``config/config.yaml``.
-    """
-    model: TimeSeriesTransformer = _state.get("model")  # type: ignore[assignment]
-    if model is None:
+    predictor: Predictor | None = _state.get("predictor")
+    if predictor is None:
         raise HTTPException(status_code=503, detail="Model not loaded.")
 
-    device: torch.device = _state["device"]
     cfg: dict = _state["config"]
     expected_input_dim: int = cfg["model"]["input_dim"]
 
-    # Validate input shape
     if not body.sequence:
         raise HTTPException(status_code=422, detail="sequence must not be empty.")
     if any(len(step) != expected_input_dim for step in body.sequence):
@@ -157,8 +193,6 @@ def predict(body: PredictRequest) -> PredictResponse:
             ),
         )
 
-    x = torch.tensor(body.sequence, dtype=torch.float32).unsqueeze(0).to(device)
-    with torch.no_grad():
-        output = model(x)
-
+    x = torch.tensor(body.sequence, dtype=torch.float32)
+    output = predictor.predict(x)
     return PredictResponse(prediction=output.squeeze(0).tolist())

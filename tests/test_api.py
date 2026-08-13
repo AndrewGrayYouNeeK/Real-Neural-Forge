@@ -182,3 +182,26 @@ class TestPredictRequestValidation:
         payload = {"sequence": [[0.0], [0.0], [0.0]]}
         resp = client.post("/predict", json=payload)
         assert resp.status_code == 200
+
+
+class TestNewEndpoints:
+    def test_model_info(self, client):
+        resp = client.get("/model/info")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["architecture"] == "time_series_transformer"
+        assert "parameters" in data
+
+    def test_training_status(self, client):
+        resp = client.get("/training/status")
+        assert resp.status_code == 200
+        assert "status" in resp.json()
+
+    def test_list_experiments(self, client):
+        resp = client.get("/experiments")
+        assert resp.status_code == 200
+        assert "experiments" in resp.json()
+
+    def test_dashboard(self, client):
+        resp = client.get("/")
+        assert resp.status_code == 200

@@ -6,6 +6,8 @@ services:
     volumes:
       - ./config:/app/config:ro
       - ./checkpoints:/app/checkpoints
+      - ./data:/app/data
+      - ./frontend:/app/frontend:ro
     environment:
       - PYTHONUNBUFFERED=1
     restart: unless-stopped
