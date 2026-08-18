@@ -71,6 +71,8 @@ class ExperimentStore:
                 """,
                 (name, model_name, json.dumps(config), now, now),
             )
+            if cursor.lastrowid is None:
+                raise RuntimeError("Failed to create experiment record.")
             return int(cursor.lastrowid)
 
     def log_metric(

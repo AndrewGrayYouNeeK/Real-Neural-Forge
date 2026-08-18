@@ -1,6 +1,7 @@
 """Transformer encoder model for time-series prediction."""
 
 import math
+from typing import cast
 
 import torch
 import torch.nn as nn
@@ -25,8 +26,9 @@ class PositionalEncoding(nn.Module):
         self.register_buffer("pe", pe)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        x = x + self.pe[:, : x.size(1), :]
-        return self.dropout(x)
+        pe = cast(torch.Tensor, self.pe)
+        x = x + pe[:, : x.size(1), :]
+        return cast(torch.Tensor, self.dropout(x))
 
 
 class TimeSeriesTransformer(nn.Module):
@@ -69,4 +71,4 @@ class TimeSeriesTransformer(nn.Module):
         x = self.pos_encoding(x)
         x = self.transformer_encoder(x, src_key_padding_mask=src_key_padding_mask)
         x = x[:, -1, :]
-        return self.output_projection(x)
+        return cast(torch.Tensor, self.output_projection(x))

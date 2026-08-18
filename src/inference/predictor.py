@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import cast
 
 import torch
 import torch.nn as nn
@@ -37,4 +38,4 @@ class Predictor:
         x = x.to(self.device)
         if x.dim() == 2:
             x = x.unsqueeze(0)
-        return self.model(x)
+        return cast(torch.Tensor, self.model(x))

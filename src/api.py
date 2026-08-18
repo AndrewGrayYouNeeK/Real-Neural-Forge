@@ -157,7 +157,9 @@ def get_experiment(experiment_id: int) -> dict[str, Any]:
 
 @app.get("/training/status", tags=["training"])
 def training_status() -> dict[str, Any]:
-    return _state.get("training", {"status": "idle", "result": None})
+    default: dict[str, Any] = {"status": "idle", "result": None}
+    training = _state.get("training")
+    return training if training is not None else default
 
 
 @app.post("/train", response_model=TrainResponse, tags=["training"])
