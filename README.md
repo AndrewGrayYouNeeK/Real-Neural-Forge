@@ -146,6 +146,16 @@ Returns the current background training state.
 
 Lists recent training runs stored in the native SQLite experiment database.
 
+## Deployment
+
+This project is deployed with **Docker**, not Vercel. Use `docker compose up --build` locally or run the container on any host with Python/PyTorch support.
+
+`vercel.json` disables Vercel GitHub auto-deployments for this repository. If Vercel status checks still appear on pull requests, remove the integration entirely:
+
+1. Open GitHub → **Settings** → **Integrations** → **Applications** → **Vercel**
+2. Click **Configure**, then remove **Real-Neural-Forge** from the repository list
+3. In the [Vercel dashboard](https://vercel.com/dashboard), delete any linked `real-neural-forge` projects
+
 ## Development
 
 ### Running Tests
