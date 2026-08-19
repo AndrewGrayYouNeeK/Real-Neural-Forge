@@ -11,6 +11,7 @@ build/
 venv/
 env/
 checkpoints/
+/data/
 *.pt
 *.pth
 .pytest_cache/

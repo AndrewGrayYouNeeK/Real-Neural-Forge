@@ -1,8 +1,5 @@
 """Tests for the FastAPI endpoints."""
 
-import os
-import tempfile
-from pathlib import Path
 from unittest.mock import patch
 
 import pytest
@@ -68,7 +65,7 @@ class TestPredictEndpoint:
     def test_model_not_loaded_error(self):
         """Test that predict returns 503 when model is not in state."""
         # Create a fresh TestClient without loading model via lifespan
-        from src.api import FastAPI, predict, health
+        from src.api import FastAPI, health, predict
 
         # Create a minimal app without lifespan
         test_app = FastAPI()
@@ -181,4 +178,27 @@ class TestPredictRequestValidation:
         """Test that zero values are accepted."""
         payload = {"sequence": [[0.0], [0.0], [0.0]]}
         resp = client.post("/predict", json=payload)
+        assert resp.status_code == 200
+
+
+class TestNewEndpoints:
+    def test_model_info(self, client):
+        resp = client.get("/model/info")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["architecture"] == "time_series_transformer"
+        assert "parameters" in data
+
+    def test_training_status(self, client):
+        resp = client.get("/training/status")
+        assert resp.status_code == 200
+        assert "status" in resp.json()
+
+    def test_list_experiments(self, client):
+        resp = client.get("/experiments")
+        assert resp.status_code == 200
+        assert "experiments" in resp.json()
+
+    def test_dashboard(self, client):
+        resp = client.get("/")
         assert resp.status_code == 200

@@ -1,12 +1,15 @@
 # Real-Neural-Forge
 
-A production-ready transformer pipeline for time-series prediction, built with PyTorch, CUDA, and FastAPI.
+A production-ready transformer pipeline for time-series prediction, built with PyTorch, CUDA, and FastAPI. This is a fully native stack — no Base44 SDK, no vendor-hosted backend.
 
 ## Features
 
 - **Transformer encoder architecture** – positional encoding + stacked encoder layers
 - **GPU-accelerated training & inference** – CUDA support via PyTorch; automatically falls back to CPU when no GPU is available
-- **FastAPI REST endpoint** – `POST /predict` for inference, `GET /health` for liveness
+- **FastAPI REST API** – prediction, training, experiment tracking, and model metadata
+- **Native web dashboard** – browser UI served directly from FastAPI at `/`
+- **SQLite experiment store** – replaces Base44 entity persistence for runs and metrics
+- **Modular Python package** – models, data, training, evaluation, inference, and storage layers
 - **Docker & docker-compose support** – single `docker compose up --build` to get started
 - **Configurable via YAML** – all hyper-parameters in `config/config.yaml`
 
@@ -15,15 +18,23 @@ A production-ready transformer pipeline for time-series prediction, built with P
 ```
 .
 ├── config/
-│   └── config.yaml        # YAML configuration (model, training, inference)
+│   └── config.yaml
+├── frontend/
+│   ├── index.html
+│   ├── app.js
+│   └── styles.css
 ├── src/
-│   ├── model.py           # TimeSeriesTransformer + PositionalEncoding
-│   ├── train.py           # Training loop & checkpoint saving
-│   └── api.py             # FastAPI application
+│   ├── api.py
+│   ├── model.py
+│   ├── train.py
+│   ├── models/
+│   ├── data/
+│   ├── training/
+│   ├── evaluation/
+│   ├── inference/
+│   ├── storage/
+│   └── utils/
 ├── tests/
-│   ├── test_model.py
-│   ├── test_api.py
-│   └── test_train.py
 ├── Dockerfile
 ├── docker-compose.yml
 └── requirements.txt
@@ -37,41 +48,46 @@ A production-ready transformer pipeline for time-series prediction, built with P
 docker compose up --build
 ```
 
-The API will be available at <http://localhost:8000>.
+The API and dashboard will be available at <http://localhost:8000>.
 
 ### Local Development
 
 ```bash
 pip install -r requirements.txt
 
-# (Optional) train a model first
+# Train a model
 python -m src.train --config config/config.yaml
 
 # Start the API server
 uvicorn src.api:app --reload
 ```
 
+Open <http://localhost:8000> for the dashboard or <http://localhost:8000/docs> for API docs.
+
 ## Configuration
 
-Edit `config/config.yaml` to change model hyper-parameters, training settings, or
-the inference device:
+Edit `config/config.yaml` to change model hyper-parameters, data source, training settings, or inference device:
 
 ```yaml
 model:
-  input_dim: 1        # number of input features per time step
-  output_dim: 1       # number of output values per prediction
-  d_model: 64         # transformer embedding dimension
-  nhead: 4            # number of attention heads
+  name: time_series_transformer
+  input_dim: 1
+  output_dim: 1
+  d_model: 64
+  nhead: 4
   num_encoder_layers: 3
-  dim_feedforward: 256
-  dropout: 0.1
-  max_seq_len: 512
+
+data:
+  source: synthetic
+  n_samples: 1024
+  seq_len: 64
 
 training:
+  experiment_name: default
   batch_size: 32
   learning_rate: 0.001
   epochs: 50
-  device: cpu         # change to "cuda" to use GPU
+  device: cpu
   checkpoint_dir: checkpoints
 
 inference:
@@ -79,11 +95,26 @@ inference:
   checkpoint_path: checkpoints/best_model.pt
 ```
 
+To train from CSV instead of synthetic data:
+
+```yaml
+data:
+  source: csv
+  path: data/timeseries.csv
+  feature_columns: ["value"]
+  target_column: value
+  seq_len: 64
+```
+
 ## API Reference
 
 ### `GET /health`
 
 Returns `{"status": "ok"}` when the service is running.
+
+### `GET /model/info`
+
+Returns architecture, parameter count, device, and checkpoint status.
 
 ### `POST /predict`
 
@@ -95,8 +126,6 @@ Returns `{"status": "ok"}` when the service is running.
 }
 ```
 
-`sequence` is a 2-D list of shape `[seq_len, input_dim]`.
-
 **Response**
 
 ```json
@@ -105,49 +134,44 @@ Returns `{"status": "ok"}` when the service is running.
 }
 ```
 
-Interactive docs are available at <http://localhost:8000/docs>.
+### `POST /train`
+
+Starts a background training job using the configured YAML file.
+
+### `GET /training/status`
+
+Returns the current background training state.
+
+### `GET /experiments`
+
+Lists recent training runs stored in the native SQLite experiment database.
+
+## Deployment
+
+This project is deployed with **Docker**, not Vercel. Use `docker compose up --build` locally or run the container on any host with Python/PyTorch support.
+
+`vercel.json` disables Vercel GitHub auto-deployments for this repository. If Vercel status checks still appear on pull requests, remove the integration entirely:
+
+1. Open GitHub → **Settings** → **Integrations** → **Applications** → **Vercel**
+2. Click **Configure**, then remove **Real-Neural-Forge** from the repository list
+3. In the [Vercel dashboard](https://vercel.com/dashboard), delete any linked `real-neural-forge` projects
 
 ## Development
 
 ### Running Tests
 
 ```bash
-# Install dev dependencies
 pip install -r requirements-dev.txt
-
-# Run tests
 pytest
-
-# Run tests with coverage
-pytest --cov=src --cov-report=html
 ```
 
 ### Code Quality
 
-This project uses automated code quality tools:
-
 ```bash
-# Install pre-commit hooks (optional but recommended)
-pip install pre-commit
-pre-commit install
-
-# Run linting
 ruff check src/ tests/
-
-# Auto-fix linting issues
-ruff check --fix src/ tests/
-
-# Run type checking
 mypy src/
 ```
 
 ### CI/CD
 
-The project includes a GitHub Actions workflow that automatically:
-- Runs tests on Python 3.10, 3.11, and 3.12
-- Performs linting with Ruff
-- Type checks with mypy
-- Generates test coverage reports
-- Builds and tests the Docker image
-
-All pull requests are automatically checked against these quality standards.
+The project includes a GitHub Actions workflow that runs tests, linting, type checks, coverage, and Docker image validation on every pull request.

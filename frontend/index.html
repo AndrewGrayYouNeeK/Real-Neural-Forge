@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Neural Forge</title>
+    <link rel="stylesheet" href="/assets/styles.css" />
+  </head>
+  <body>
+    <div class="grid-bg"></div>
+    <main class="shell">
+      <header class="hero">
+        <p class="eyebrow">// native ml platform</p>
+        <h1>Neural Forge</h1>
+        <p class="subtitle">
+          Transformer pipeline for time-series prediction. No Base44. No vendor lock-in.
+        </p>
+      </header>
+
+      <section class="panel">
+        <div class="panel-header">
+          <h2>System Status</h2>
+          <button id="refresh-btn" class="btn secondary">Refresh</button>
+        </div>
+        <div id="status-grid" class="status-grid"></div>
+      </section>
+
+      <section class="panel two-col">
+        <div>
+          <div class="panel-header">
+            <h2>Run Prediction</h2>
+          </div>
+          <label for="sequence-input">Sequence JSON</label>
+          <textarea id="sequence-input" rows="8">[[0.1], [0.2], [0.3], [0.4], [0.5]]</textarea>
+          <button id="predict-btn" class="btn primary">Predict</button>
+          <pre id="prediction-output" class="output"></pre>
+        </div>
+
+        <div>
+          <div class="panel-header">
+            <h2>Training</h2>
+          </div>
+          <p class="hint">Kick off a background training run using the current config.</p>
+          <button id="train-btn" class="btn primary">Start Training</button>
+          <pre id="training-output" class="output"></pre>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-header">
+          <h2>Recent Experiments</h2>
+        </div>
+        <div id="experiments-list" class="experiments-list"></div>
+      </section>
+    </main>
+    <script src="/assets/app.js"></script>
+  </body>
+</html>
