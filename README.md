@@ -146,6 +146,16 @@ Returns the current background training state.
 
 Lists recent training runs stored in the native SQLite experiment database.
 
+### YouNeeK Time
+
+YouNeeK Time is **100 units / 100 minutes / 100 seconds** (not App Store 10/10/10). Noon is `50:00:00`. The year is 354 days with 10-day weeks, epoch `2026-01-01`. Lunar phase uses the mean synodic month (`00:00:00` new, `50:00:00` full).
+
+- `GET /youneek/now` — current YouNeeK clocks
+- `GET /youneek/convert?at=<ISO-8601>` — convert a Gregorian timestamp
+- `GET /youneek/forecast/next-minute` — next YouNeeK minute boundary
+- `GET /youneek/calendar` — year, 10-day week, year clock
+- `GET /youneek/lunar` — lunar YouNeeK clock
+
 ## Deployment
 
 This project is deployed with **Docker**, not Vercel. Use `docker compose up --build` locally or run the container on any host with Python/PyTorch support.
