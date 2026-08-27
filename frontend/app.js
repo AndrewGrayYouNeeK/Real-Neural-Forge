@@ -55,15 +55,40 @@ function renderExperiments(experiments) {
     .join("");
 }
 
+function renderYouneek(now) {
+  const grid = document.getElementById("youneek-grid");
+  const cards = [
+    ["Clock", now.time.display],
+    ["Year clock", now.calendar.year_clock.display],
+    ["Year / week / day", `${now.calendar.year_index} / ${now.calendar.week} / ${now.calendar.weekday}`],
+    ["Lunar", now.lunar.clock.display],
+    ["Next minute", now.forecast.next_minute.youneek_display],
+    ["Scale", "100/100/100"],
+  ];
+  grid.innerHTML = cards
+    .map(
+      ([label, value]) => `
+        <div class="stat-card">
+          <span>${label}</span>
+          <strong>${value}</strong>
+        </div>
+      `
+    )
+    .join("");
+  document.getElementById("youneek-output").textContent = JSON.stringify(now, null, 2);
+}
+
 async function refreshDashboard() {
-  const [health, modelInfo, training, experiments] = await Promise.all([
+  const [health, modelInfo, training, experiments, youneek] = await Promise.all([
     fetchJson("/health"),
     fetchJson("/model/info"),
     fetchJson("/training/status"),
     fetchJson("/experiments"),
+    fetchJson("/youneek/now"),
   ]);
 
   renderStatus(modelInfo, health, training);
+  renderYouneek(youneek);
   renderExperiments(experiments.experiments);
   document.getElementById("training-output").textContent = JSON.stringify(
     training,

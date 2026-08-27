@@ -16,6 +16,7 @@ from src.models.registry import ModelRegistry, build_model
 from src.storage.experiments import ExperimentStore
 from src.training.trainer import TimeSeriesTrainer
 from src.utils.config import load_config
+from src.youneek import parse_moment, snapshot
 
 logger = logging.getLogger("uvicorn.error")
 
@@ -173,6 +174,50 @@ def start_training(
     background_tasks.add_task(_run_training, body.config_path)
     _state["training"] = {"status": "running", "result": None}
     return TrainResponse(status="running", message="Training started in background.")
+
+
+@app.get("/youneek/now", tags=["youneek"])
+def youneek_now() -> dict[str, Any]:
+    return snapshot(parse_moment(None)).as_dict()
+
+
+@app.get("/youneek/convert", tags=["youneek"])
+def youneek_convert(at: str) -> dict[str, Any]:
+    try:
+        moment = parse_moment(at)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=f"Invalid timestamp: {exc}") from exc
+    return snapshot(moment).as_dict()
+
+
+@app.get("/youneek/forecast/next-minute", tags=["youneek"])
+def youneek_forecast_next_minute(at: str | None = None) -> dict[str, Any]:
+    try:
+        moment = parse_moment(at)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=f"Invalid timestamp: {exc}") from exc
+    snap = snapshot(moment)
+    return {"utc": snap.as_dict()["utc"], **snap.next_minute}
+
+
+@app.get("/youneek/calendar", tags=["youneek"])
+def youneek_calendar(at: str | None = None) -> dict[str, Any]:
+    try:
+        moment = parse_moment(at)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=f"Invalid timestamp: {exc}") from exc
+    snap = snapshot(moment)
+    return {"utc": snap.as_dict()["utc"], **snap.calendar}
+
+
+@app.get("/youneek/lunar", tags=["youneek"])
+def youneek_lunar(at: str | None = None) -> dict[str, Any]:
+    try:
+        moment = parse_moment(at)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=f"Invalid timestamp: {exc}") from exc
+    snap = snapshot(moment)
+    return {"utc": snap.as_dict()["utc"], **snap.lunar}
 
 
 @app.post("/predict", response_model=PredictResponse, tags=["inference"])
