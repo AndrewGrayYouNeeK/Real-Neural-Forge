@@ -10,6 +10,14 @@ import torch
 from src.train import build_model, load_config, make_sine_dataset, train
 
 
+def _write_train_config(cfg: dict, tmp_path) -> str:
+    import yaml
+
+    cfg_path = tmp_path / "config.yaml"
+    cfg_path.write_text(yaml.dump(cfg))
+    return str(cfg_path)
+
+
 class TestLoadConfig:
     def test_returns_dict(self):
         cfg = load_config("config/config.yaml")
@@ -149,6 +157,27 @@ class TestTrain:
             assert (tmp_path / "best_model.pt").exists()
         finally:
             os.unlink(tmp_config)
+
+    def test_training_from_csv_saves_val_metrics(self, tmp_path):
+        values = [f"{i},{0.1 * i:.4f}" for i in range(100)]
+        csv_path = tmp_path / "series.csv"
+        csv_path.write_text("t,value\n" + "\n".join(values) + "\n")
+
+        cfg = load_config("config/config.yaml")
+        cfg["training"]["epochs"] = 1
+        cfg["training"]["batch_size"] = 8
+        cfg["training"]["device"] = "cpu"
+        cfg["training"]["checkpoint_dir"] = str(tmp_path / "ckpts")
+        cfg["data"]["csv_path"] = str(csv_path)
+        cfg["data"]["seq_len"] = 8
+        cfg["data"]["val_split"] = 0.2
+
+        train(_write_train_config(cfg, tmp_path))
+        ckpt = torch.load(tmp_path / "ckpts" / "best_model.pt", weights_only=True)
+        assert "val_mse" in ckpt
+        assert "val_mae" in ckpt
+        assert ckpt["source"].startswith("csv:")
+        assert ckpt["epoch"] == 1
 
 
 class TestMakeSineDatasetEdgeCases:

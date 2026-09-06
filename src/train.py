@@ -2,13 +2,13 @@
 
 import argparse
 import logging
-import os
 from pathlib import Path
 
 import torch
 import torch.nn as nn
 import yaml
 
+from src.data import load_train_val, make_sine_dataset
 from src.model import TimeSeriesTransformer
 
 logging.basicConfig(
@@ -40,29 +40,27 @@ def build_model(cfg: dict, device: torch.device) -> TimeSeriesTransformer:
     return model.to(device)
 
 
-def make_sine_dataset(
-    n_samples: int,
-    seq_len: int,
-    noise: float = 0.05,
-) -> tuple[torch.Tensor, torch.Tensor]:
-    """
-    Generate a synthetic sine-wave dataset for demonstration.
-
-    Each sample is a sequence of length seq_len drawn from sin(t + offset)
-    with added Gaussian noise.  The target is the value one step ahead.
-
-    Returns:
-        inputs: (n_samples, seq_len, 1)
-        targets: (n_samples, 1)
-    """
-    t = torch.linspace(0, 4 * torch.pi, seq_len + 1)
-    offsets = torch.rand(n_samples) * 2 * torch.pi
-    # (n_samples, seq_len+1)
-    series = torch.sin(t.unsqueeze(0) + offsets.unsqueeze(1))
-    series += torch.randn_like(series) * noise
-    inputs = series[:, :-1].unsqueeze(-1)   # (n_samples, seq_len, 1)
-    targets = series[:, -1].unsqueeze(-1)   # (n_samples, 1)
-    return inputs, targets
+@torch.no_grad()
+def evaluate(
+    model: nn.Module,
+    loader: torch.utils.data.DataLoader,
+    device: torch.device,
+) -> tuple[float, float]:
+    """Return (mse, mae) over a loader."""
+    model.eval()
+    sse = 0.0
+    sae = 0.0
+    n = 0
+    for batch_x, batch_y in loader:
+        batch_x, batch_y = batch_x.to(device), batch_y.to(device)
+        preds = model(batch_x)
+        err = preds - batch_y
+        sse += (err * err).sum().item()
+        sae += err.abs().sum().item()
+        n += batch_y.numel()
+    if n == 0:
+        return float("nan"), float("nan")
+    return sse / n, sae / n
 
 
 def train(config_path: str = "config/config.yaml") -> None:
@@ -86,23 +84,30 @@ def train(config_path: str = "config/config.yaml") -> None:
     optimizer = torch.optim.Adam(model.parameters(), lr=t_cfg["learning_rate"])
     criterion = nn.MSELoss()
 
-    # Synthetic dataset
-    inputs, targets = make_sine_dataset(n_samples=1024, seq_len=64)
-    dataset = torch.utils.data.TensorDataset(inputs, targets)
-    loader = torch.utils.data.DataLoader(
-        dataset, batch_size=t_cfg["batch_size"], shuffle=True
+    train_x, train_y, val_x, val_y, source = load_train_val(cfg)
+    train_loader = torch.utils.data.DataLoader(
+        torch.utils.data.TensorDataset(train_x, train_y),
+        batch_size=t_cfg["batch_size"],
+        shuffle=True,
+    )
+    val_loader = torch.utils.data.DataLoader(
+        torch.utils.data.TensorDataset(val_x, val_y),
+        batch_size=t_cfg["batch_size"],
+        shuffle=False,
     )
 
     checkpoint_dir = Path(t_cfg.get("checkpoint_dir", "checkpoints"))
     checkpoint_dir.mkdir(parents=True, exist_ok=True)
 
-    best_loss = float("inf")
+    best_val_mse = float("inf")
+    best_val_mae = float("inf")
+    best_epoch = 0
     log_interval = t_cfg.get("log_interval", 10)
 
     for epoch in range(1, t_cfg["epochs"] + 1):
         model.train()
         running_loss = 0.0
-        for batch_x, batch_y in loader:
+        for batch_x, batch_y in train_loader:
             batch_x, batch_y = batch_x.to(device), batch_y.to(device)
             optimizer.zero_grad()
             preds = model(batch_x)
@@ -111,24 +116,43 @@ def train(config_path: str = "config/config.yaml") -> None:
             optimizer.step()
             running_loss += loss.item() * batch_x.size(0)
 
-        epoch_loss = running_loss / len(dataset)
-        if epoch % log_interval == 0 or epoch == 1:
-            logger.info("Epoch %d/%d  loss=%.6f", epoch, t_cfg["epochs"], epoch_loss)
+        train_mse = running_loss / len(train_x)
+        val_mse, val_mae = evaluate(model, val_loader, device)
 
-        if epoch_loss < best_loss:
-            best_loss = epoch_loss
+        if epoch % log_interval == 0 or epoch == 1:
+            logger.info(
+                "Epoch %d/%d  train_mse=%.6f  val_mse=%.6f  val_mae=%.6f",
+                epoch,
+                t_cfg["epochs"],
+                train_mse,
+                val_mse,
+                val_mae,
+            )
+
+        if val_mse < best_val_mse:
+            best_val_mse = val_mse
+            best_val_mae = val_mae
+            best_epoch = epoch
             torch.save(
                 {
                     "epoch": epoch,
                     "model_state_dict": model.state_dict(),
                     "optimizer_state_dict": optimizer.state_dict(),
-                    "loss": best_loss,
+                    "loss": best_val_mse,
+                    "val_mse": best_val_mse,
+                    "val_mae": best_val_mae,
+                    "source": source,
                     "config": cfg,
                 },
                 checkpoint_dir / "best_model.pt",
             )
 
-    logger.info("Training complete. Best loss: %.6f", best_loss)
+    logger.info(
+        "Training complete. Best val_mse=%.6f  val_mae=%.6f  (epoch %d)",
+        best_val_mse,
+        best_val_mae,
+        best_epoch,
+    )
 
 
 if __name__ == "__main__":

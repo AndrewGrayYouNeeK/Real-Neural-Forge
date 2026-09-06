@@ -8,6 +8,14 @@ model:
   dropout: 0.1          # dropout probability
   max_seq_len: 512      # maximum sequence length for positional encoding
 
+data:
+  csv_path: null        # path to a CSV; null uses the sine-wave fallback
+  value_column: null    # column name; auto-detects value/close/price/y
+  seq_len: 64
+  val_split: 0.2        # last fraction of windows held out in time order
+  n_samples: 1024       # sine fallback only
+  noise: 0.05           # sine fallback only
+
 training:
   batch_size: 32
   learning_rate: 0.001
