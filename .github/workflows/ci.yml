@@ -2,9 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [ main, develop ]
   pull_request:
-    branches: [ main, develop ]
 
 jobs:
   test:
@@ -64,4 +62,4 @@ jobs:
 
     - name: Test Docker image
       run: |
-        docker run --rm neural-forge:test python -c "import src.model; import src.api; import src.train; print('Import test passed')"
+        docker run --rm neural-forge:test python -c "import src.model; import src.api; import src.train; import src.data; import src.common; import src.eval; import src.predict; print('Import test passed')"

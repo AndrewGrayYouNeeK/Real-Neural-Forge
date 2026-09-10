@@ -9,9 +9,12 @@ from src.data import (
     apply_scaler,
     fit_scaler,
     load_csv_series,
+    load_splits,
     load_train_val,
     maybe_standardize,
+    sequence_from_series,
     temporal_split,
+    temporal_split_with_test,
     window_series,
 )
 from src.train import evaluate, load_config
@@ -87,6 +90,24 @@ class TestWindowAndSplit:
         with pytest.raises(ValueError, match="val_split"):
             temporal_split(x, y, val_split=1.0)
 
+    def test_temporal_split_with_test_is_ordered(self):
+        series = torch.arange(30, dtype=torch.float32)
+        inputs, targets = window_series(series, seq_len=5)
+        train_x, train_y, val_x, val_y, test_x, test_y = temporal_split_with_test(
+            inputs, targets, val_split=0.2, test_split=0.2
+        )
+        assert train_x.size(0) + val_x.size(0) + test_x.size(0) == inputs.size(0)
+        assert train_y[-1].item() < val_y[0].item() < test_y[0].item()
+
+    def test_sequence_from_series_uses_tail(self):
+        series = torch.arange(10, dtype=torch.float32)
+        seq = sequence_from_series(series, 3)
+        assert seq == [[7.0], [8.0], [9.0]]
+
+    def test_sequence_from_series_too_short(self):
+        with pytest.raises(ValueError, match="Need at least"):
+            sequence_from_series(torch.arange(3, dtype=torch.float32), 8)
+
 
 class TestLoadTrainVal:
     def test_sine_fallback_default_config(self):
@@ -112,6 +133,25 @@ class TestLoadTrainVal:
         assert source.startswith("csv:")
         assert train_x.size(0) + val_x.size(0) == 80 - 8
         assert val_x.size(0) == pytest.approx((80 - 8) * 0.25, abs=1)
+
+    def test_load_splits_exposes_test_holdout(self, tmp_path):
+        values = [f"{i},{i * 0.1:.4f}" for i in range(80)]
+        csv_path = _write_csv(tmp_path / "series.csv", ["t,value", *values])
+        splits = load_splits(
+            {
+                "data": {
+                    "csv_path": str(csv_path),
+                    "seq_len": 8,
+                    "val_split": 0.2,
+                    "test_split": 0.25,
+                }
+            }
+        )
+        assert splits.test_x.size(0) > 0
+        assert (
+            splits.train_x.size(0) + splits.val_x.size(0) + splits.test_x.size(0)
+            == 80 - 8
+        )
 
 
 class TestScaler:

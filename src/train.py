@@ -7,11 +7,13 @@ from pathlib import Path
 
 import torch
 import torch.nn as nn
-import yaml
 
-from src.data import load_train_val, maybe_standardize
-from src.data import make_sine_dataset  # noqa: F401 — re-exported for tests
-from src.model import TimeSeriesTransformer
+from src.common import build_model, load_config, resolve_device
+from src.data import (
+    load_splits,
+    make_sine_dataset,  # noqa: F401 — re-exported for tests
+    maybe_standardize,
+)
 
 logging.basicConfig(
     level=logging.INFO,
@@ -20,33 +22,11 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-def load_config(config_path: str) -> dict:
-    """Load YAML configuration file."""
-    with open(config_path) as f:
-        return yaml.safe_load(f)
-
-
 def set_seed(seed: int) -> None:
     """Make training deterministic enough to reproduce a run."""
     torch.manual_seed(seed)
     if torch.cuda.is_available():
         torch.cuda.manual_seed_all(seed)
-
-
-def build_model(cfg: dict, device: torch.device) -> TimeSeriesTransformer:
-    """Instantiate and return the transformer model."""
-    m_cfg = cfg["model"]
-    model = TimeSeriesTransformer(
-        input_dim=m_cfg["input_dim"],
-        output_dim=m_cfg["output_dim"],
-        d_model=m_cfg["d_model"],
-        nhead=m_cfg["nhead"],
-        num_encoder_layers=m_cfg["num_encoder_layers"],
-        dim_feedforward=m_cfg["dim_feedforward"],
-        dropout=m_cfg["dropout"],
-        max_seq_len=m_cfg["max_seq_len"],
-    )
-    return model.to(device)
 
 
 @torch.no_grad()
@@ -78,12 +58,7 @@ def train(config_path: str = "config/config.yaml") -> None:
     t_cfg = cfg["training"]
 
     set_seed(int(t_cfg.get("seed", 42)))
-
-    device_str = t_cfg.get("device", "cpu")
-    if device_str == "cuda" and not torch.cuda.is_available():
-        logger.warning("CUDA requested but not available – falling back to CPU.")
-        device_str = "cpu"
-    device = torch.device(device_str)
+    device = resolve_device(t_cfg.get("device", "cpu"))
     logger.info("Using device: %s", device)
 
     model = build_model(cfg, device)
@@ -94,10 +69,15 @@ def train(config_path: str = "config/config.yaml") -> None:
 
     optimizer = torch.optim.Adam(model.parameters(), lr=t_cfg["learning_rate"])
     criterion = nn.MSELoss()
+    scheduler = None
+    if t_cfg.get("scheduler") in ("plateau", True):
+        scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+            optimizer, mode="min", factor=0.5, patience=3
+        )
 
-    train_x, train_y, val_x, val_y, source = load_train_val(cfg)
+    splits = load_splits(cfg)
     train_x, train_y, val_x, val_y, scaler = maybe_standardize(
-        cfg, train_x, train_y, val_x, val_y
+        cfg, splits.train_x, splits.train_y, splits.val_x, splits.val_y
     )
     train_loader = torch.utils.data.DataLoader(
         torch.utils.data.TensorDataset(train_x, train_y),
@@ -112,15 +92,32 @@ def train(config_path: str = "config/config.yaml") -> None:
 
     checkpoint_dir = Path(t_cfg.get("checkpoint_dir", "checkpoints"))
     checkpoint_dir.mkdir(parents=True, exist_ok=True)
+    best_path = checkpoint_dir / "best_model.pt"
 
+    start_epoch = 1
     best_val_mse = float("inf")
     best_val_mae = float("inf")
     best_epoch = 0
+    if t_cfg.get("resume") and best_path.exists():
+        checkpoint = torch.load(best_path, map_location=device, weights_only=True)
+        model.load_state_dict(checkpoint["model_state_dict"])
+        if checkpoint.get("optimizer_state_dict"):
+            optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
+        start_epoch = int(checkpoint.get("epoch", 0)) + 1
+        best_val_mse = float(
+            checkpoint.get("val_mse", checkpoint.get("loss", float("inf")))
+        )
+        best_val_mae = float(checkpoint.get("val_mae", float("inf")))
+        best_epoch = int(checkpoint.get("epoch", 0))
+        logger.info("Resumed from %s at epoch %d", best_path, start_epoch)
+
     stale = 0
     patience = int(t_cfg.get("patience", 0) or 0)
     log_interval = t_cfg.get("log_interval", 10)
+    grad_clip = float(t_cfg.get("grad_clip") or t_cfg.get("max_grad_norm") or 0)
+    total_epochs = t_cfg["epochs"]
 
-    for epoch in range(1, t_cfg["epochs"] + 1):
+    for epoch in range(start_epoch, total_epochs + 1):
         model.train()
         running_loss = 0.0
         for batch_x, batch_y in train_loader:
@@ -129,17 +126,21 @@ def train(config_path: str = "config/config.yaml") -> None:
             preds = model(batch_x)
             loss = criterion(preds, batch_y)
             loss.backward()
+            if grad_clip > 0:
+                torch.nn.utils.clip_grad_norm_(model.parameters(), grad_clip)
             optimizer.step()
             running_loss += loss.item() * batch_x.size(0)
 
         train_mse = running_loss / len(train_x)
         val_mse, val_mae = evaluate(model, val_loader, device)
+        if scheduler is not None:
+            scheduler.step(val_mse)
 
-        if epoch % log_interval == 0 or epoch == 1:
+        if epoch % log_interval == 0 or epoch == start_epoch:
             logger.info(
                 "Epoch %d/%d  train_mse=%.6f  val_mse=%.6f  val_mae=%.6f",
                 epoch,
-                t_cfg["epochs"],
+                total_epochs,
                 train_mse,
                 val_mse,
                 val_mae,
@@ -157,11 +158,12 @@ def train(config_path: str = "config/config.yaml") -> None:
                 "loss": best_val_mse,
                 "val_mse": best_val_mse,
                 "val_mae": best_val_mae,
-                "source": source,
+                "train_mse": train_mse,
+                "source": splits.source,
                 "scaler": scaler,
                 "config": cfg,
             }
-            torch.save(payload, checkpoint_dir / "best_model.pt")
+            torch.save(payload, best_path)
             (checkpoint_dir / "metrics.json").write_text(
                 json.dumps(
                     {
@@ -169,7 +171,10 @@ def train(config_path: str = "config/config.yaml") -> None:
                         "val_mse": best_val_mse,
                         "val_mae": best_val_mae,
                         "train_mse": train_mse,
-                        "source": source,
+                        "source": splits.source,
+                        "n_train": int(train_x.size(0)),
+                        "n_val": int(val_x.size(0)),
+                        "n_test": int(splits.test_x.size(0)),
                         "scaler": scaler,
                     },
                     indent=2,

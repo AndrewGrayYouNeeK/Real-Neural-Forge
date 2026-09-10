@@ -1,10 +1,10 @@
 """Tests for the local inference CLI helpers."""
 
-import json
+from pathlib import Path
 
 import pytest
 
-from src.predict import parse_sequence
+from src.predict import parse_sequence, sequence_from_csv
 
 
 class TestParseSequence:
@@ -20,3 +20,10 @@ class TestParseSequence:
     def test_invalid_token_rejected(self):
         with pytest.raises(ValueError):
             parse_sequence("1,nope,3")
+
+
+class TestSequenceFromCsv:
+    def test_uses_last_seq_len_rows(self, tmp_path: Path):
+        csv_path = tmp_path / "series.csv"
+        csv_path.write_text("value\n1\n2\n3\n4\n")
+        assert sequence_from_csv(str(csv_path), 2) == [[3.0], [4.0]]

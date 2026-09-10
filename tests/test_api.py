@@ -142,6 +142,45 @@ class TestLoadModel:
         assert _state["checkpoint_loaded"] is True
         assert _state["scaler"] == {"mean": 1.5, "std": 2.0}
 
+    def test_load_model_uses_checkpoint_architecture(self, tmp_path):
+        with open("config/config.yaml") as handle:
+            cfg = yaml.safe_load(handle)
+
+        from src.model import TimeSeriesTransformer
+
+        trained = TimeSeriesTransformer(
+            input_dim=cfg["model"]["input_dim"],
+            output_dim=cfg["model"]["output_dim"],
+            d_model=cfg["model"]["d_model"],
+            nhead=cfg["model"]["nhead"],
+            num_encoder_layers=cfg["model"]["num_encoder_layers"],
+            dim_feedforward=cfg["model"]["dim_feedforward"],
+            dropout=cfg["model"]["dropout"],
+            max_seq_len=cfg["model"]["max_seq_len"],
+        )
+        checkpoint_path = tmp_path / "test_checkpoint.pt"
+        torch.save(
+            {
+                "epoch": 2,
+                "model_state_dict": trained.state_dict(),
+                "optimizer_state_dict": {},
+                "loss": 0.05,
+                "config": cfg,
+                "source": "sine",
+            },
+            checkpoint_path,
+        )
+
+        cfg["model"]["d_model"] = 32
+        cfg["model"]["nhead"] = 2
+        cfg["inference"]["checkpoint_path"] = str(checkpoint_path)
+        tmp_config = tmp_path / "config.yaml"
+        tmp_config.write_text(yaml.dump(cfg))
+
+        load_model(str(tmp_config))
+        assert _state["config"]["model"]["d_model"] == 64
+        assert _state["model"].input_projection.out_features == 64
+
     @patch("torch.cuda.is_available")
     def test_load_model_cuda_fallback(self, mock_cuda_available, tmp_path):
         """Test CUDA fallback when CUDA is requested but not available."""
@@ -161,6 +200,25 @@ class TestLoadModel:
 
         # Verify device is CPU
         assert _state["device"] == torch.device("cpu")
+
+    def test_require_checkpoint_blocks_predict(self, tmp_path):
+        with open("config/config.yaml") as handle:
+            cfg = yaml.safe_load(handle)
+        cfg["inference"]["require_checkpoint"] = True
+        cfg["inference"]["checkpoint_path"] = str(tmp_path / "missing.pt")
+        tmp_config = tmp_path / "config.yaml"
+        tmp_config.write_text(yaml.dump(cfg))
+
+        try:
+            load_model(str(tmp_config))
+            from src.api import run_predict
+            from fastapi import HTTPException
+
+            with pytest.raises(HTTPException) as exc:
+                run_predict([[0.1], [0.2], [0.3]])
+            assert exc.value.status_code == 503
+        finally:
+            load_model("config/config.yaml")
 
 
 class TestPredictRequestValidation:
@@ -198,3 +256,14 @@ class TestPredictRequestValidation:
         resp = client.post("/predict", json=payload)
         assert resp.status_code == 422
         assert "max_seq_len" in resp.json()["detail"]
+
+    def test_horizon_rolls_forecast(self, client):
+        payload = {"sequence": [[0.1], [0.2], [0.3]], "horizon": 3}
+        resp = client.post("/predict", json=payload)
+        assert resp.status_code == 200
+        assert len(resp.json()["prediction"]) == 3
+
+    def test_horizon_zero_rejected(self, client):
+        payload = {"sequence": [[0.1], [0.2]], "horizon": 0}
+        resp = client.post("/predict", json=payload)
+        assert resp.status_code == 422

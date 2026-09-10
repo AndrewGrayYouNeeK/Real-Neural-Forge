@@ -181,6 +181,47 @@ class TestTrain:
         assert ckpt["scaler"] is not None
         assert (tmp_path / "ckpts" / "metrics.json").exists()
 
+    def test_resume_from_checkpoint(self, tmp_path):
+        cfg = load_config("config/config.yaml")
+        cfg["training"]["epochs"] = 1
+        cfg["training"]["batch_size"] = 16
+        cfg["training"]["device"] = "cpu"
+        cfg["training"]["checkpoint_dir"] = str(tmp_path)
+        cfg["training"]["resume"] = False
+        train(_write_train_config(cfg, tmp_path))
+
+        cfg["training"]["resume"] = True
+        cfg["training"]["epochs"] = 2
+        train(_write_train_config(cfg, tmp_path))
+        assert (tmp_path / "best_model.pt").exists()
+
+    def test_early_stopping(self, tmp_path):
+        cfg = load_config("config/config.yaml")
+        cfg["training"]["epochs"] = 20
+        cfg["training"]["patience"] = 2
+        cfg["training"]["batch_size"] = 16
+        cfg["training"]["device"] = "cpu"
+        cfg["training"]["checkpoint_dir"] = str(tmp_path)
+        cfg["training"]["log_interval"] = 1
+        cfg["training"]["scheduler"] = None
+        cfg["data"]["n_samples"] = 32
+        cfg["data"]["seq_len"] = 8
+
+        mse_values = [0.5, 0.4, 0.45, 0.46, 0.47]
+
+        def fake_evaluate(model, loader, device):
+            idx = min(fake_evaluate.i, len(mse_values) - 1)
+            fake_evaluate.i += 1
+            return mse_values[idx], 0.1
+
+        fake_evaluate.i = 0
+
+        with patch("src.train.evaluate", side_effect=fake_evaluate):
+            train(_write_train_config(cfg, tmp_path))
+
+        ckpt = torch.load(tmp_path / "best_model.pt", weights_only=True)
+        assert ckpt["epoch"] == 2
+
 
 class TestMakeSineDatasetEdgeCases:
     def test_large_dataset(self):

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import csv
 import logging
+from dataclasses import dataclass
 from pathlib import Path
 
 import torch
@@ -162,17 +163,56 @@ def temporal_split(
     return inputs[:n_train], targets[:n_train], inputs[n_train:], targets[n_train:]
 
 
-def load_train_val(
-    cfg: dict,
-) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, str]:
+def temporal_split_with_test(
+    inputs: torch.Tensor,
+    targets: torch.Tensor,
+    val_split: float = 0.2,
+    test_split: float = 0.0,
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
     """
-    Build train/val tensors from config.
+    Peel a final test holdout, then split the remainder into train/val.
+    """
+    test_split = float(test_split)
+    if test_split < 0 or test_split >= 1:
+        raise ValueError("test_split must be in [0, 1)")
+
+    n = inputs.size(0)
+    if test_split == 0:
+        n_test = 0
+    else:
+        if n < 3:
+            raise ValueError("Need at least 3 windows for a train/val/test split")
+        n_test = min(max(int(round(n * test_split)), 1), n - 2)
+
+    test_x = inputs[n - n_test :]
+    test_y = targets[n - n_test :]
+    rest_x = inputs[: n - n_test]
+    rest_y = targets[: n - n_test]
+    train_x, train_y, val_x, val_y = temporal_split(rest_x, rest_y, val_split)
+    return train_x, train_y, val_x, val_y, test_x, test_y
+
+
+@dataclass
+class DatasetSplits:
+    train_x: torch.Tensor
+    train_y: torch.Tensor
+    val_x: torch.Tensor
+    val_y: torch.Tensor
+    test_x: torch.Tensor
+    test_y: torch.Tensor
+    source: str
+
+
+def load_splits(cfg: dict) -> DatasetSplits:
+    """
+    Build train/val/test tensors from config.
 
     Uses ``data.csv_path`` when set; otherwise falls back to the sine generator.
     """
     data_cfg = cfg.get("data") or {}
     seq_len = int(data_cfg.get("seq_len", 64))
     val_split = float(data_cfg.get("val_split", 0.2))
+    test_split = float(data_cfg.get("test_split", 0.0))
     csv_path = data_cfg.get("csv_path")
 
     if csv_path:
@@ -187,15 +227,46 @@ def load_train_val(
         )
         source = "sine"
 
-    train_x, train_y, val_x, val_y = temporal_split(inputs, targets, val_split)
+    train_x, train_y, val_x, val_y, test_x, test_y = temporal_split_with_test(
+        inputs, targets, val_split=val_split, test_split=test_split
+    )
     logger.info(
-        "Dataset source=%s  train=%d  val=%d  seq_len=%d",
+        "Dataset source=%s  train=%d  val=%d  test=%d  seq_len=%d",
         source,
         train_x.size(0),
         val_x.size(0),
+        test_x.size(0),
         seq_len,
     )
-    return train_x, train_y, val_x, val_y, source
+    return DatasetSplits(
+        train_x=train_x,
+        train_y=train_y,
+        val_x=val_x,
+        val_y=val_y,
+        test_x=test_x,
+        test_y=test_y,
+        source=source,
+    )
+
+
+def load_train_val(
+    cfg: dict,
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, str]:
+    """Build train/val tensors from config (test holdout is available via load_splits)."""
+    splits = load_splits(cfg)
+    return splits.train_x, splits.train_y, splits.val_x, splits.val_y, splits.source
+
+
+def sequence_from_series(series: torch.Tensor, seq_len: int) -> list[list[float]]:
+    """Take the last ``seq_len`` points as a model input sequence."""
+    if series.ndim != 1:
+        raise ValueError(f"Expected a 1-D series, got shape {tuple(series.shape)}")
+    if seq_len < 1:
+        raise ValueError("seq_len must be >= 1")
+    if series.numel() < seq_len:
+        raise ValueError(f"Need at least {seq_len} points, got {series.numel()}")
+    tail = series[-seq_len:]
+    return [[float(value)] for value in tail.tolist()]
 
 
 def fit_scaler(train_x: torch.Tensor) -> dict[str, float]:

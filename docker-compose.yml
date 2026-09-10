@@ -6,6 +6,28 @@ services:
     volumes:
       - ./config:/app/config:ro
       - ./checkpoints:/app/checkpoints
+      - ./data:/app/data:ro
     environment:
       - PYTHONUNBUFFERED=1
     restart: unless-stopped
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 40s
+
+  train:
+    build: .
+    volumes:
+      - ./config:/app/config:ro
+      - ./checkpoints:/app/checkpoints
+      - ./data:/app/data:ro
+    command: python -m src.train --config config/config.yaml
+    profiles: ["train"]

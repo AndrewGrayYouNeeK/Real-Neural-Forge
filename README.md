@@ -7,7 +7,8 @@ A production-ready transformer pipeline for time-series prediction, built with P
 - **Transformer encoder architecture** – positional encoding + stacked encoder layers
 - **GPU-accelerated training & inference** – CUDA support via PyTorch; automatically falls back to CPU when no GPU is available
 - **FastAPI REST endpoint** – `POST /predict` for inference, `GET /health` for liveness
-- **CSV or sine-wave training** – temporal val split, checkpoint on val loss
+- **CSV or sine-wave training** – temporal train/val/test split, checkpoint on val loss
+- **Eval + multi-step forecast** – `python -m src.eval` and `horizon` on `/predict`
 - **Docker & docker-compose support** – single `docker compose up --build` to get started
 - **Configurable via YAML** – all hyper-parameters in `config/config.yaml`
 
@@ -21,8 +22,10 @@ A production-ready transformer pipeline for time-series prediction, built with P
 │   └── sample.csv         # bundled univariate series
 ├── src/
 │   ├── model.py           # TimeSeriesTransformer + PositionalEncoding
+│   ├── common.py          # Config, device, model constructor
 │   ├── data.py            # CSV / sine datasets, windows, scaler
 │   ├── train.py           # Training loop & checkpoint saving
+│   ├── eval.py            # Score a checkpoint on the holdout split
 │   ├── predict.py         # Local CLI inference
 │   └── api.py             # FastAPI application
 ├── tests/
@@ -30,6 +33,7 @@ A production-ready transformer pipeline for time-series prediction, built with P
 │   ├── test_api.py
 │   ├── test_data.py
 │   ├── test_train.py
+│   ├── test_eval.py
 │   └── test_predict.py
 ├── Dockerfile
 ├── docker-compose.yml
@@ -44,7 +48,11 @@ A production-ready transformer pipeline for time-series prediction, built with P
 docker compose up --build
 ```
 
-The API will be available at <http://localhost:8000>.
+The API will be available at <http://localhost:8000>. Train a checkpoint first with:
+
+```bash
+docker compose --profile train run --rm train
+```
 
 ### Local Development
 
@@ -57,8 +65,10 @@ python -m src.train --config config/config.yaml
 # Start the API server
 uvicorn src.api:app --reload
 
-# Optional: infer without the server
+# Optional: score the checkpoint, then infer without the server
+python -m src.eval --config config/config.yaml
 python -m src.predict --sequence 0.1,0.2,0.3,0.4,0.5
+python -m src.predict --csv data/sample.csv --horizon 3
 ```
 
 ## Configuration
@@ -81,6 +91,7 @@ data:
   csv_path: null      # e.g. data/sample.csv; null uses the sine fallback
   seq_len: 64
   val_split: 0.2
+  test_split: 0.1
   standardize: true
 
 training:
@@ -88,6 +99,7 @@ training:
   learning_rate: 0.001
   epochs: 50
   patience: 10
+  max_grad_norm: 1.0
   device: cpu         # change to "cuda" to use GPU
   checkpoint_dir: checkpoints
 
@@ -101,7 +113,8 @@ inference:
 ### `GET /health`
 
 Returns `{"status": "ok"}` when the service is running, plus whether a trained
-checkpoint is loaded (`checkpoint_loaded`), `seq_len`, and `max_seq_len`.
+checkpoint is loaded (`checkpoint_loaded`), `seq_len`, `max_seq_len`, and
+holdout metrics when a checkpoint is present.
 
 ### `POST /predict`
 
@@ -109,12 +122,14 @@ checkpoint is loaded (`checkpoint_loaded`), `seq_len`, and `max_seq_len`.
 
 ```json
 {
-  "sequence": [[0.1], [0.2], [0.3], [0.4], [0.5]]
+  "sequence": [[0.1], [0.2], [0.3], [0.4], [0.5]],
+  "horizon": 1
 }
 ```
 
 `sequence` is a 2-D list of shape `[seq_len, input_dim]`. Sequences longer than
 `model.max_seq_len` are rejected. Matching `data.seq_len` is recommended.
+Set `horizon` > 1 to roll the forecast forward one step at a time.
 
 **Response**
 
@@ -136,6 +151,8 @@ pip install -r requirements-dev.txt
 
 # Run tests
 pytest
+
+# Or: make test
 
 # Run tests with coverage
 pytest --cov=src --cov-report=html

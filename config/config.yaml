@@ -12,7 +12,8 @@ data:
   csv_path: null        # path to a CSV; null uses the sine-wave fallback
   value_column: null    # column name; auto-detects value/close/price/y
   seq_len: 64
-  val_split: 0.2        # last fraction of windows held out in time order
+  val_split: 0.2        # last fraction of remaining windows held out in time order
+  test_split: 0.1       # final holdout for src.eval; 0 disables
   standardize: true     # fit mean/std on train windows only
   n_samples: 1024       # sine fallback only
   noise: 0.05           # sine fallback only
@@ -22,7 +23,10 @@ training:
   learning_rate: 0.001
   epochs: 50
   patience: 10          # stop if val_mse does not improve; 0 disables
+  max_grad_norm: 1.0    # 0 disables gradient clipping
   seed: 42
+  resume: false         # continue from checkpoints/best_model.pt
+  scheduler: plateau    # ReduceLROnPlateau, or null
   device: cpu           # set to "cuda" to use GPU
   checkpoint_dir: checkpoints
   log_interval: 10
@@ -30,3 +34,5 @@ training:
 inference:
   device: cpu           # set to "cuda" to use GPU
   checkpoint_path: checkpoints/best_model.pt
+  require_checkpoint: false  # 503 /predict if no trained weights
+  max_horizon: 64
