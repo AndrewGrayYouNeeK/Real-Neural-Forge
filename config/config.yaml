@@ -13,6 +13,7 @@ data:
   value_column: null    # column name; auto-detects value/close/price/y
   seq_len: 64
   val_split: 0.2        # last fraction of windows held out in time order
+  standardize: true     # fit mean/std on train windows only
   n_samples: 1024       # sine fallback only
   noise: 0.05           # sine fallback only
 
@@ -20,6 +21,8 @@ training:
   batch_size: 32
   learning_rate: 0.001
   epochs: 50
+  patience: 10          # stop if val_mse does not improve; 0 disables
+  seed: 42
   device: cpu           # set to "cuda" to use GPU
   checkpoint_dir: checkpoints
   log_interval: 10

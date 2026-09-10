@@ -10,6 +10,7 @@ import yaml
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
+from src.data import apply_scaler
 from src.model import TimeSeriesTransformer
 
 logger = logging.getLogger("uvicorn.error")
@@ -52,10 +53,14 @@ def load_model(config_path: str = "config/config.yaml") -> None:
 
     model = _build_model_from_config(cfg)
     checkpoint_path = Path(i_cfg.get("checkpoint_path", ""))
+    checkpoint_loaded = False
+    scaler = None
 
     if checkpoint_path.exists():
         checkpoint = torch.load(checkpoint_path, map_location=device, weights_only=True)
         model.load_state_dict(checkpoint["model_state_dict"])
+        scaler = checkpoint.get("scaler")
+        checkpoint_loaded = True
         logger.info("Loaded checkpoint from %s", checkpoint_path)
     else:
         logger.warning(
@@ -68,6 +73,50 @@ def load_model(config_path: str = "config/config.yaml") -> None:
     _state["model"] = model
     _state["device"] = device
     _state["config"] = cfg
+    _state["checkpoint_loaded"] = checkpoint_loaded
+    _state["scaler"] = scaler
+
+
+def run_predict(sequence: list[list[float]]) -> list[float]:
+    """Run one inference pass against the loaded model."""
+    model: TimeSeriesTransformer | None = _state.get("model")
+    if model is None:
+        raise HTTPException(status_code=503, detail="Model not loaded.")
+
+    device: torch.device = _state["device"]
+    cfg: dict = _state["config"]
+    expected_input_dim: int = cfg["model"]["input_dim"]
+    max_seq_len: int = cfg["model"]["max_seq_len"]
+
+    if not sequence:
+        raise HTTPException(status_code=422, detail="sequence must not be empty.")
+    if any(len(step) != expected_input_dim for step in sequence):
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"Each time step must have {expected_input_dim} feature(s); "
+                f"got a step with {len(sequence[0])} feature(s)."
+            ),
+        )
+    if len(sequence) > max_seq_len:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"sequence length {len(sequence)} exceeds max_seq_len {max_seq_len}."
+            ),
+        )
+
+    x = torch.tensor(sequence, dtype=torch.float32).unsqueeze(0).to(device)
+    scaler = _state.get("scaler")
+    if scaler:
+        x = apply_scaler(x, scaler)
+
+    with torch.no_grad():
+        output = model(x)
+        if scaler:
+            output = apply_scaler(output, scaler, inverse=True)
+
+    return output.squeeze(0).tolist()
 
 
 # ---------------------------------------------------------------------------
@@ -119,14 +168,40 @@ class PredictResponse(BaseModel):
     )
 
 
+class HealthResponse(BaseModel):
+    """Liveness plus whether a trained checkpoint is actually loaded."""
+
+    status: str
+    ready: bool
+    checkpoint_loaded: bool
+    device: str
+    input_dim: int | None = None
+    output_dim: int | None = None
+    seq_len: int | None = None
+    max_seq_len: int | None = None
+
+
 # ---------------------------------------------------------------------------
 # Routes
 # ---------------------------------------------------------------------------
 
-@app.get("/health", tags=["monitoring"])
-def health() -> dict[str, str]:
-    """Return service liveness status."""
-    return {"status": "ok"}
+@app.get("/health", response_model=HealthResponse, tags=["monitoring"])
+def health() -> HealthResponse:
+    """Return service liveness and model/checkpoint status."""
+    cfg: dict = _state.get("config") or {}
+    model_cfg = cfg.get("model") or {}
+    data_cfg = cfg.get("data") or {}
+    device = _state.get("device")
+    return HealthResponse(
+        status="ok",
+        ready=_state.get("model") is not None,
+        checkpoint_loaded=bool(_state.get("checkpoint_loaded")),
+        device=str(device) if device is not None else "",
+        input_dim=model_cfg.get("input_dim"),
+        output_dim=model_cfg.get("output_dim"),
+        seq_len=data_cfg.get("seq_len"),
+        max_seq_len=model_cfg.get("max_seq_len"),
+    )
 
 
 @app.post("/predict", response_model=PredictResponse, tags=["inference"])
@@ -137,28 +212,4 @@ def predict(body: PredictRequest) -> PredictResponse:
     The *sequence* field must be a 2-D list of shape ``[seq_len, input_dim]``
     where ``input_dim`` matches the value configured in ``config/config.yaml``.
     """
-    model: TimeSeriesTransformer = _state.get("model")  # type: ignore[assignment]
-    if model is None:
-        raise HTTPException(status_code=503, detail="Model not loaded.")
-
-    device: torch.device = _state["device"]
-    cfg: dict = _state["config"]
-    expected_input_dim: int = cfg["model"]["input_dim"]
-
-    # Validate input shape
-    if not body.sequence:
-        raise HTTPException(status_code=422, detail="sequence must not be empty.")
-    if any(len(step) != expected_input_dim for step in body.sequence):
-        raise HTTPException(
-            status_code=422,
-            detail=(
-                f"Each time step must have {expected_input_dim} feature(s); "
-                f"got a step with {len(body.sequence[0])} feature(s)."
-            ),
-        )
-
-    x = torch.tensor(body.sequence, dtype=torch.float32).unsqueeze(0).to(device)
-    with torch.no_grad():
-        output = model(x)
-
-    return PredictResponse(prediction=output.squeeze(0).tolist())
+    return PredictResponse(prediction=run_predict(body.sequence))

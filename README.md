@@ -7,6 +7,7 @@ A production-ready transformer pipeline for time-series prediction, built with P
 - **Transformer encoder architecture** – positional encoding + stacked encoder layers
 - **GPU-accelerated training & inference** – CUDA support via PyTorch; automatically falls back to CPU when no GPU is available
 - **FastAPI REST endpoint** – `POST /predict` for inference, `GET /health` for liveness
+- **CSV or sine-wave training** – temporal val split, checkpoint on val loss
 - **Docker & docker-compose support** – single `docker compose up --build` to get started
 - **Configurable via YAML** – all hyper-parameters in `config/config.yaml`
 
@@ -15,15 +16,21 @@ A production-ready transformer pipeline for time-series prediction, built with P
 ```
 .
 ├── config/
-│   └── config.yaml        # YAML configuration (model, training, inference)
+│   └── config.yaml        # YAML configuration (model, data, training, inference)
+├── data/
+│   └── sample.csv         # bundled univariate series
 ├── src/
 │   ├── model.py           # TimeSeriesTransformer + PositionalEncoding
+│   ├── data.py            # CSV / sine datasets, windows, scaler
 │   ├── train.py           # Training loop & checkpoint saving
+│   ├── predict.py         # Local CLI inference
 │   └── api.py             # FastAPI application
 ├── tests/
 │   ├── test_model.py
 │   ├── test_api.py
-│   └── test_train.py
+│   ├── test_data.py
+│   ├── test_train.py
+│   └── test_predict.py
 ├── Dockerfile
 ├── docker-compose.yml
 └── requirements.txt
@@ -44,11 +51,14 @@ The API will be available at <http://localhost:8000>.
 ```bash
 pip install -r requirements.txt
 
-# (Optional) train a model first
+# (Optional) train a model first — sine fallback, or set data.csv_path
 python -m src.train --config config/config.yaml
 
 # Start the API server
 uvicorn src.api:app --reload
+
+# Optional: infer without the server
+python -m src.predict --sequence 0.1,0.2,0.3,0.4,0.5
 ```
 
 ## Configuration
@@ -67,10 +77,17 @@ model:
   dropout: 0.1
   max_seq_len: 512
 
+data:
+  csv_path: null      # e.g. data/sample.csv; null uses the sine fallback
+  seq_len: 64
+  val_split: 0.2
+  standardize: true
+
 training:
   batch_size: 32
   learning_rate: 0.001
   epochs: 50
+  patience: 10
   device: cpu         # change to "cuda" to use GPU
   checkpoint_dir: checkpoints
 
@@ -83,7 +100,8 @@ inference:
 
 ### `GET /health`
 
-Returns `{"status": "ok"}` when the service is running.
+Returns `{"status": "ok"}` when the service is running, plus whether a trained
+checkpoint is loaded (`checkpoint_loaded`), `seq_len`, and `max_seq_len`.
 
 ### `POST /predict`
 
@@ -95,7 +113,8 @@ Returns `{"status": "ok"}` when the service is running.
 }
 ```
 
-`sequence` is a 2-D list of shape `[seq_len, input_dim]`.
+`sequence` is a 2-D list of shape `[seq_len, input_dim]`. Sequences longer than
+`model.max_seq_len` are rejected. Matching `data.seq_len` is recommended.
 
 **Response**
 

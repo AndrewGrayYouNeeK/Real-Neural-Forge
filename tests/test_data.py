@@ -6,9 +6,11 @@ import pytest
 import torch
 
 from src.data import (
+    apply_scaler,
+    fit_scaler,
     load_csv_series,
     load_train_val,
-    make_sine_dataset,
+    maybe_standardize,
     temporal_split,
     window_series,
 )
@@ -110,6 +112,26 @@ class TestLoadTrainVal:
         assert source.startswith("csv:")
         assert train_x.size(0) + val_x.size(0) == 80 - 8
         assert val_x.size(0) == pytest.approx((80 - 8) * 0.25, abs=1)
+
+
+class TestScaler:
+    def test_round_trip(self):
+        x = torch.tensor([[[2.0], [4.0], [6.0]]])
+        scaler = fit_scaler(x)
+        scaled = apply_scaler(x, scaler)
+        restored = apply_scaler(scaled, scaler, inverse=True)
+        assert torch.allclose(restored, x, atol=1e-6)
+        assert scaled.mean().abs().item() < 1e-6
+
+    def test_maybe_standardize_can_be_disabled(self):
+        x = torch.arange(8, dtype=torch.float32).view(4, 2, 1)
+        y = torch.arange(4, dtype=torch.float32).view(4, 1)
+        out_x, out_y, _, _, scaler = maybe_standardize(
+            {"data": {"standardize": False}}, x, y, x, y
+        )
+        assert scaler is None
+        assert torch.equal(out_x, x)
+        assert torch.equal(out_y, y)
 
 
 class TestEvaluate:

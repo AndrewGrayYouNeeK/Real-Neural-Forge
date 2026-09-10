@@ -196,3 +196,46 @@ def load_train_val(
         seq_len,
     )
     return train_x, train_y, val_x, val_y, source
+
+
+def fit_scaler(train_x: torch.Tensor) -> dict[str, float]:
+    """Fit a mean/std scaler on training windows only."""
+    mean = float(train_x.mean().item())
+    std = float(train_x.std(unbiased=False).clamp_min(1e-8).item())
+    return {"mean": mean, "std": std}
+
+
+def apply_scaler(
+    tensor: torch.Tensor,
+    scaler: dict[str, float],
+    inverse: bool = False,
+) -> torch.Tensor:
+    """Scale or inverse-scale a tensor with a fitted mean/std scaler."""
+    mean = float(scaler["mean"])
+    std = float(scaler["std"])
+    if std <= 0:
+        raise ValueError("scaler std must be > 0")
+    if inverse:
+        return tensor * std + mean
+    return (tensor - mean) / std
+
+
+def maybe_standardize(
+    cfg: dict,
+    train_x: torch.Tensor,
+    train_y: torch.Tensor,
+    val_x: torch.Tensor,
+    val_y: torch.Tensor,
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, dict[str, float] | None]:
+    """Standardize train/val if ``data.standardize`` is enabled (default on)."""
+    data_cfg = cfg.get("data") or {}
+    if not data_cfg.get("standardize", True):
+        return train_x, train_y, val_x, val_y, None
+
+    scaler = fit_scaler(train_x)
+    train_x = apply_scaler(train_x, scaler)
+    train_y = apply_scaler(train_y, scaler)
+    val_x = apply_scaler(val_x, scaler)
+    val_y = apply_scaler(val_y, scaler)
+    logger.info("Standardized features  mean=%.6f  std=%.6f", scaler["mean"], scaler["std"])
+    return train_x, train_y, val_x, val_y, scaler

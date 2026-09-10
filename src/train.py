@@ -1,6 +1,7 @@
 """Training script for the TimeSeriesTransformer."""
 
 import argparse
+import json
 import logging
 from pathlib import Path
 
@@ -8,7 +9,8 @@ import torch
 import torch.nn as nn
 import yaml
 
-from src.data import load_train_val, make_sine_dataset
+from src.data import load_train_val, maybe_standardize
+from src.data import make_sine_dataset  # noqa: F401 — re-exported for tests
 from src.model import TimeSeriesTransformer
 
 logging.basicConfig(
@@ -22,6 +24,13 @@ def load_config(config_path: str) -> dict:
     """Load YAML configuration file."""
     with open(config_path) as f:
         return yaml.safe_load(f)
+
+
+def set_seed(seed: int) -> None:
+    """Make training deterministic enough to reproduce a run."""
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
 
 
 def build_model(cfg: dict, device: torch.device) -> TimeSeriesTransformer:
@@ -68,6 +77,8 @@ def train(config_path: str = "config/config.yaml") -> None:
     cfg = load_config(config_path)
     t_cfg = cfg["training"]
 
+    set_seed(int(t_cfg.get("seed", 42)))
+
     device_str = t_cfg.get("device", "cpu")
     if device_str == "cuda" and not torch.cuda.is_available():
         logger.warning("CUDA requested but not available – falling back to CPU.")
@@ -85,6 +96,9 @@ def train(config_path: str = "config/config.yaml") -> None:
     criterion = nn.MSELoss()
 
     train_x, train_y, val_x, val_y, source = load_train_val(cfg)
+    train_x, train_y, val_x, val_y, scaler = maybe_standardize(
+        cfg, train_x, train_y, val_x, val_y
+    )
     train_loader = torch.utils.data.DataLoader(
         torch.utils.data.TensorDataset(train_x, train_y),
         batch_size=t_cfg["batch_size"],
@@ -102,6 +116,8 @@ def train(config_path: str = "config/config.yaml") -> None:
     best_val_mse = float("inf")
     best_val_mae = float("inf")
     best_epoch = 0
+    stale = 0
+    patience = int(t_cfg.get("patience", 0) or 0)
     log_interval = t_cfg.get("log_interval", 10)
 
     for epoch in range(1, t_cfg["epochs"] + 1):
@@ -133,19 +149,43 @@ def train(config_path: str = "config/config.yaml") -> None:
             best_val_mse = val_mse
             best_val_mae = val_mae
             best_epoch = epoch
-            torch.save(
-                {
-                    "epoch": epoch,
-                    "model_state_dict": model.state_dict(),
-                    "optimizer_state_dict": optimizer.state_dict(),
-                    "loss": best_val_mse,
-                    "val_mse": best_val_mse,
-                    "val_mae": best_val_mae,
-                    "source": source,
-                    "config": cfg,
-                },
-                checkpoint_dir / "best_model.pt",
+            stale = 0
+            payload = {
+                "epoch": epoch,
+                "model_state_dict": model.state_dict(),
+                "optimizer_state_dict": optimizer.state_dict(),
+                "loss": best_val_mse,
+                "val_mse": best_val_mse,
+                "val_mae": best_val_mae,
+                "source": source,
+                "scaler": scaler,
+                "config": cfg,
+            }
+            torch.save(payload, checkpoint_dir / "best_model.pt")
+            (checkpoint_dir / "metrics.json").write_text(
+                json.dumps(
+                    {
+                        "epoch": epoch,
+                        "val_mse": best_val_mse,
+                        "val_mae": best_val_mae,
+                        "train_mse": train_mse,
+                        "source": source,
+                        "scaler": scaler,
+                    },
+                    indent=2,
+                )
+                + "\n"
             )
+        else:
+            stale += 1
+            if patience > 0 and stale >= patience:
+                logger.info(
+                    "Early stopping at epoch %d (patience=%d). Best epoch %d.",
+                    epoch,
+                    patience,
+                    best_epoch,
+                )
+                break
 
     logger.info(
         "Training complete. Best val_mse=%.6f  val_mae=%.6f  (epoch %d)",

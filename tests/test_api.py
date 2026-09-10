@@ -25,7 +25,14 @@ class TestHealthEndpoint:
     def test_health_ok(self, client):
         resp = client.get("/health")
         assert resp.status_code == 200
-        assert resp.json() == {"status": "ok"}
+        data = resp.json()
+        assert data["status"] == "ok"
+        assert data["ready"] is True
+        assert "checkpoint_loaded" in data
+        assert data["input_dim"] == 1
+        assert data["output_dim"] == 1
+        assert data["seq_len"] == 64
+        assert data["max_seq_len"] == 512
 
 
 class TestPredictEndpoint:
@@ -113,6 +120,7 @@ class TestLoadModel:
                 "model_state_dict": model.state_dict(),
                 "optimizer_state_dict": {},
                 "loss": 0.1,
+                "scaler": {"mean": 1.5, "std": 2.0},
                 "config": cfg,
             },
             checkpoint_path,
@@ -131,6 +139,8 @@ class TestLoadModel:
         assert _state["model"] is not None
         assert _state["device"] is not None
         assert _state["config"] is not None
+        assert _state["checkpoint_loaded"] is True
+        assert _state["scaler"] == {"mean": 1.5, "std": 2.0}
 
     @patch("torch.cuda.is_available")
     def test_load_model_cuda_fallback(self, mock_cuda_available, tmp_path):
@@ -182,3 +192,9 @@ class TestPredictRequestValidation:
         payload = {"sequence": [[0.0], [0.0], [0.0]]}
         resp = client.post("/predict", json=payload)
         assert resp.status_code == 200
+
+    def test_sequence_longer_than_max_rejected(self, client):
+        payload = {"sequence": [[0.0] for _ in range(513)]}
+        resp = client.post("/predict", json=payload)
+        assert resp.status_code == 422
+        assert "max_seq_len" in resp.json()["detail"]

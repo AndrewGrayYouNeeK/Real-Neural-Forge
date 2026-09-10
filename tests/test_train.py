@@ -178,6 +178,8 @@ class TestTrain:
         assert "val_mae" in ckpt
         assert ckpt["source"].startswith("csv:")
         assert ckpt["epoch"] == 1
+        assert ckpt["scaler"] is not None
+        assert (tmp_path / "ckpts" / "metrics.json").exists()
 
 
 class TestMakeSineDatasetEdgeCases:
