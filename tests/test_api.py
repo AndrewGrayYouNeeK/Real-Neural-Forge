@@ -1,8 +1,5 @@
 """Tests for the FastAPI endpoints."""
 
-import os
-import tempfile
-from pathlib import Path
 from unittest.mock import patch
 
 import pytest
@@ -75,7 +72,7 @@ class TestPredictEndpoint:
     def test_model_not_loaded_error(self):
         """Test that predict returns 503 when model is not in state."""
         # Create a fresh TestClient without loading model via lifespan
-        from src.api import FastAPI, predict, health
+        from src.api import FastAPI, health, predict
 
         # Create a minimal app without lifespan
         test_app = FastAPI()
@@ -211,8 +208,9 @@ class TestLoadModel:
 
         try:
             load_model(str(tmp_config))
-            from src.api import run_predict
             from fastapi import HTTPException
+
+            from src.api import run_predict
 
             with pytest.raises(HTTPException) as exc:
                 run_predict([[0.1], [0.2], [0.3]])

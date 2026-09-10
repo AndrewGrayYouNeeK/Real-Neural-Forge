@@ -1,7 +1,7 @@
 """Tests for checkpoint evaluation."""
 
-import yaml
 import pytest
+import yaml
 
 from src.eval import evaluate_checkpoint
 from src.train import load_config, train

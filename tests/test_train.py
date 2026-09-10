@@ -1,10 +1,8 @@
 """Tests for the training utilities."""
 
 import os
-from pathlib import Path
 from unittest.mock import patch
 
-import pytest
 import torch
 
 from src.train import build_model, load_config, make_sine_dataset, train
@@ -70,6 +68,7 @@ class TestTrain:
 
         # Patch config file with tmp checkpoint dir
         import tempfile
+
         import yaml
 
         with tempfile.NamedTemporaryFile(
@@ -92,6 +91,7 @@ class TestTrain:
         cfg["training"]["checkpoint_dir"] = str(tmp_path)
 
         import tempfile
+
         import yaml
 
         with tempfile.NamedTemporaryFile(
@@ -120,6 +120,7 @@ class TestTrain:
         cfg["training"]["checkpoint_dir"] = str(tmp_path)
 
         import tempfile
+
         import yaml
 
         with tempfile.NamedTemporaryFile(
@@ -144,6 +145,7 @@ class TestTrain:
         cfg["training"]["checkpoint_dir"] = str(tmp_path)
 
         import tempfile
+
         import yaml
 
         with tempfile.NamedTemporaryFile(
