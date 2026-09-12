@@ -1,0 +1,15 @@
+# Run the image published to GitHub Container Registry.
+# docker compose -f docker-compose.ghcr.yml up
+services:
+  api:
+    image: ghcr.io/andrewgrayyouneek/real-neural-forge:latest
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./config:/app/config:ro
+      - ./checkpoints:/app/checkpoints
+      - ./data:/app/data
+      - ./frontend:/app/frontend:ro
+    environment:
+      - PYTHONUNBUFFERED=1
+    restart: unless-stopped
