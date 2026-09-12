@@ -201,12 +201,13 @@ GitHub is the home for this project:
 
 Tagged releases (`vX.Y.Z`) also publish matching image tags. Run the container on any host with Docker; no Vercel project is required.
 
-`vercel.json` remains only to disable leftover Vercel GitHub auto-deployments. If Vercel status checks still appear on pull requests, remove the integration:
+`vercel.json` remains only to disable leftover Vercel GitHub auto-deployments. If Vercel **or Cloudflare Workers** status checks still appear on pull requests, disconnect those apps:
 
-1. Open GitHub → **Settings** → **Integrations** → **Applications** → **Vercel**
-2. Click **Configure**, then remove **Real-Neural-Forge** from the repository list
-3. In the [Vercel dashboard](https://vercel.com/dashboard), delete any linked `real-neural-forge` projects
-4. On the GitHub repo, clear **About → Website** if it still points at `*.vercel.app`
+1. Open GitHub → **Settings** → **Integrations** → **Applications**
+2. For **Vercel**, click **Configure**, then remove **Real-Neural-Forge** from the repository list
+3. For **Cloudflare Workers**, click **Configure**, then remove **Real-Neural-Forge** (this repo is a FastAPI/Docker app, not a Worker)
+4. In the [Vercel dashboard](https://vercel.com/dashboard), delete any linked `real-neural-forge` projects
+5. On the GitHub repo, clear **About → Website** if it still points at `*.vercel.app`
 
 ## Development
 
