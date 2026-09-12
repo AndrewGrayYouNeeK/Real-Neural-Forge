@@ -1,6 +1,12 @@
 # Real-Neural-Forge
 
-A production-ready transformer pipeline for time-series prediction, built with PyTorch, CUDA, and FastAPI. This is a fully native stack — no Base44 SDK, no vendor-hosted backend.
+[![CI](https://github.com/AndrewGrayYouNeeK/Real-Neural-Forge/actions/workflows/ci.yml/badge.svg)](https://github.com/AndrewGrayYouNeeK/Real-Neural-Forge/actions/workflows/ci.yml)
+[![Publish image](https://github.com/AndrewGrayYouNeeK/Real-Neural-Forge/actions/workflows/publish.yml/badge.svg)](https://github.com/AndrewGrayYouNeeK/Real-Neural-Forge/actions/workflows/publish.yml)
+
+A production-ready transformer pipeline for time-series prediction, built with PyTorch, CUDA, and FastAPI. Source of truth is this GitHub repository — no Base44 SDK, no Vercel, no vendor-hosted backend.
+
+**GitHub:** <https://github.com/AndrewGrayYouNeeK/Real-Neural-Forge>  
+**Image:** `ghcr.io/andrewgrayyouneek/real-neural-forge`
 
 ## Features
 
@@ -10,7 +16,7 @@ A production-ready transformer pipeline for time-series prediction, built with P
 - **Native web dashboard** – browser UI served directly from FastAPI at `/`
 - **SQLite experiment store** – replaces Base44 entity persistence for runs and metrics
 - **Modular Python package** – models, data, training, evaluation, inference, and storage layers
-- **Docker & docker-compose support** – single `docker compose up --build` to get started
+- **Docker & GitHub Container Registry** – `docker compose up --build` locally, or pull `ghcr.io/andrewgrayyouneek/real-neural-forge`
 - **Configurable via YAML** – all hyper-parameters in `config/config.yaml`
 
 ## Project Structure
@@ -35,14 +41,40 @@ A production-ready transformer pipeline for time-series prediction, built with P
 │   ├── storage/
 │   └── utils/
 ├── tests/
+├── .github/
+│   ├── dependabot.yml
+│   └── workflows/
+│       ├── ci.yml
+│       └── publish.yml
 ├── Dockerfile
 ├── docker-compose.yml
+├── docker-compose.ghcr.yml
 └── requirements.txt
 ```
 
 ## Quick Start
 
-### Docker (recommended)
+### Clone from GitHub
+
+```bash
+git clone https://github.com/AndrewGrayYouNeeK/Real-Neural-Forge.git
+cd Real-Neural-Forge
+```
+
+### GitHub Container Registry (recommended)
+
+After the [Publish image](https://github.com/AndrewGrayYouNeeK/Real-Neural-Forge/actions/workflows/publish.yml) workflow has run on `main`:
+
+```bash
+docker pull ghcr.io/andrewgrayyouneek/real-neural-forge:latest
+docker compose -f docker-compose.ghcr.yml up
+```
+
+The API and dashboard will be available at <http://localhost:8000>.
+
+The first package published to GHCR is private by default. If `docker pull` returns `denied`, open the package on GitHub → **Package settings** → **Change visibility** → **Public**.
+
+### Docker (build locally)
 
 ```bash
 docker compose up --build
@@ -158,13 +190,23 @@ YouNeeK Time is **100 units / 100 minutes / 100 seconds** (not App Store 10/10/1
 
 ## Deployment
 
-This project is deployed with **Docker**, not Vercel. Use `docker compose up --build` locally or run the container on any host with Python/PyTorch support.
+GitHub is the home for this project:
 
-`vercel.json` disables Vercel GitHub auto-deployments for this repository. If Vercel status checks still appear on pull requests, remove the integration entirely:
+| Surface | Where |
+| --- | --- |
+| Source, issues, pull requests | [github.com/AndrewGrayYouNeeK/Real-Neural-Forge](https://github.com/AndrewGrayYouNeeK/Real-Neural-Forge) |
+| CI (test, lint, typecheck, Docker build) | [GitHub Actions CI](https://github.com/AndrewGrayYouNeeK/Real-Neural-Forge/actions/workflows/ci.yml) |
+| Published image | `ghcr.io/andrewgrayyouneek/real-neural-forge` |
+| Run the published image | `docker compose -f docker-compose.ghcr.yml up` |
+
+Tagged releases (`vX.Y.Z`) also publish matching image tags. Run the container on any host with Docker; no Vercel project is required.
+
+`vercel.json` remains only to disable leftover Vercel GitHub auto-deployments. If Vercel status checks still appear on pull requests, remove the integration:
 
 1. Open GitHub → **Settings** → **Integrations** → **Applications** → **Vercel**
 2. Click **Configure**, then remove **Real-Neural-Forge** from the repository list
 3. In the [Vercel dashboard](https://vercel.com/dashboard), delete any linked `real-neural-forge` projects
+4. On the GitHub repo, clear **About → Website** if it still points at `*.vercel.app`
 
 ## Development
 
@@ -184,4 +226,6 @@ mypy src/
 
 ### CI/CD
 
-The project includes a GitHub Actions workflow that runs tests, linting, type checks, coverage, and Docker image validation on every pull request.
+- **CI** (`.github/workflows/ci.yml`) runs tests, linting, type checks, coverage, and a Docker image smoke test on every pull request.
+- **Publish** (`.github/workflows/publish.yml`) pushes the image to GitHub Container Registry on every push to `main` and on version tags.
+- **Dependabot** (`.github/dependabot.yml`) opens weekly PRs for GitHub Actions and pip updates.
