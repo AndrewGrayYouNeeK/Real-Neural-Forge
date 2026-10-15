@@ -157,6 +157,7 @@ class TestPredictRequestValidation:
         payload = {"sequence": [[0.1], [0.2, 0.3]]}
         resp = client.post("/predict", json=payload)
         assert resp.status_code == 422
+        assert "step 1 has 2 feature(s)" in resp.json()["detail"]
 
     def test_long_sequence(self, client):
         """Test prediction with a long sequence."""

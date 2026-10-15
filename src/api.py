@@ -231,14 +231,15 @@ def predict(body: PredictRequest) -> PredictResponse:
 
     if not body.sequence:
         raise HTTPException(status_code=422, detail="sequence must not be empty.")
-    if any(len(step) != expected_input_dim for step in body.sequence):
-        raise HTTPException(
-            status_code=422,
-            detail=(
-                f"Each time step must have {expected_input_dim} feature(s); "
-                f"got a step with {len(body.sequence[0])} feature(s)."
-            ),
-        )
+    for index, step in enumerate(body.sequence):
+        if len(step) != expected_input_dim:
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    f"Each time step must have {expected_input_dim} feature(s); "
+                    f"step {index} has {len(step)} feature(s)."
+                ),
+            )
 
     x = torch.tensor(body.sequence, dtype=torch.float32)
     output = predictor.predict(x)
