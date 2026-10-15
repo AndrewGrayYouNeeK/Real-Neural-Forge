@@ -81,57 +81,73 @@ class TimeSeriesTrainer:
             model_name=cfg["model"].get("name", "time_series_transformer"),
         )
 
-        for epoch in range(1, t_cfg["epochs"] + 1):
-            model.train()
-            running_loss = 0.0
-            for batch_x, batch_y in loader:
-                batch_x, batch_y = batch_x.to(device), batch_y.to(device)
-                optimizer.zero_grad()
-                preds = model(batch_x)
-                loss = criterion(preds, batch_y)
-                loss.backward()
-                optimizer.step()
-                running_loss += loss.item() * batch_x.size(0)
+        try:
+            for epoch in range(1, t_cfg["epochs"] + 1):
+                model.train()
+                running_loss = 0.0
+                for batch_x, batch_y in loader:
+                    batch_x, batch_y = batch_x.to(device), batch_y.to(device)
+                    optimizer.zero_grad()
+                    preds = model(batch_x)
+                    loss = criterion(preds, batch_y)
+                    loss.backward()
+                    optimizer.step()
+                    running_loss += loss.item() * batch_x.size(0)
 
-            epoch_loss = running_loss / len(dataset)
-            history.append({"epoch": epoch, "train_loss": epoch_loss})
-            self.store.log_metric(experiment_id, "train_loss", epoch_loss, epoch)
+                epoch_loss = running_loss / len(dataset)
+                history.append({"epoch": epoch, "train_loss": epoch_loss})
+                self.store.log_metric(experiment_id, "train_loss", epoch_loss, epoch)
 
-            if epoch % log_interval == 0 or epoch == 1:
-                logger.info(
-                    "Epoch %d/%d  loss=%.6f", epoch, t_cfg["epochs"], epoch_loss
-                )
+                if epoch % log_interval == 0 or epoch == 1:
+                    logger.info(
+                        "Epoch %d/%d  loss=%.6f", epoch, t_cfg["epochs"], epoch_loss
+                    )
 
-            if epoch_loss < best_loss:
-                best_loss = epoch_loss
-                checkpoint_path = checkpoint_dir / "best_model.pt"
-                save_checkpoint(
-                    model,
-                    optimizer,
-                    epoch,
-                    best_loss,
-                    cfg,
-                    checkpoint_path,
-                )
-                self.store.complete_experiment(
-                    experiment_id,
-                    status="running",
-                    best_loss=best_loss,
-                    checkpoint_path=str(checkpoint_path),
-                )
+                if epoch_loss < best_loss:
+                    best_loss = epoch_loss
+                    checkpoint_path = checkpoint_dir / "best_model.pt"
+                    save_checkpoint(
+                        model,
+                        optimizer,
+                        epoch,
+                        best_loss,
+                        cfg,
+                        checkpoint_path,
+                    )
+                    self.store.complete_experiment(
+                        experiment_id,
+                        status="running",
+                        best_loss=best_loss,
+                        checkpoint_path=str(checkpoint_path),
+                    )
 
-        model.eval()
-        with torch.no_grad():
-            sample_x, sample_y = next(iter(loader))
-            sample_x, sample_y = sample_x.to(device), sample_y.to(device)
-            preds = model(sample_x)
+            # Evaluate over the full dataset (not a single shuffled batch) so the
+            # reported metrics are deterministic for a given model.
+            model.eval()
+            eval_loader = DataLoader(dataset, batch_size=t_cfg["batch_size"])
+            all_preds: list[torch.Tensor] = []
+            all_targets: list[torch.Tensor] = []
+            with torch.no_grad():
+                for batch_x, batch_y in eval_loader:
+                    all_preds.append(model(batch_x.to(device)).cpu())
+                    all_targets.append(batch_y)
+            preds = torch.cat(all_preds)
+            targets_all = torch.cat(all_targets)
             metrics = {
-                "mse": mse(preds, sample_y),
-                "rmse": rmse(preds, sample_y),
-                "mae": mae(preds, sample_y),
+                "mse": mse(preds, targets_all),
+                "rmse": rmse(preds, targets_all),
+                "mae": mae(preds, targets_all),
             }
             for name, value in metrics.items():
                 self.store.log_metric(experiment_id, name, value)
+
+        except Exception:
+            self.store.complete_experiment(
+                experiment_id,
+                status="failed",
+                best_loss=best_loss if best_loss != float("inf") else None,
+            )
+            raise
 
         self.store.complete_experiment(
             experiment_id,
