@@ -200,6 +200,12 @@ class TestNewEndpoints:
         assert resp.status_code == 200
         assert "experiments" in resp.json()
 
+    def test_list_experiments_rejects_invalid_limit(self, client):
+        # SQLite treats a negative LIMIT as "no limit", so reject it up front.
+        for bad in (-1, 0, 501):
+            resp = client.get("/experiments", params={"limit": bad})
+            assert resp.status_code == 422
+
     def test_dashboard(self, client):
         resp = client.get("/")
         assert resp.status_code == 200

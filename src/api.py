@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any
 
 import torch
-from fastapi import BackgroundTasks, FastAPI, HTTPException
+from fastapi import BackgroundTasks, FastAPI, HTTPException, Query
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -143,7 +143,7 @@ def model_info() -> dict[str, Any]:
 
 
 @app.get("/experiments", tags=["experiments"])
-def list_experiments(limit: int = 20) -> dict[str, Any]:
+def list_experiments(limit: int = Query(20, ge=1, le=500)) -> dict[str, Any]:
     return {"experiments": _store.list_experiments(limit=limit)}
 
 
