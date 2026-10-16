@@ -127,6 +127,8 @@ inference:
   checkpoint_path: checkpoints/best_model.pt
 ```
 
+`data.val_split` (default `0.0` in code, `0.2` in the shipped config) holds out a seeded random fraction of samples (`data.split_seed`); when set, the best checkpoint is selected on validation loss and the final mse/rmse/mae are reported on the validation set.
+
 To train from CSV instead of synthetic data:
 
 ```yaml
