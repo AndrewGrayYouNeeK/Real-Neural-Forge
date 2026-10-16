@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any
 
 import torch
-from fastapi import BackgroundTasks, FastAPI, HTTPException
+from fastapi import BackgroundTasks, FastAPI, HTTPException, Query
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -143,7 +143,7 @@ def model_info() -> dict[str, Any]:
 
 
 @app.get("/experiments", tags=["experiments"])
-def list_experiments(limit: int = 20) -> dict[str, Any]:
+def list_experiments(limit: int = Query(20, ge=1, le=500)) -> dict[str, Any]:
     return {"experiments": _store.list_experiments(limit=limit)}
 
 
@@ -231,14 +231,15 @@ def predict(body: PredictRequest) -> PredictResponse:
 
     if not body.sequence:
         raise HTTPException(status_code=422, detail="sequence must not be empty.")
-    if any(len(step) != expected_input_dim for step in body.sequence):
-        raise HTTPException(
-            status_code=422,
-            detail=(
-                f"Each time step must have {expected_input_dim} feature(s); "
-                f"got a step with {len(body.sequence[0])} feature(s)."
-            ),
-        )
+    for index, step in enumerate(body.sequence):
+        if len(step) != expected_input_dim:
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    f"Each time step must have {expected_input_dim} feature(s); "
+                    f"step {index} has {len(step)} feature(s)."
+                ),
+            )
 
     x = torch.tensor(body.sequence, dtype=torch.float32)
     output = predictor.predict(x)

@@ -206,3 +206,43 @@ class TestBuildModelEdgeCases:
         x = torch.randn(batch, seq_len, 3)
         out = model(x)
         assert out.shape == (batch, 2)
+
+
+class TestTrainerFailureHandling:
+    def test_failed_training_marks_experiment_failed(self, tmp_path):
+        import pytest
+
+        from src.storage.experiments import ExperimentStore
+        from src.training.trainer import TimeSeriesTrainer
+
+        trainer = TimeSeriesTrainer("config/config.yaml")
+        trainer.cfg["training"]["epochs"] = 1
+        trainer.cfg["training"]["checkpoint_dir"] = str(tmp_path / "ckpt")
+        trainer.cfg["data"] = {"n_samples": 8, "seq_len": 8}
+        trainer.store = ExperimentStore(tmp_path / "exp.db")
+
+        with patch(
+            "src.training.trainer.save_checkpoint",
+            side_effect=RuntimeError("disk full"),
+        ):
+            with pytest.raises(RuntimeError, match="disk full"):
+                trainer.train()
+
+        (experiment,) = trainer.store.list_experiments()
+        assert experiment["status"] == "failed"
+
+    def test_metrics_cover_full_dataset(self, tmp_path):
+        from src.storage.experiments import ExperimentStore
+        from src.training.trainer import TimeSeriesTrainer
+
+        trainer = TimeSeriesTrainer("config/config.yaml")
+        trainer.cfg["training"]["epochs"] = 1
+        trainer.cfg["training"]["batch_size"] = 4
+        trainer.cfg["training"]["checkpoint_dir"] = str(tmp_path / "ckpt")
+        trainer.cfg["data"] = {"n_samples": 10, "seq_len": 8}
+        trainer.store = ExperimentStore(tmp_path / "exp.db")
+
+        result = trainer.train()
+        (experiment,) = trainer.store.list_experiments()
+        assert experiment["status"] == "completed"
+        assert abs(result["metrics"]["rmse"] ** 2 - result["metrics"]["mse"]) < 1e-5

@@ -157,6 +157,7 @@ class TestPredictRequestValidation:
         payload = {"sequence": [[0.1], [0.2, 0.3]]}
         resp = client.post("/predict", json=payload)
         assert resp.status_code == 422
+        assert "step 1 has 2 feature(s)" in resp.json()["detail"]
 
     def test_long_sequence(self, client):
         """Test prediction with a long sequence."""
@@ -198,6 +199,12 @@ class TestNewEndpoints:
         resp = client.get("/experiments")
         assert resp.status_code == 200
         assert "experiments" in resp.json()
+
+    def test_list_experiments_rejects_invalid_limit(self, client):
+        # SQLite treats a negative LIMIT as "no limit", so reject it up front.
+        for bad in (-1, 0, 501):
+            resp = client.get("/experiments", params={"limit": bad})
+            assert resp.status_code == 422
 
     def test_dashboard(self, client):
         resp = client.get("/")
