@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 import torch
+import yaml
 from fastapi import BackgroundTasks, FastAPI, HTTPException, Query
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -22,7 +23,10 @@ logger = logging.getLogger("uvicorn.error")
 
 _state: dict[str, Any] = {}
 _store = ExperimentStore()
-FRONTEND_DIR = Path(__file__).resolve().parent.parent / "frontend"
+REPO_ROOT = Path(__file__).resolve().parent.parent
+FRONTEND_DIR = REPO_ROOT / "frontend"
+CONFIG_DIR = REPO_ROOT / "config"
+_CONFIG_SUFFIXES = {".yaml", ".yml"}
 
 
 def load_model(config_path: str = "config/config.yaml") -> None:
@@ -89,12 +93,79 @@ class PredictResponse(BaseModel):
 
 
 class TrainRequest(BaseModel):
-    config_path: str = "config/config.yaml"
+    config_path: str = Field(
+        default="config/config.yaml",
+        description="Path to a .yaml or .yml file inside the config/ directory.",
+    )
 
 
 class TrainResponse(BaseModel):
     status: str
     message: str
+
+
+def resolve_train_config(config_path: str) -> Path:
+    """Resolve a training config and reject anything outside ``config/``.
+
+    Relative paths are resolved from the repository root, not the process
+    working directory, so a request cannot name arbitrary files on disk.
+    """
+    raw = config_path.strip()
+    if not raw:
+        raise HTTPException(status_code=422, detail="config_path must not be empty.")
+
+    candidate = Path(raw)
+    try:
+        if candidate.is_absolute():
+            resolved = candidate.resolve()
+        else:
+            resolved = (REPO_ROOT / candidate).resolve()
+    except (OSError, ValueError) as exc:
+        raise HTTPException(status_code=422, detail="Invalid config_path.") from exc
+
+    config_root = CONFIG_DIR.resolve()
+    try:
+        relative = resolved.relative_to(config_root)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=422,
+            detail="config_path must point to a YAML file inside the config/ directory.",
+        ) from exc
+    if relative == Path("."):
+        raise HTTPException(
+            status_code=422,
+            detail="config_path must point to a YAML file inside the config/ directory.",
+        )
+
+    if resolved.suffix.lower() not in _CONFIG_SUFFIXES:
+        raise HTTPException(
+            status_code=422,
+            detail="config_path must be a .yaml or .yml file.",
+        )
+    if not resolved.is_file():
+        raise HTTPException(status_code=404, detail="Config file not found.")
+
+    try:
+        cfg = load_config(resolved)
+    except yaml.YAMLError as exc:
+        raise HTTPException(
+            status_code=422, detail=f"Invalid YAML config: {exc}"
+        ) from exc
+    except OSError as exc:
+        raise HTTPException(
+            status_code=422, detail="Could not read config file."
+        ) from exc
+
+    if (
+        not isinstance(cfg, dict)
+        or not isinstance(cfg.get("model"), dict)
+        or not isinstance(cfg.get("training"), dict)
+    ):
+        raise HTTPException(
+            status_code=422,
+            detail="Config must include mapping sections 'model' and 'training'.",
+        )
+    return resolved
 
 
 def _run_training(config_path: str) -> None:
@@ -168,10 +239,11 @@ def start_training(
     body: TrainRequest,
     background_tasks: BackgroundTasks,
 ) -> TrainResponse:
+    config_path = resolve_train_config(body.config_path)
     if _state.get("training", {}).get("status") == "running":
         raise HTTPException(status_code=409, detail="Training already in progress.")
 
-    background_tasks.add_task(_run_training, body.config_path)
+    background_tasks.add_task(_run_training, str(config_path))
     _state["training"] = {"status": "running", "result": None}
     return TrainResponse(status="running", message="Training started in background.")
 

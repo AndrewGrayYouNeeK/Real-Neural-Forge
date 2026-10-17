@@ -1,5 +1,6 @@
 """Tests for the FastAPI endpoints."""
 
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
@@ -209,3 +210,118 @@ class TestNewEndpoints:
     def test_dashboard(self, client):
         resp = client.get("/")
         assert resp.status_code == 200
+
+
+def _idle_training() -> None:
+    _state["training"] = {"status": "idle", "result": None}
+
+
+class TestTrainConfigPath:
+    @pytest.fixture(autouse=True)
+    def _reset_training_state(self):
+        _idle_training()
+        yield
+        _idle_training()
+
+    def test_default_config_starts_training(self, client):
+        with patch("src.api._run_training") as run:
+            resp = client.post("/train", json={})
+        assert resp.status_code == 200
+        assert resp.json()["status"] == "running"
+        started = Path(run.call_args.args[0])
+        assert started == (Path("config/config.yaml")).resolve()
+        assert started.is_relative_to(Path("config").resolve())
+
+    def test_normalized_path_inside_config_is_accepted(self, client):
+        with patch("src.api._run_training") as run:
+            resp = client.post(
+                "/train", json={"config_path": "config/../config/config.yaml"}
+            )
+        assert resp.status_code == 200
+        assert Path(run.call_args.args[0]) == Path("config/config.yaml").resolve()
+
+    def test_absolute_config_inside_directory_is_accepted(self, client):
+        absolute = str(Path("config/config.yaml").resolve())
+        with patch("src.api._run_training") as run:
+            resp = client.post("/train", json={"config_path": absolute})
+        assert resp.status_code == 200
+        assert run.call_args.args[0] == absolute
+
+    def test_rejects_paths_outside_config(self, client):
+        outside = [
+            "../README.md",
+            "config/../../etc/passwd",
+            "/etc/passwd",
+            str(Path("pyproject.toml").resolve()),
+            "config",
+        ]
+        for config_path in outside:
+            resp = client.post("/train", json={"config_path": config_path})
+            assert resp.status_code == 422, config_path
+            assert "config/" in resp.json()["detail"]
+            assert _state["training"]["status"] == "idle"
+
+    def test_rejects_empty_config_path(self, client):
+        resp = client.post("/train", json={"config_path": "   "})
+        assert resp.status_code == 422
+        assert _state["training"]["status"] == "idle"
+
+    def test_rejects_non_yaml_suffix(self, client):
+        path = Path("config/_train_reject.txt")
+        path.write_text("not yaml\n", encoding="utf-8")
+        try:
+            resp = client.post("/train", json={"config_path": path.as_posix()})
+        finally:
+            path.unlink(missing_ok=True)
+        assert resp.status_code == 422
+        assert ".yaml" in resp.json()["detail"]
+        assert _state["training"]["status"] == "idle"
+
+    def test_missing_config_is_not_found(self, client):
+        resp = client.post(
+            "/train", json={"config_path": "config/does-not-exist.yaml"}
+        )
+        assert resp.status_code == 404
+        assert _state["training"]["status"] == "idle"
+
+    def test_rejects_invalid_yaml(self, client):
+        path = Path("config/_train_invalid.yaml")
+        path.write_text("model: [\n", encoding="utf-8")
+        try:
+            resp = client.post("/train", json={"config_path": path.as_posix()})
+        finally:
+            path.unlink(missing_ok=True)
+        assert resp.status_code == 422
+        assert "Invalid YAML" in resp.json()["detail"]
+        assert _state["training"]["status"] == "idle"
+
+    def test_rejects_config_missing_sections(self, client):
+        path = Path("config/_train_incomplete.yaml")
+        path.write_text("model:\n  name: demo\n", encoding="utf-8")
+        try:
+            resp = client.post("/train", json={"config_path": path.as_posix()})
+        finally:
+            path.unlink(missing_ok=True)
+        assert resp.status_code == 422
+        assert "model" in resp.json()["detail"]
+        assert _state["training"]["status"] == "idle"
+
+    def test_rejects_symlink_that_leaves_config(self, client, tmp_path):
+        outside = tmp_path / "secret.yaml"
+        outside.write_text("model: {}\ntraining: {}\n", encoding="utf-8")
+        link = Path("config/_train_escape.yaml")
+        link.symlink_to(outside)
+        try:
+            resp = client.post("/train", json={"config_path": link.as_posix()})
+        finally:
+            link.unlink(missing_ok=True)
+        assert resp.status_code == 422
+        assert "config/" in resp.json()["detail"]
+        assert _state["training"]["status"] == "idle"
+
+    def test_conflict_when_already_running(self, client):
+        _state["training"] = {"status": "running", "result": None}
+        with patch("src.api._run_training") as run:
+            resp = client.post("/train", json={})
+        assert resp.status_code == 409
+        run.assert_not_called()
