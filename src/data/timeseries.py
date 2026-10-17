@@ -13,12 +13,17 @@ def make_sine_dataset(
     n_samples: int,
     seq_len: int,
     noise: float = 0.05,
+    seed: int | None = None,
 ) -> tuple[torch.Tensor, torch.Tensor]:
-    """Generate a synthetic sine-wave dataset for demonstration."""
+    """Generate a synthetic sine-wave dataset for demonstration.
+
+    Pass ``seed`` for a reproducible dataset; ``None`` uses the global RNG.
+    """
+    generator = torch.Generator().manual_seed(seed) if seed is not None else None
     t = torch.linspace(0, 4 * torch.pi, seq_len + 1)
-    offsets = torch.rand(n_samples) * 2 * torch.pi
+    offsets = torch.rand(n_samples, generator=generator) * 2 * torch.pi
     series = torch.sin(t.unsqueeze(0) + offsets.unsqueeze(1))
-    series += torch.randn_like(series) * noise
+    series += torch.randn(series.shape, generator=generator) * noise
     inputs = series[:, :-1].unsqueeze(-1)
     targets = series[:, -1].unsqueeze(-1)
     return inputs, targets

@@ -40,6 +40,10 @@ class TimeSeriesTrainer:
         device = self._resolve_device(t_cfg.get("device", "cpu"))
         logger.info("Using device: %s", device)
 
+        seed = t_cfg.get("seed")
+        if seed is not None:
+            torch.manual_seed(int(seed))
+
         model = build_model(cfg).to(device)
         param_count = sum(p.numel() for p in model.parameters() if p.requires_grad)
         logger.info("Model parameters: %d", param_count)
@@ -62,6 +66,7 @@ class TimeSeriesTrainer:
                 n_samples=data_cfg.get("n_samples", 1024),
                 seq_len=data_cfg.get("seq_len", 64),
                 noise=data_cfg.get("noise", 0.05),
+                seed=data_cfg.get("seed"),
             )
 
         full_dataset = TensorDataset(inputs, targets)

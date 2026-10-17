@@ -129,6 +129,8 @@ inference:
 
 `data.val_split` (default `0.0` in code, `0.2` in the shipped config) holds out a seeded random fraction of samples (`data.split_seed`); when set, the best checkpoint is selected on validation loss and the final mse/rmse/mae are reported on the validation set.
 
+For reproducible runs, set `data.seed` (seeds the synthetic dataset) and `training.seed` (seeds model initialisation, shuffling and dropout); both are `0` in the shipped config and unset (random) by default in code.
+
 To train from CSV instead of synthetic data:
 
 ```yaml
