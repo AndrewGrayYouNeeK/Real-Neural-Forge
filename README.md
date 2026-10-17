@@ -135,7 +135,7 @@ inference:
   checkpoint_path: checkpoints/best_model.pt
 ```
 
-`data.val_split` (default `0.0` in code, `0.2` in the shipped config) holds out a seeded random fraction of samples (`data.split_seed`); when set, the best checkpoint is selected on validation loss and the final mse/rmse/mae are reported on the validation set.
+`data.val_split` (default `0.0` in code, `0.2` in the shipped config) holds out a fraction of samples. `data.split_mode` picks how: `random` (seeded by `data.split_seed`; the default for synthetic data) or `temporal` (the most recent windows; the default for CSV data, whose overlapping windows would otherwise leak into validation); when set, the best checkpoint is selected on validation loss and the final mse/rmse/mae are reported on the validation set.
 
 For reproducible runs, set `data.seed` (seeds the synthetic dataset) and `training.seed` (seeds model initialisation, shuffling and dropout); both are `0` in the shipped config and unset (random) by default in code.
 

@@ -8,7 +8,7 @@ from typing import Any
 
 import torch
 import torch.nn as nn
-from torch.utils.data import DataLoader, Dataset, TensorDataset, random_split
+from torch.utils.data import DataLoader, Dataset, Subset, TensorDataset, random_split
 
 from src.data.scaling import StandardScaler
 from src.data.timeseries import make_sine_dataset
@@ -79,7 +79,20 @@ class TimeSeriesTrainer:
             raise ValueError("data.val_split leaves an empty train or validation set.")
         dataset: Dataset[tuple[torch.Tensor, ...]]
         val_dataset: Dataset[tuple[torch.Tensor, ...]] | None
-        if n_val:
+        # CSV windows overlap and are ordered in time, so a random split leaks
+        # near-duplicate windows into validation; hold out the most recent ones.
+        split_mode = data_cfg.get(
+            "split_mode", "temporal" if data_cfg.get("source") == "csv" else "random"
+        )
+        if split_mode not in ("random", "temporal"):
+            raise ValueError(
+                f"data.split_mode must be 'random' or 'temporal', got {split_mode!r}"
+            )
+        if n_val and split_mode == "temporal":
+            n_fit = len(full_dataset) - n_val
+            dataset = Subset(full_dataset, list(range(n_fit)))
+            val_dataset = Subset(full_dataset, list(range(n_fit, len(full_dataset))))
+        elif n_val:
             generator = torch.Generator().manual_seed(int(data_cfg.get("split_seed", 0)))
             dataset, val_dataset = random_split(
                 full_dataset, [len(full_dataset) - n_val, n_val], generator=generator
