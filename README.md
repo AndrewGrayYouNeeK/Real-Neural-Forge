@@ -80,6 +80,8 @@ The first package published to GHCR is private by default. If `docker pull` retu
 docker compose up --build
 ```
 
+The image declares a `HEALTHCHECK` against `/health`, so `docker ps` shows the container as `healthy` once the API is up. `.dockerignore` keeps the virtualenv, caches, git history and local checkpoints out of the build context.
+
 The API and dashboard will be available at <http://localhost:8000>.
 
 ### Local Development
