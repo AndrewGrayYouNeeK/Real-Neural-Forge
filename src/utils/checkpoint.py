@@ -16,6 +16,7 @@ def save_checkpoint(
     loss: float,
     config: dict[str, Any],
     path: str | Path,
+    scaler: dict[str, Any] | None = None,
 ) -> None:
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -26,6 +27,7 @@ def save_checkpoint(
             "optimizer_state_dict": optimizer.state_dict(),
             "loss": loss,
             "config": config,
+            "scaler": scaler,
         },
         path,
     )

@@ -84,8 +84,14 @@ The API and dashboard will be available at <http://localhost:8000>.
 
 ### Local Development
 
+Requires Python 3.10+.
+
 ```bash
-pip install -r requirements.txt
+python -m venv .venv
+source .venv/bin/activate
+# Optional: CPU-only PyTorch (much smaller download; skip if you have CUDA)
+pip install --index-url https://download.pytorch.org/whl/cpu torch
+pip install -r requirements.txt -r requirements-dev.txt
 
 # Train a model
 python -m src.train --config config/config.yaml
@@ -129,6 +135,8 @@ inference:
 
 `data.val_split` (default `0.0` in code, `0.2` in the shipped config) holds out a seeded random fraction of samples (`data.split_seed`); when set, the best checkpoint is selected on validation loss and the final mse/rmse/mae are reported on the validation set.
 
+For reproducible runs, set `data.seed` (seeds the synthetic dataset) and `training.seed` (seeds model initialisation, shuffling and dropout); both are `0` in the shipped config and unset (random) by default in code.
+
 To train from CSV instead of synthetic data:
 
 ```yaml
@@ -139,6 +147,8 @@ data:
   target_column: value
   seq_len: 64
 ```
+
+CSV data is standardised (per-feature z-score) by default; set `data.normalize: false` to disable it, or `true` to also scale synthetic data. The mean/std are fitted on the training split only, saved in the checkpoint, and applied automatically by `/predict`, so requests and responses stay in the CSV's original units. Final mse/rmse/mae are reported in original units; per-epoch `train_loss`/`val_loss` are in scaled units.
 
 ## API Reference
 
@@ -221,16 +231,18 @@ Tagged releases (`vX.Y.Z`) also publish matching image tags. Run the container o
 
 ### Running Tests
 
+With the virtualenv from *Local Development* active:
+
 ```bash
-pip install -r requirements-dev.txt
-pytest
+pytest            # full suite (~1 min on CPU; no GPU needed)
+pytest --cov=src  # with coverage
 ```
 
 ### Code Quality
 
 ```bash
 ruff check src/ tests/
-mypy src/
+mypy src/ --ignore-missing-imports
 ```
 
 ### CI/CD

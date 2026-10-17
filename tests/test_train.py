@@ -284,3 +284,30 @@ class TestValidationSplit:
         t = self._trainer(tmp_path, self._cfg(tmp_path, 1.0))
         with pytest.raises(ValueError, match="val_split"):
             t.train()
+
+
+class TestReproducibility:
+    def test_seeded_dataset_is_deterministic(self):
+        a = make_sine_dataset(n_samples=8, seq_len=6, seed=3)
+        b = make_sine_dataset(n_samples=8, seq_len=6, seed=3)
+        c = make_sine_dataset(n_samples=8, seq_len=6, seed=4)
+        assert torch.equal(a[0], b[0]) and torch.equal(a[1], b[1])
+        assert not torch.equal(a[0], c[0])
+
+    def test_seeded_training_is_reproducible(self, tmp_path):
+        from src.storage.experiments import ExperimentStore
+        from src.training.trainer import TimeSeriesTrainer
+
+        losses = []
+        for run in range(2):
+            cfg = load_config("config/config.yaml")
+            cfg["training"].update(epochs=2, batch_size=8, device="cpu", seed=7,
+                                   checkpoint_dir=str(tmp_path / f"c{run}"))
+            cfg["data"].update(n_samples=24, seq_len=8, val_split=0.25, seed=7)
+            cfg["model"].update(d_model=16, nhead=2, num_encoder_layers=1,
+                                dim_feedforward=32)
+            t = TimeSeriesTrainer.__new__(TimeSeriesTrainer)
+            t.cfg = cfg
+            t.store = ExperimentStore(str(tmp_path / f"e{run}.db"))
+            losses.append([h["val_loss"] for h in t.train()["history"]])
+        assert losses[0] == losses[1]
