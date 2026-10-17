@@ -80,6 +80,8 @@ The first package published to GHCR is private by default. If `docker pull` retu
 docker compose up --build
 ```
 
+The image declares a `HEALTHCHECK` against `/health`, so `docker ps` shows the container as `healthy` once the API is up. `.dockerignore` keeps the virtualenv, caches, git history and local checkpoints out of the build context.
+
 The API and dashboard will be available at <http://localhost:8000>.
 
 ### Local Development
@@ -133,7 +135,9 @@ inference:
   checkpoint_path: checkpoints/best_model.pt
 ```
 
-`data.val_split` (default `0.0` in code, `0.2` in the shipped config) holds out a seeded random fraction of samples (`data.split_seed`); when set, the best checkpoint is selected on validation loss and the final mse/rmse/mae are reported on the validation set.
+`data.val_split` (default `0.0` in code, `0.2` in the shipped config) holds out a fraction of samples. `data.split_mode` picks how: `random` (seeded by `data.split_seed`; the default for synthetic data) or `temporal` (the most recent windows; the default for CSV data, whose overlapping windows would otherwise leak into validation); when set, the best checkpoint is selected on validation loss and the final mse/rmse/mae are reported on the validation set.
+
+`training.patience` stops training once the selection loss (validation loss when there is a split, otherwise train loss) has not improved for that many epochs, and `training.max_grad_norm` clips the gradient norm each step; both default to `0` (disabled).
 
 For reproducible runs, set `data.seed` (seeds the synthetic dataset) and `training.seed` (seeds model initialisation, shuffling and dropout); both are `0` in the shipped config and unset (random) by default in code.
 

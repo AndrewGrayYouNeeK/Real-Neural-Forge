@@ -65,6 +65,7 @@ class TestCsvScalingPipeline:
         from src.data.timeseries import load_csv_timeseries
 
         cfg = _csv_cfg(tmp_path)
+        cfg["data"]["split_mode"] = "random"
         _train(tmp_path, cfg)
         ckpt = torch.load(tmp_path / "ckpt" / "best_model.pt", weights_only=True)
         assert ckpt["scaler"] is not None
@@ -99,3 +100,30 @@ class TestCsvScalingPipeline:
         _train(tmp_path, cfg)
         ckpt = torch.load(tmp_path / "ckpt" / "best_model.pt", weights_only=True)
         assert ckpt["scaler"] is None
+
+
+class TestSplitMode:
+    def test_csv_defaults_to_temporal_split(self, tmp_path):
+        from src.data.timeseries import load_csv_timeseries
+
+        cfg = _csv_cfg(tmp_path)
+        _train(tmp_path, cfg)
+        ckpt = torch.load(tmp_path / "ckpt" / "best_model.pt", weights_only=True)
+        x, y = load_csv_timeseries(cfg["data"]["path"], ["value"], "value", 8)
+        n_fit = len(x) - int(len(x) * 0.25)
+        expected = StandardScaler.fit(x[:n_fit], y[:n_fit])
+        assert ckpt["scaler"]["y_mean"] == pytest.approx(expected.y_mean.tolist(), rel=1e-5)
+
+    def test_temporal_split_on_synthetic_data(self, tmp_path):
+        cfg = load_config("config/config.yaml")
+        cfg["data"].update(n_samples=20, seq_len=8, val_split=0.25, split_mode="temporal")
+        cfg["training"].update(epochs=1, batch_size=8, checkpoint_dir=str(tmp_path / "c"))
+        cfg["model"].update(d_model=16, nhead=2, num_encoder_layers=1, dim_feedforward=32)
+        result = _train(tmp_path, cfg)
+        assert "val_loss" in result["history"][0]
+
+    def test_unknown_split_mode_rejected(self, tmp_path):
+        cfg = _csv_cfg(tmp_path)
+        cfg["data"]["split_mode"] = "shuffle"
+        with pytest.raises(ValueError, match="split_mode"):
+            _train(tmp_path, cfg)
