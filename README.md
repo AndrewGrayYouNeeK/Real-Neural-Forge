@@ -168,7 +168,13 @@ Returns architecture, parameter count, device, and checkpoint status.
 
 ### `POST /train`
 
-Starts a background training job using the configured YAML file.
+Starts a background training job. Optional JSON body:
+
+```json
+{ "config_path": "config/config.yaml" }
+```
+
+`config_path` is resolved from the repository root and must be an existing `.yaml` or `.yml` file inside `config/`. Paths outside that directory (absolute paths, `..` traversal, symlinks that leave `config/`) are rejected before a job starts. The file must be a mapping with `model` and `training` sections.
 
 ### `GET /training/status`
 
