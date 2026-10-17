@@ -14,6 +14,8 @@ data:
   n_samples: 1024
   seq_len: 64
   noise: 0.05
+  val_split: 0.2
+  split_seed: 0
 
 training:
   experiment_name: default

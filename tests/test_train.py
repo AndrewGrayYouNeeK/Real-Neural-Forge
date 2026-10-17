@@ -246,3 +246,41 @@ class TestTrainerFailureHandling:
         (experiment,) = trainer.store.list_experiments()
         assert experiment["status"] == "completed"
         assert abs(result["metrics"]["rmse"] ** 2 - result["metrics"]["mse"]) < 1e-5
+
+
+class TestValidationSplit:
+    def _cfg(self, tmp_path, val_split):
+        cfg = load_config("config/config.yaml")
+        cfg["training"].update(epochs=2, batch_size=16, device="cpu",
+                               checkpoint_dir=str(tmp_path), log_interval=1)
+        cfg["data"].update(n_samples=40, seq_len=8, val_split=val_split)
+        cfg["model"].update(d_model=16, nhead=2, num_encoder_layers=1, dim_feedforward=32)
+        return cfg
+
+    def _trainer(self, tmp_path, cfg):
+        from src.storage.experiments import ExperimentStore
+        from src.training.trainer import TimeSeriesTrainer
+
+        t = TimeSeriesTrainer.__new__(TimeSeriesTrainer)
+        t.cfg = cfg
+        t.store = ExperimentStore(str(tmp_path / "exp.db"))
+        return t
+
+    def test_val_loss_recorded_and_used(self, tmp_path):
+        t = self._trainer(tmp_path, self._cfg(tmp_path, 0.25))
+        result = t.train()
+        assert all("val_loss" in h for h in result["history"])
+        assert result["best_loss"] == min(h["val_loss"] for h in result["history"])
+
+    def test_no_split_keeps_train_loss(self, tmp_path):
+        t = self._trainer(tmp_path, self._cfg(tmp_path, 0.0))
+        result = t.train()
+        assert all("val_loss" not in h for h in result["history"])
+        assert result["best_loss"] == min(h["train_loss"] for h in result["history"])
+
+    def test_invalid_split_rejected(self, tmp_path):
+        import pytest
+
+        t = self._trainer(tmp_path, self._cfg(tmp_path, 1.0))
+        with pytest.raises(ValueError, match="val_split"):
+            t.train()

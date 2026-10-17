@@ -8,7 +8,7 @@ from typing import Any
 
 import torch
 import torch.nn as nn
-from torch.utils.data import DataLoader, TensorDataset
+from torch.utils.data import DataLoader, Dataset, TensorDataset, random_split
 
 from src.data.timeseries import make_sine_dataset
 from src.evaluation.metrics import mae, mse, rmse
@@ -64,10 +64,36 @@ class TimeSeriesTrainer:
                 noise=data_cfg.get("noise", 0.05),
             )
 
-        dataset = TensorDataset(inputs, targets)
+        full_dataset = TensorDataset(inputs, targets)
+        val_split = float(data_cfg.get("val_split", 0.0))
+        if not 0.0 <= val_split < 1.0:
+            raise ValueError(f"data.val_split must be in [0, 1), got {val_split}")
+        n_val = int(len(full_dataset) * val_split)
+        if val_split > 0 and (n_val == 0 or n_val == len(full_dataset)):
+            raise ValueError("data.val_split leaves an empty train or validation set.")
+        dataset: Dataset[tuple[torch.Tensor, ...]]
+        val_dataset: Dataset[tuple[torch.Tensor, ...]] | None
+        if n_val:
+            generator = torch.Generator().manual_seed(int(data_cfg.get("split_seed", 0)))
+            dataset, val_dataset = random_split(
+                full_dataset, [len(full_dataset) - n_val, n_val], generator=generator
+            )
+        else:
+            dataset, val_dataset = full_dataset, None
+        n_train = len(full_dataset) - n_val
         loader = DataLoader(
             dataset, batch_size=t_cfg["batch_size"], shuffle=True
         )
+
+        def evaluate(ds: Dataset[tuple[torch.Tensor, ...]]) -> tuple[torch.Tensor, torch.Tensor]:
+            model.eval()
+            preds_l: list[torch.Tensor] = []
+            targets_l: list[torch.Tensor] = []
+            with torch.no_grad():
+                for bx, by in DataLoader(ds, batch_size=t_cfg["batch_size"]):
+                    preds_l.append(model(bx.to(device)).cpu())
+                    targets_l.append(by)
+            return torch.cat(preds_l), torch.cat(targets_l)
 
         checkpoint_dir = Path(t_cfg.get("checkpoint_dir", "checkpoints"))
         checkpoint_dir.mkdir(parents=True, exist_ok=True)
@@ -94,17 +120,25 @@ class TimeSeriesTrainer:
                     optimizer.step()
                     running_loss += loss.item() * batch_x.size(0)
 
-                epoch_loss = running_loss / len(dataset)
-                history.append({"epoch": epoch, "train_loss": epoch_loss})
+                epoch_loss = running_loss / n_train
+                record: dict[str, float] = {"epoch": epoch, "train_loss": epoch_loss}
                 self.store.log_metric(experiment_id, "train_loss", epoch_loss, epoch)
+                # Select the best checkpoint on held-out loss when available.
+                select_loss = epoch_loss
+                if val_dataset is not None:
+                    vp, vt = evaluate(val_dataset)
+                    select_loss = mse(vp, vt)
+                    record["val_loss"] = select_loss
+                    self.store.log_metric(experiment_id, "val_loss", select_loss, epoch)
+                history.append(record)
 
                 if epoch % log_interval == 0 or epoch == 1:
                     logger.info(
                         "Epoch %d/%d  loss=%.6f", epoch, t_cfg["epochs"], epoch_loss
                     )
 
-                if epoch_loss < best_loss:
-                    best_loss = epoch_loss
+                if select_loss < best_loss:
+                    best_loss = select_loss
                     checkpoint_path = checkpoint_dir / "best_model.pt"
                     save_checkpoint(
                         model,
@@ -121,18 +155,9 @@ class TimeSeriesTrainer:
                         checkpoint_path=str(checkpoint_path),
                     )
 
-            # Evaluate over the full dataset (not a single shuffled batch) so the
-            # reported metrics are deterministic for a given model.
-            model.eval()
-            eval_loader = DataLoader(dataset, batch_size=t_cfg["batch_size"])
-            all_preds: list[torch.Tensor] = []
-            all_targets: list[torch.Tensor] = []
-            with torch.no_grad():
-                for batch_x, batch_y in eval_loader:
-                    all_preds.append(model(batch_x.to(device)).cpu())
-                    all_targets.append(batch_y)
-            preds = torch.cat(all_preds)
-            targets_all = torch.cat(all_targets)
+            # Report metrics on the validation set when one exists, otherwise
+            # on the full training set (deterministic, unshuffled).
+            preds, targets_all = evaluate(val_dataset if val_dataset is not None else dataset)
             metrics = {
                 "mse": mse(preds, targets_all),
                 "rmse": rmse(preds, targets_all),
