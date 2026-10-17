@@ -84,8 +84,14 @@ The API and dashboard will be available at <http://localhost:8000>.
 
 ### Local Development
 
+Requires Python 3.10+.
+
 ```bash
-pip install -r requirements.txt
+python -m venv .venv
+source .venv/bin/activate
+# Optional: CPU-only PyTorch (much smaller download; skip if you have CUDA)
+pip install --index-url https://download.pytorch.org/whl/cpu torch
+pip install -r requirements.txt -r requirements-dev.txt
 
 # Train a model
 python -m src.train --config config/config.yaml
@@ -217,16 +223,18 @@ Tagged releases (`vX.Y.Z`) also publish matching image tags. Run the container o
 
 ### Running Tests
 
+With the virtualenv from *Local Development* active:
+
 ```bash
-pip install -r requirements-dev.txt
-pytest
+pytest            # full suite (~1 min on CPU; no GPU needed)
+pytest --cov=src  # with coverage
 ```
 
 ### Code Quality
 
 ```bash
 ruff check src/ tests/
-mypy src/
+mypy src/ --ignore-missing-imports
 ```
 
 ### CI/CD
