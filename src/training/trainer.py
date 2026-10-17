@@ -134,6 +134,11 @@ class TimeSeriesTrainer:
         best_loss = float("inf")
         log_interval = t_cfg.get("log_interval", 10)
         history: list[dict[str, float]] = []
+        patience = int(t_cfg.get("patience", 0) or 0)
+        max_grad_norm = float(t_cfg.get("max_grad_norm", 0) or 0)
+        if patience < 0 or max_grad_norm < 0:
+            raise ValueError("training.patience and training.max_grad_norm must be >= 0")
+        epochs_without_improvement = 0
 
         experiment_id = self.store.create_experiment(
             name=t_cfg.get("experiment_name", "default"),
@@ -151,6 +156,8 @@ class TimeSeriesTrainer:
                     preds = model(batch_x)
                     loss = criterion(preds, batch_y)
                     loss.backward()
+                    if max_grad_norm > 0:
+                        torch.nn.utils.clip_grad_norm_(model.parameters(), max_grad_norm)
                     optimizer.step()
                     running_loss += loss.item() * batch_x.size(0)
 
@@ -172,6 +179,7 @@ class TimeSeriesTrainer:
                     )
 
                 if select_loss < best_loss:
+                    epochs_without_improvement = 0
                     best_loss = select_loss
                     checkpoint_path = checkpoint_dir / "best_model.pt"
                     save_checkpoint(
@@ -189,6 +197,15 @@ class TimeSeriesTrainer:
                         best_loss=best_loss,
                         checkpoint_path=str(checkpoint_path),
                     )
+                else:
+                    epochs_without_improvement += 1
+                    if patience and epochs_without_improvement >= patience:
+                        logger.info(
+                            "Early stopping at epoch %d (no improvement for %d epochs).",
+                            epoch,
+                            patience,
+                        )
+                        break
 
             # Report metrics on the validation set when one exists, otherwise
             # on the full training set (deterministic, unshuffled).

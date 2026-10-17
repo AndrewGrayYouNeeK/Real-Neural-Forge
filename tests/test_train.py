@@ -311,3 +311,50 @@ class TestReproducibility:
             t.store = ExperimentStore(str(tmp_path / f"e{run}.db"))
             losses.append([h["val_loss"] for h in t.train()["history"]])
         assert losses[0] == losses[1]
+
+
+class TestEarlyStoppingAndClipping:
+    def _trainer(self, tmp_path, **training):
+        from src.storage.experiments import ExperimentStore
+        from src.training.trainer import TimeSeriesTrainer
+
+        cfg = load_config("config/config.yaml")
+        cfg["training"].update(epochs=30, batch_size=8, device="cpu", seed=0,
+                               checkpoint_dir=str(tmp_path / "ckpt"))
+        cfg["training"].update(training)
+        cfg["data"].update(n_samples=24, seq_len=8, val_split=0.25, seed=0)
+        cfg["model"].update(d_model=16, nhead=2, num_encoder_layers=1, dim_feedforward=32)
+        t = TimeSeriesTrainer.__new__(TimeSeriesTrainer)
+        t.cfg = cfg
+        t.store = ExperimentStore(str(tmp_path / "exp.db"))
+        return t
+
+    def test_patience_stops_after_no_improvement(self, tmp_path):
+        result = self._trainer(tmp_path, patience=2, learning_rate=0.5).train()
+        history = result["history"]
+        assert len(history) < 30
+        losses = [h["val_loss"] for h in history]
+        best_epoch = losses.index(min(losses))
+        assert len(history) - 1 - best_epoch == 2
+
+    def test_clipping_bounds_gradient_norm(self, tmp_path):
+        from unittest.mock import patch
+
+        import torch.nn.utils as nn_utils
+
+        real = nn_utils.clip_grad_norm_
+        calls: list[float] = []
+
+        def spy(params, max_norm, *a, **k):
+            calls.append(max_norm)
+            return real(params, max_norm, *a, **k)
+
+        with patch("torch.nn.utils.clip_grad_norm_", side_effect=spy):
+            self._trainer(tmp_path, epochs=1, max_grad_norm=0.5).train()
+        assert calls and all(c == 0.5 for c in calls)
+
+    def test_negative_patience_rejected(self, tmp_path):
+        import pytest
+
+        with pytest.raises(ValueError, match="patience"):
+            self._trainer(tmp_path, patience=-1).train()
