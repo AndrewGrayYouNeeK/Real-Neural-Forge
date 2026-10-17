@@ -10,6 +10,7 @@ import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader, Dataset, TensorDataset, random_split
 
+from src.data.scaling import StandardScaler
 from src.data.timeseries import make_sine_dataset
 from src.evaluation.metrics import mae, mse, rmse
 from src.models.registry import build_model
@@ -86,6 +87,21 @@ class TimeSeriesTrainer:
         else:
             dataset, val_dataset = full_dataset, None
         n_train = len(full_dataset) - n_val
+
+        # Standardise features/targets (default on for CSV data). Statistics come
+        # from the training split only so validation data never leaks into them.
+        scaler: StandardScaler | None = None
+        if data_cfg.get("normalize", data_cfg.get("source") == "csv"):
+            train_idx = list(getattr(dataset, "indices", range(len(full_dataset))))
+            scaler = StandardScaler.fit(inputs[train_idx], targets[train_idx])
+            full_dataset.tensors = (
+                scaler.transform_inputs(inputs),
+                scaler.transform_targets(targets),
+            )
+        scaler_state = scaler.state_dict() if scaler is not None else None
+
+        def to_original(t: torch.Tensor) -> torch.Tensor:
+            return scaler.inverse_targets(t) if scaler is not None else t
         loader = DataLoader(
             dataset, batch_size=t_cfg["batch_size"], shuffle=True
         )
@@ -132,7 +148,7 @@ class TimeSeriesTrainer:
                 select_loss = epoch_loss
                 if val_dataset is not None:
                     vp, vt = evaluate(val_dataset)
-                    select_loss = mse(vp, vt)
+                    select_loss = mse(vp, vt)  # in scaled units, like train_loss
                     record["val_loss"] = select_loss
                     self.store.log_metric(experiment_id, "val_loss", select_loss, epoch)
                 history.append(record)
@@ -152,6 +168,7 @@ class TimeSeriesTrainer:
                         best_loss,
                         cfg,
                         checkpoint_path,
+                        scaler=scaler_state,
                     )
                     self.store.complete_experiment(
                         experiment_id,
@@ -163,6 +180,8 @@ class TimeSeriesTrainer:
             # Report metrics on the validation set when one exists, otherwise
             # on the full training set (deterministic, unshuffled).
             preds, targets_all = evaluate(val_dataset if val_dataset is not None else dataset)
+            # Final metrics are reported in the data's original units.
+            preds, targets_all = to_original(preds), to_original(targets_all)
             metrics = {
                 "mse": mse(preds, targets_all),
                 "rmse": rmse(preds, targets_all),
