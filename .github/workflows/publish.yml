@@ -1,22 +1,49 @@
 name: Publish image
 
+# :latest is published only after CI succeeds on a push to main.
+# Version tags and manual runs execute that same CI workflow first.
 on:
-  push:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
     branches: [main]
+  push:
     tags: ["v*.*.*"]
   workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
 
 env:
   REGISTRY: ghcr.io
 
 jobs:
+  verify:
+    if: github.event_name != 'workflow_run'
+    uses: ./.github/workflows/ci.yml
+    secrets: inherit
+
   publish:
+    needs: verify
+    if: >-
+      always() &&
+      (needs.verify.result == 'success' || needs.verify.result == 'skipped') &&
+      (
+        github.event_name == 'workflow_dispatch' ||
+        startsWith(github.ref, 'refs/tags/v') ||
+        (
+          github.event_name == 'workflow_run' &&
+          github.event.workflow_run.conclusion == 'success' &&
+          github.event.workflow_run.event == 'push' &&
+          github.event.workflow_run.head_branch == 'main'
+        )
+      )
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
 
       - name: Lowercase image name
         run: echo "IMAGE=${REGISTRY}/${GITHUB_REPOSITORY,,}" >> "$GITHUB_ENV"
@@ -27,13 +54,19 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Commit tag
+        id: rev
+        env:
+          SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+        run: echo "short_tag=sha-${SHA::7}" >> "$GITHUB_OUTPUT"
+
       - uses: docker/metadata-action@v6
         id: meta
         with:
           images: ${{ env.IMAGE }}
           tags: |
-            type=raw,value=latest,enable={{is_default_branch}}
-            type=sha,prefix=sha-
+            type=raw,value=latest,enable=${{ github.event_name == 'workflow_run' || github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
+            type=raw,value=${{ steps.rev.outputs.short_tag }}
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
 
@@ -45,5 +78,7 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            TORCH_INDEX_URL=${{ vars.TORCH_INDEX_URL || 'https://download.pytorch.org/whl/cpu' }}
           cache-from: type=gha
           cache-to: type=gha,mode=max

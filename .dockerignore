@@ -1,6 +1,7 @@
 .git
 .venv
 venv
+env
 __pycache__
 *.py[cod]
 .pytest_cache
@@ -13,3 +14,16 @@ coverage.json
 checkpoints
 *.pt
 *.pth
+/data
+*.db
+*.sqlite
+*.sqlite3
+.env
+.env.*
+*.log
+.idea
+.vscode
+*.egg-info
+dist
+build
+.eggs
