@@ -93,7 +93,9 @@ class TimeSeriesTrainer:
             dataset = Subset(full_dataset, list(range(n_fit)))
             val_dataset = Subset(full_dataset, list(range(n_fit, len(full_dataset))))
         elif n_val:
-            generator = torch.Generator().manual_seed(int(data_cfg.get("split_seed", 0)))
+            generator = torch.Generator().manual_seed(
+                int(data_cfg.get("split_seed", 0))
+            )
             dataset, val_dataset = random_split(
                 full_dataset, [len(full_dataset) - n_val, n_val], generator=generator
             )
@@ -115,11 +117,12 @@ class TimeSeriesTrainer:
 
         def to_original(t: torch.Tensor) -> torch.Tensor:
             return scaler.inverse_targets(t) if scaler is not None else t
-        loader = DataLoader(
-            dataset, batch_size=t_cfg["batch_size"], shuffle=True
-        )
 
-        def evaluate(ds: Dataset[tuple[torch.Tensor, ...]]) -> tuple[torch.Tensor, torch.Tensor]:
+        loader = DataLoader(dataset, batch_size=t_cfg["batch_size"], shuffle=True)
+
+        def evaluate(
+            ds: Dataset[tuple[torch.Tensor, ...]],
+        ) -> tuple[torch.Tensor, torch.Tensor]:
             model.eval()
             preds_l: list[torch.Tensor] = []
             targets_l: list[torch.Tensor] = []
@@ -137,7 +140,9 @@ class TimeSeriesTrainer:
         patience = int(t_cfg.get("patience", 0) or 0)
         max_grad_norm = float(t_cfg.get("max_grad_norm", 0) or 0)
         if patience < 0 or max_grad_norm < 0:
-            raise ValueError("training.patience and training.max_grad_norm must be >= 0")
+            raise ValueError(
+                "training.patience and training.max_grad_norm must be >= 0"
+            )
         epochs_without_improvement = 0
 
         experiment_id = self.store.create_experiment(
@@ -157,7 +162,9 @@ class TimeSeriesTrainer:
                     loss = criterion(preds, batch_y)
                     loss.backward()
                     if max_grad_norm > 0:
-                        torch.nn.utils.clip_grad_norm_(model.parameters(), max_grad_norm)
+                        torch.nn.utils.clip_grad_norm_(
+                            model.parameters(), max_grad_norm
+                        )
                     optimizer.step()
                     running_loss += loss.item() * batch_x.size(0)
 
@@ -209,7 +216,9 @@ class TimeSeriesTrainer:
 
             # Report metrics on the validation set when one exists, otherwise
             # on the full training set (deterministic, unshuffled).
-            preds, targets_all = evaluate(val_dataset if val_dataset is not None else dataset)
+            preds, targets_all = evaluate(
+                val_dataset if val_dataset is not None else dataset
+            )
             # Final metrics are reported in the data's original units.
             preds, targets_all = to_original(preds), to_original(targets_all)
             metrics = {

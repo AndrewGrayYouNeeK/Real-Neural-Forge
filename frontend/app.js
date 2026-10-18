@@ -1,80 +1,129 @@
+function errorMessage(response, data, text) {
+  const detail = data && typeof data === "object" ? data.detail : null;
+  if (typeof detail === "string" && detail) {
+    return detail;
+  }
+  if (Array.isArray(detail)) {
+    const parts = detail.map((item) => {
+      if (item && typeof item === "object" && typeof item.msg === "string") {
+        return item.msg;
+      }
+      return String(item);
+    });
+    const joined = parts.filter(Boolean).join("; ");
+    if (joined) {
+      return joined;
+    }
+  } else if (detail != null) {
+    return JSON.stringify(detail);
+  }
+  const body = text.trim();
+  return body || response.statusText || `Request failed (${response.status})`;
+}
+
 async function fetchJson(url, options = {}) {
   const response = await fetch(url, options);
-  const data = await response.json();
+  const text = await response.text();
+  let data = null;
+  if (text) {
+    try {
+      data = JSON.parse(text);
+    } catch {
+      throw new Error(
+        response.ok
+          ? `Expected JSON but received a non-JSON response (${response.status})`
+          : text.trim() || response.statusText || `Request failed (${response.status})`
+      );
+    }
+  }
   if (!response.ok) {
-    throw new Error(data.detail || response.statusText);
+    throw new Error(errorMessage(response, data, text));
   }
   return data;
 }
 
+function fillStatGrid(grid, cards) {
+  grid.replaceChildren(
+    ...cards.map(([label, value]) => {
+      const card = document.createElement("div");
+      card.className = "stat-card";
+      const span = document.createElement("span");
+      span.textContent = label;
+      const strong = document.createElement("strong");
+      strong.textContent = value == null ? "" : String(value);
+      card.append(span, strong);
+      return card;
+    })
+  );
+}
+
 function renderStatus(modelInfo, health, training) {
   const grid = document.getElementById("status-grid");
-  const cards = [
+  fillStatGrid(grid, [
     ["API Health", health.status],
     ["Architecture", modelInfo.architecture],
     ["Parameters", modelInfo.parameters.toLocaleString()],
     ["Device", modelInfo.device],
     ["Checkpoint", modelInfo.checkpoint_loaded ? "loaded" : "missing"],
     ["Training", training.status],
-  ];
-
-  grid.innerHTML = cards
-    .map(
-      ([label, value]) => `
-        <div class="stat-card">
-          <span>${label}</span>
-          <strong>${value}</strong>
-        </div>
-      `
-    )
-    .join("");
+  ]);
 }
 
 function renderExperiments(experiments) {
   const list = document.getElementById("experiments-list");
   if (!experiments.length) {
-    list.innerHTML = "<p class='hint'>No experiments yet. Start a training run.</p>";
+    const empty = document.createElement("p");
+    empty.className = "hint";
+    empty.textContent = "No experiments yet. Start a training run.";
+    list.replaceChildren(empty);
     return;
   }
 
-  list.innerHTML = experiments
-    .map(
-      (exp) => `
-        <div class="experiment-card">
-          <div>
-            <strong>${exp.name}</strong>
-            <div class="hint">${exp.model_name} · ${exp.created_at}</div>
-          </div>
-          <div>
-            <span class="badge ${exp.status}">${exp.status}</span>
-            <div class="hint">loss: ${exp.best_loss ?? "n/a"}</div>
-          </div>
-        </div>
-      `
-    )
-    .join("");
+  list.replaceChildren(
+    ...experiments.map((exp) => {
+      const card = document.createElement("div");
+      card.className = "experiment-card";
+
+      const left = document.createElement("div");
+      const name = document.createElement("strong");
+      name.textContent = exp.name ?? "";
+      const meta = document.createElement("div");
+      meta.className = "hint";
+      meta.textContent = `${exp.model_name ?? ""} · ${exp.created_at ?? ""}`;
+      left.append(name, meta);
+
+      const right = document.createElement("div");
+      const badge = document.createElement("span");
+      const status = String(exp.status ?? "");
+      badge.className = "badge";
+      if (status === "running" || status === "completed" || status === "failed") {
+        badge.classList.add(status);
+      }
+      badge.textContent = status;
+      const loss = document.createElement("div");
+      loss.className = "hint";
+      loss.textContent = `loss: ${exp.best_loss ?? "n/a"}`;
+      right.append(badge, loss);
+
+      card.append(left, right);
+      return card;
+    })
+  );
 }
 
 function renderYouneek(now) {
   const grid = document.getElementById("youneek-grid");
-  const cards = [
+  fillStatGrid(grid, [
     ["Clock", now.time.display],
     ["Year clock", now.calendar.year_clock.display],
-    ["Year / week / day", `${now.calendar.year_index} / ${now.calendar.week} / ${now.calendar.weekday}`],
+    [
+      "Year / week / day",
+      `${now.calendar.year_index} / ${now.calendar.week} / ${now.calendar.weekday}`,
+    ],
     ["Lunar", now.lunar.clock.display],
     ["Next minute", now.forecast.next_minute.youneek_display],
     ["Scale", "100/100/100"],
-  ];
-  grid.innerHTML = cards
-    .map(
-      ([label, value]) => `
-        <div class="stat-card">
-          <span>${label}</span>
-          <strong>${value}</strong>
-        </div>
-      `
-    )
-    .join("");
+  ]);
   document.getElementById("youneek-output").textContent = JSON.stringify(now, null, 2);
 }
 
@@ -132,7 +181,10 @@ document.getElementById("train-btn").addEventListener("click", async () => {
 });
 
 refreshDashboard().catch((error) => {
-  document.getElementById("status-grid").innerHTML = `<p>${error.message}</p>`;
+  const grid = document.getElementById("status-grid");
+  const message = document.createElement("p");
+  message.textContent = error.message;
+  grid.replaceChildren(message);
 });
 
 setInterval(() => {

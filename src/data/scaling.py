@@ -45,9 +45,15 @@ class StandardScaler:
         return y * self.y_std.to(y.device) + self.y_mean.to(y.device)
 
     def state_dict(self) -> dict[str, list[float]]:
-        return {k: getattr(self, k).tolist() for k in ("x_mean", "x_std", "y_mean", "y_std")}
+        return {
+            k: getattr(self, k).tolist() for k in ("x_mean", "x_std", "y_mean", "y_std")
+        }
 
     @classmethod
     def from_state_dict(cls, state: dict[str, Any]) -> StandardScaler:
-        return cls(**{k: torch.tensor(state[k], dtype=torch.float32)
-                      for k in ("x_mean", "x_std", "y_mean", "y_std")})
+        return cls(
+            **{
+                k: torch.tensor(state[k], dtype=torch.float32)
+                for k in ("x_mean", "x_std", "y_mean", "y_std")
+            }
+        )

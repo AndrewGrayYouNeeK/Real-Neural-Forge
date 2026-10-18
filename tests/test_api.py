@@ -278,9 +278,7 @@ class TestTrainConfigPath:
         assert _state["training"]["status"] == "idle"
 
     def test_missing_config_is_not_found(self, client):
-        resp = client.post(
-            "/train", json={"config_path": "config/does-not-exist.yaml"}
-        )
+        resp = client.post("/train", json={"config_path": "config/does-not-exist.yaml"})
         assert resp.status_code == 404
         assert _state["training"]["status"] == "idle"
 

@@ -88,11 +88,7 @@ class TestTimeSeriesTransformer:
         loss = out.sum()
         loss.backward()
         # Check at least one gradient is non-zero
-        grads = [
-            p.grad
-            for p in default_model.parameters()
-            if p.grad is not None
-        ]
+        grads = [p.grad for p in default_model.parameters() if p.grad is not None]
         assert len(grads) > 0
         assert any(g.abs().sum().item() > 0 for g in grads)
 

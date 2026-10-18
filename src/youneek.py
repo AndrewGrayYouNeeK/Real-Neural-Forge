@@ -107,7 +107,9 @@ def calendar_state(moment: datetime) -> dict[str, Any]:
 
 def lunar_state(moment: datetime) -> dict[str, Any]:
     utc = _ensure_utc(moment)
-    elapsed_days = (utc - MEAN_NEW_MOON_EPOCH).total_seconds() / GREGORIAN_SECONDS_PER_DAY
+    elapsed_days = (
+        utc - MEAN_NEW_MOON_EPOCH
+    ).total_seconds() / GREGORIAN_SECONDS_PER_DAY
     cycle_fraction = (elapsed_days / SYNODIC_MONTH_DAYS) % 1.0
     ticks = ticks_from_fraction(cycle_fraction)
     # Illumination peaks at full moon (0.5).
@@ -141,7 +143,9 @@ def next_youneek_minute(moment: datetime) -> dict[str, Any]:
         boundary = midnight + timedelta(days=1)
         next_index = 0
     else:
-        boundary = midnight + timedelta(seconds=next_index * YOUNEEK_MINUTE_EARTH_SECONDS)
+        boundary = midnight + timedelta(
+            seconds=next_index * YOUNEEK_MINUTE_EARTH_SECONDS
+        )
     units = next_index // MINUTES_PER_UNIT
     minutes = next_index % MINUTES_PER_UNIT
     return {

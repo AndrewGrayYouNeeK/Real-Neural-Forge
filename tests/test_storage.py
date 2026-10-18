@@ -1,6 +1,5 @@
 """Tests for experiment storage."""
 
-
 from src.storage.experiments import ExperimentStore
 
 

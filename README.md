@@ -49,7 +49,10 @@ A production-ready transformer pipeline for time-series prediction, built with P
 ├── Dockerfile
 ├── docker-compose.yml
 ├── docker-compose.ghcr.yml
-└── requirements.txt
+├── requirements.in
+├── requirements.txt
+├── requirements-dev.in
+└── requirements-dev.txt
 ```
 
 ## Quick Start
@@ -86,13 +89,13 @@ The API and dashboard will be available at <http://localhost:8000>.
 
 ### Local Development
 
-Requires Python 3.10+.
+Requires Python 3.10+ (CI tests 3.10–3.13).
+
+`requirements.txt` and `requirements-dev.txt` are pinned locks. They install the CPU torch wheel from the PyTorch CPU index (no NVIDIA packages). A GPU machine can still run that build; it just will not use CUDA.
 
 ```bash
 python -m venv .venv
 source .venv/bin/activate
-# Optional: CPU-only PyTorch (much smaller download; skip if you have CUDA)
-pip install --index-url https://download.pytorch.org/whl/cpu torch
 pip install -r requirements.txt -r requirements-dev.txt
 
 # Train a model
@@ -246,11 +249,12 @@ pytest --cov=src  # with coverage
 
 ```bash
 ruff check src/ tests/
+ruff format --check src/ tests/
 mypy src/ --ignore-missing-imports
 ```
 
 ### CI/CD
 
-- **CI** (`.github/workflows/ci.yml`) runs tests, linting, type checks, coverage, and a Docker image smoke test on every pull request.
+- **CI** (`.github/workflows/ci.yml`) runs tests, linting, formatting, type checks, coverage, and a Docker image smoke test on Python 3.10–3.13.
 - **Publish** (`.github/workflows/publish.yml`) pushes the image to GitHub Container Registry on every push to `main` and on version tags.
-- **Dependabot** (`.github/dependabot.yml`) opens weekly PRs for GitHub Actions and pip updates.
+- **Dependabot** (`.github/dependabot.yml`) opens weekly grouped PRs for GitHub Actions and the pip locks. Pip updates are resolved on Python 3.10 so they stay installable on the whole CI matrix.

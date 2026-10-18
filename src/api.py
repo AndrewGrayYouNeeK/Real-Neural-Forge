@@ -258,7 +258,9 @@ def youneek_convert(at: str) -> dict[str, Any]:
     try:
         moment = parse_moment(at)
     except ValueError as exc:
-        raise HTTPException(status_code=422, detail=f"Invalid timestamp: {exc}") from exc
+        raise HTTPException(
+            status_code=422, detail=f"Invalid timestamp: {exc}"
+        ) from exc
     return snapshot(moment).as_dict()
 
 
@@ -267,7 +269,9 @@ def youneek_forecast_next_minute(at: str | None = None) -> dict[str, Any]:
     try:
         moment = parse_moment(at)
     except ValueError as exc:
-        raise HTTPException(status_code=422, detail=f"Invalid timestamp: {exc}") from exc
+        raise HTTPException(
+            status_code=422, detail=f"Invalid timestamp: {exc}"
+        ) from exc
     snap = snapshot(moment)
     return {"utc": snap.as_dict()["utc"], **snap.next_minute}
 
@@ -277,7 +281,9 @@ def youneek_calendar(at: str | None = None) -> dict[str, Any]:
     try:
         moment = parse_moment(at)
     except ValueError as exc:
-        raise HTTPException(status_code=422, detail=f"Invalid timestamp: {exc}") from exc
+        raise HTTPException(
+            status_code=422, detail=f"Invalid timestamp: {exc}"
+        ) from exc
     snap = snapshot(moment)
     return {"utc": snap.as_dict()["utc"], **snap.calendar}
 
@@ -287,7 +293,9 @@ def youneek_lunar(at: str | None = None) -> dict[str, Any]:
     try:
         moment = parse_moment(at)
     except ValueError as exc:
-        raise HTTPException(status_code=422, detail=f"Invalid timestamp: {exc}") from exc
+        raise HTTPException(
+            status_code=422, detail=f"Invalid timestamp: {exc}"
+        ) from exc
     snap = snapshot(moment)
     return {"utc": snap.as_dict()["utc"], **snap.lunar}
 
