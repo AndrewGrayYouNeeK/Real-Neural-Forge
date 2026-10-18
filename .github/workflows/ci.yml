@@ -34,7 +34,7 @@ jobs:
 
     - name: Lint with ruff
       run: |
-        ruff check src/ tests/
+        ruff check src/ tests/ workers_ci/
 
     - name: Type check with mypy
       run: |

@@ -12,7 +12,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
+# workers_ci is installed from requirements.txt and has to be in the
+# image before that install runs.
 COPY requirements.txt .
+COPY workers_ci ./workers_ci
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
