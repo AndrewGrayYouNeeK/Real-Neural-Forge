@@ -32,5 +32,11 @@ inference:
   device: cpu
   checkpoint_path: checkpoints/best_model.pt
 
+# training_enabled defaults to true when this section is omitted.
+# Set it to false to reject POST /train. A token, when required, comes from
+# the NEURAL_FORGE_API_TOKEN environment variable rather than this file.
+api:
+  training_enabled: true
+
 storage:
   db_path: data/experiments.db

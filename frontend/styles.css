@@ -97,7 +97,9 @@ label,
   margin-bottom: 8px;
 }
 
-textarea {
+textarea,
+input[type="password"],
+input[type="text"] {
   width: 100%;
   background: #0d1420;
   color: var(--text);

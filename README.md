@@ -72,6 +72,8 @@ docker compose -f docker-compose.ghcr.yml up
 
 The API and dashboard will be available at <http://localhost:8000>.
 
+Leave `NEURAL_FORGE_API_TOKEN` unset to keep `POST /train` open. Set it (for example in the compose `environment` block) when that endpoint should require a bearer token.
+
 The first package published to GHCR is private by default. If `docker pull` returns `denied`, open the package on GitHub → **Package settings** → **Change visibility** → **Public**.
 
 ### Docker (build locally)
@@ -144,7 +146,21 @@ training:
 inference:
   device: cpu
   checkpoint_path: checkpoints/best_model.pt
+
+api:
+  training_enabled: true
+
+storage:
+  db_path: data/experiments.db
 ```
+
+Relative paths in the configuration — `training.checkpoint_dir`, `inference.checkpoint_path`, `storage.db_path`, and a CSV `data.path` — are resolved from the repository root. The default config path (`config/config.yaml`) is resolved the same way, so the server and `python -m src.train` work from any working directory. Absolute paths are used as given.
+
+`storage.db_path` (default `data/experiments.db`) is the SQLite file used by both the API and the trainer.
+
+`api.training_enabled` defaults to `true` when the `api` section is omitted. Set it to `false` to reject `POST /train` with `403`.
+
+`POST /train` stays open when `NEURAL_FORGE_API_TOKEN` is unset, which is the localhost default. When that environment variable is a non-empty string, `POST /train` requires `Authorization: Bearer <token>` and otherwise returns `401`. The dashboard has an optional token field; it sends the header when a token is entered and shows a clear message on `401` or `403`. The token is not written into the YAML config, because training runs persist that file in the experiment store.
 
 `data.val_split` (default `0.0` in code, `0.2` in the shipped config) holds out a fraction of samples. `data.split_mode` picks how: `random` (seeded by `data.split_seed`; the default for synthetic data) or `temporal` (the most recent windows; the default for CSV data, whose overlapping windows would otherwise leak into validation); when set, the best checkpoint is selected on validation loss and the final mse/rmse/mae are reported on the validation set.
 
@@ -175,6 +191,8 @@ Returns `{"status": "ok"}` when the service is running.
 
 Returns architecture, parameter count, device, and checkpoint status.
 
+`checkpoint_loaded` is true only when this process actually loaded weights from a checkpoint. It stays false if the file was missing at load time, even if a checkpoint appears later (for example after training from the CLI while the server is running). `checkpoint_stale` is true when a checkpoint file on disk is newer than the weights in memory, or when a file is present that was never loaded. Restart the server, or finish a training run through `POST /train` (which reloads the model), to pick up that file. The OpenAPI `info.version` is the `[project].version` from `pyproject.toml`.
+
 ### `POST /predict`
 
 **Request body**
@@ -193,6 +211,8 @@ Returns architecture, parameter count, device, and checkpoint status.
 }
 ```
 
+Each step must contain `model.input_dim` finite numbers. A sequence longer than `model.max_seq_len` (512 in the shipped config), or any `NaN` or infinity, is rejected with `422`.
+
 ### `POST /train`
 
 Starts a background training job. Optional JSON body:
@@ -202,6 +222,8 @@ Starts a background training job. Optional JSON body:
 ```
 
 `config_path` is resolved from the repository root and must be an existing `.yaml` or `.yml` file inside `config/`. Paths outside that directory (absolute paths, `..` traversal, symlinks that leave `config/`) are rejected before a job starts. The file must be a mapping with `model` and `training` sections.
+
+When `NEURAL_FORGE_API_TOKEN` is set, send it as `Authorization: Bearer <token>`. A missing or wrong token returns `401` and does not start a job. When `api.training_enabled` is `false`, the endpoint returns `403` even if the token is valid. With the variable unset and training enabled, the endpoint behaves as before.
 
 ### `GET /training/status`
 

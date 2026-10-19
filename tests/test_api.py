@@ -1,5 +1,6 @@
 """Tests for the FastAPI endpoints."""
 
+import os
 from pathlib import Path
 from unittest.mock import patch
 
@@ -8,7 +9,11 @@ import torch
 import yaml
 from fastapi.testclient import TestClient
 
+import src.api as api_module
+from src import project_version
 from src.api import _state, app, load_model
+from src.models.registry import build_model
+from src.utils.paths import REPO_ROOT
 
 
 @pytest.fixture(scope="module")
@@ -190,6 +195,8 @@ class TestNewEndpoints:
         data = resp.json()
         assert data["architecture"] == "time_series_transformer"
         assert "parameters" in data
+        assert "checkpoint_loaded" in data
+        assert "checkpoint_stale" in data
 
     def test_training_status(self, client):
         resp = client.get("/training/status")
@@ -325,3 +332,275 @@ class TestTrainConfigPath:
             resp = client.post("/train", json={})
         assert resp.status_code == 409
         run.assert_not_called()
+
+    def test_resolves_config_from_repo_root_when_cwd_differs(self, client, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        with patch("src.api._run_training") as run:
+            resp = client.post("/train", json={"config_path": "config/config.yaml"})
+        assert resp.status_code == 200
+        assert Path(run.call_args.args[0]) == (REPO_ROOT / "config" / "config.yaml").resolve()
+
+
+def _write_cfg(path: Path, cfg: dict) -> None:
+    path.write_text(yaml.safe_dump(cfg), encoding="utf-8")
+
+
+def _save_checkpoint(path: Path, cfg: dict) -> None:
+    model = build_model(cfg)
+    torch.save(
+        {
+            "epoch": 1,
+            "model_state_dict": model.state_dict(),
+            "optimizer_state_dict": {},
+            "loss": 0.1,
+            "config": cfg,
+        },
+        path,
+    )
+
+
+def _project_version_from_file() -> str:
+    in_project = False
+    for line in (REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8").splitlines():
+        stripped = line.strip()
+        if stripped.startswith("[") and stripped.endswith("]"):
+            in_project = stripped == "[project]"
+            continue
+        if not in_project:
+            continue
+        key, separator, raw = stripped.partition("=")
+        if separator and key.strip() == "version":
+            return raw.strip().strip('"').strip("'")
+    raise AssertionError("version is not set in pyproject.toml")
+
+
+class TestPredictRobustness:
+    def test_sequence_at_positional_limit(self, client):
+        resp = client.post("/predict", json={"sequence": [[0.0]] * 512})
+        assert resp.status_code == 200
+        assert all(isinstance(value, float) for value in resp.json()["prediction"])
+
+    def test_sequence_over_positional_limit(self, client):
+        resp = client.post("/predict", json={"sequence": [[0.0]] * 513})
+        assert resp.status_code == 422
+        assert resp.json()["detail"] == "sequence length 513 exceeds the maximum of 512."
+
+    def test_limit_follows_loaded_model(self, client, tmp_path):
+        cfg = yaml.safe_load((REPO_ROOT / "config" / "config.yaml").read_text())
+        cfg["model"]["max_seq_len"] = 4
+        cfg["inference"]["checkpoint_path"] = str(tmp_path / "missing.pt")
+        cfg["storage"]["db_path"] = str(tmp_path / "exp.db")
+        config_path = tmp_path / "config.yaml"
+        _write_cfg(config_path, cfg)
+        try:
+            load_model(config_path)
+            accepted = client.post("/predict", json={"sequence": [[0.1]] * 4})
+            rejected = client.post("/predict", json={"sequence": [[0.1]] * 5})
+        finally:
+            load_model("config/config.yaml")
+        assert accepted.status_code == 200
+        assert rejected.status_code == 422
+        assert rejected.json()["detail"] == "sequence length 5 exceeds the maximum of 4."
+
+    @pytest.mark.parametrize("literal", ["NaN", "Infinity", "-Infinity"])
+    def test_non_finite_values_rejected(self, client, literal):
+        # Send the token literally. Recent HTTP clients refuse to encode NaN,
+        # but Python's JSON parser accepts it and the API must still reject it.
+        body = f'{{"sequence": [[0.1], [{literal}]]}}'.encode()
+        resp = client.post(
+            "/predict",
+            content=body,
+            headers={"Content-Type": "application/json"},
+        )
+        assert resp.status_code == 422
+        assert "step 1" in resp.text
+        assert "finite" in resp.text
+
+
+class TestCheckpointReporting:
+    def test_missing_checkpoint_is_not_loaded(self, client, tmp_path):
+        cfg = yaml.safe_load((REPO_ROOT / "config" / "config.yaml").read_text())
+        missing = tmp_path / "missing.pt"
+        cfg["inference"]["checkpoint_path"] = str(missing)
+        cfg["storage"]["db_path"] = str(tmp_path / "exp.db")
+        config_path = tmp_path / "config.yaml"
+        _write_cfg(config_path, cfg)
+        try:
+            load_model(config_path)
+            info = client.get("/model/info").json()
+            assert info["checkpoint_loaded"] is False
+            assert info["checkpoint_stale"] is False
+            missing.write_bytes(b"checkpoint appeared after startup")
+            info = client.get("/model/info").json()
+            assert info["checkpoint_loaded"] is False
+            assert info["checkpoint_stale"] is True
+        finally:
+            load_model("config/config.yaml")
+
+    def test_loaded_checkpoint_reports_newer_file(self, client, tmp_path):
+        cfg = yaml.safe_load((REPO_ROOT / "config" / "config.yaml").read_text())
+        checkpoint = tmp_path / "model.pt"
+        _save_checkpoint(checkpoint, cfg)
+        cfg["inference"]["checkpoint_path"] = str(checkpoint)
+        cfg["storage"]["db_path"] = str(tmp_path / "exp.db")
+        config_path = tmp_path / "config.yaml"
+        _write_cfg(config_path, cfg)
+        try:
+            load_model(config_path)
+            info = client.get("/model/info").json()
+            assert info["checkpoint_loaded"] is True
+            assert info["checkpoint_stale"] is False
+            loaded_ns = checkpoint.stat().st_mtime_ns
+            os.utime(checkpoint, ns=(loaded_ns + 1_000_000_000, loaded_ns + 1_000_000_000))
+            info = client.get("/model/info").json()
+            assert info["checkpoint_loaded"] is True
+            assert info["checkpoint_stale"] is True
+            assert info["checkpoint_path"] == str(checkpoint.resolve())
+        finally:
+            load_model("config/config.yaml")
+
+    def test_relative_checkpoint_loads_from_repo_root(self, client, tmp_path, monkeypatch):
+        cfg = yaml.safe_load((REPO_ROOT / "config" / "config.yaml").read_text())
+        repo = tmp_path / "repo"
+        checkpoint = repo / "checkpoints" / "best_model.pt"
+        checkpoint.parent.mkdir(parents=True)
+        _save_checkpoint(checkpoint, cfg)
+        cfg["inference"]["checkpoint_path"] = "checkpoints/best_model.pt"
+        cfg["storage"]["db_path"] = str(tmp_path / "exp.db")
+        config_path = tmp_path / "config.yaml"
+        _write_cfg(config_path, cfg)
+        elsewhere = tmp_path / "elsewhere"
+        elsewhere.mkdir()
+        monkeypatch.chdir(elsewhere)
+        monkeypatch.setattr("src.utils.paths.REPO_ROOT", repo)
+        try:
+            load_model(config_path)
+            info = client.get("/model/info").json()
+            assert info["checkpoint_loaded"] is True
+            assert info["checkpoint_stale"] is False
+            assert info["checkpoint_path"] == str(checkpoint.resolve())
+            assert not (elsewhere / "checkpoints").exists()
+        finally:
+            monkeypatch.setattr("src.utils.paths.REPO_ROOT", REPO_ROOT)
+            load_model("config/config.yaml")
+
+
+class TestExperimentStoreConfig:
+    def test_api_uses_configured_db_path(self, client, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        cfg = yaml.safe_load((REPO_ROOT / "config" / "config.yaml").read_text())
+        db_path = tmp_path / "custom.db"
+        cfg["storage"]["db_path"] = str(db_path)
+        cfg["inference"]["checkpoint_path"] = str(tmp_path / "missing.pt")
+        config_path = tmp_path / "config.yaml"
+        _write_cfg(config_path, cfg)
+        try:
+            load_model(config_path)
+            assert api_module._store is not None
+            assert api_module._store.db_path == db_path.resolve()
+            exp_id = api_module._store.create_experiment(
+                name="from-config", config={"epochs": 1}, model_name="m"
+            )
+            listed = client.get("/experiments").json()["experiments"]
+            assert listed[0]["id"] == exp_id
+            assert listed[0]["name"] == "from-config"
+            assert not (tmp_path / "data" / "experiments.db").exists()
+        finally:
+            load_model("config/config.yaml")
+
+    def test_relative_db_path_ignores_cwd(self, client, tmp_path, monkeypatch):
+        cfg = yaml.safe_load((REPO_ROOT / "config" / "config.yaml").read_text())
+        cfg["storage"]["db_path"] = "nested/runs.db"
+        cfg["inference"]["checkpoint_path"] = str(tmp_path / "missing.pt")
+        config_path = tmp_path / "config.yaml"
+        _write_cfg(config_path, cfg)
+        repo = tmp_path / "repo"
+        elsewhere = tmp_path / "elsewhere"
+        elsewhere.mkdir()
+        monkeypatch.chdir(elsewhere)
+        monkeypatch.setattr("src.utils.paths.REPO_ROOT", repo)
+        try:
+            load_model(config_path)
+            assert api_module._store is not None
+            assert api_module._store.db_path == (repo / "nested" / "runs.db").resolve()
+            assert not (elsewhere / "nested").exists()
+        finally:
+            monkeypatch.setattr("src.utils.paths.REPO_ROOT", REPO_ROOT)
+            load_model("config/config.yaml")
+
+    def test_default_config_loads_from_other_cwd(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        try:
+            load_model("config/config.yaml")
+            assert _state["config"]["model"]["name"] == "time_series_transformer"
+            checkpoint_path = _state["checkpoint_path"]
+            assert isinstance(checkpoint_path, Path)
+            assert checkpoint_path.is_relative_to(REPO_ROOT)
+            assert not (tmp_path / "checkpoints").exists()
+            assert not (tmp_path / "data").exists()
+        finally:
+            load_model("config/config.yaml")
+
+
+class TestTrainProtection:
+    @pytest.fixture(autouse=True)
+    def _reset_training_state(self, monkeypatch):
+        monkeypatch.delenv("NEURAL_FORGE_API_TOKEN", raising=False)
+        previous = _state["config"].get("api", {}).get("training_enabled", True)
+        _idle_training()
+        yield
+        _state["config"].setdefault("api", {})["training_enabled"] = previous
+        _idle_training()
+
+    def test_open_when_token_unset(self, client):
+        with patch("src.api._run_training") as run:
+            resp = client.post("/train", json={})
+        assert resp.status_code == 200
+        run.assert_called_once()
+
+    def test_blank_token_keeps_training_open(self, client, monkeypatch):
+        monkeypatch.setenv("NEURAL_FORGE_API_TOKEN", "   ")
+        with patch("src.api._run_training") as run:
+            resp = client.post("/train", json={})
+        assert resp.status_code == 200
+        run.assert_called_once()
+
+    def test_token_required_when_set(self, client, monkeypatch):
+        monkeypatch.setenv("NEURAL_FORGE_API_TOKEN", "secret-token")
+        with patch("src.api._run_training") as run:
+            missing = client.post("/train", json={})
+            wrong = client.post(
+                "/train", json={}, headers={"Authorization": "Bearer nope"}
+            )
+            ok = client.post(
+                "/train",
+                json={},
+                headers={"Authorization": "Bearer secret-token"},
+            )
+        assert missing.status_code == 401
+        assert "token" in missing.json()["detail"].lower()
+        assert missing.headers["www-authenticate"].lower().startswith("bearer")
+        assert wrong.status_code == 401
+        assert ok.status_code == 200
+        run.assert_called_once()
+        assert _state["training"]["status"] == "running"
+
+    def test_disabled_training_rejects_even_with_token(self, client, monkeypatch):
+        monkeypatch.setenv("NEURAL_FORGE_API_TOKEN", "secret-token")
+        _state["config"].setdefault("api", {})["training_enabled"] = False
+        with patch("src.api._run_training") as run:
+            resp = client.post(
+                "/train",
+                json={},
+                headers={"Authorization": "Bearer secret-token"},
+            )
+        assert resp.status_code == 403
+        assert "disabled" in resp.json()["detail"].lower()
+        run.assert_not_called()
+        assert _state["training"]["status"] == "idle"
+
+
+class TestAppVersion:
+    def test_version_comes_from_pyproject(self, client):
+        assert app.version == project_version() == _project_version_from_file()
+        assert client.get("/openapi.json").json()["info"]["version"] == app.version
