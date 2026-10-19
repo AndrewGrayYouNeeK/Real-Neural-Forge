@@ -26,9 +26,7 @@ class ModelRegistry:
     @staticmethod
     def build(name: str, **kwargs: Any) -> nn.Module:
         if name not in _REGISTRY:
-            raise KeyError(
-                f"Unknown model '{name}'. Available: {list(_REGISTRY)}"
-            )
+            raise KeyError(f"Unknown model '{name}'. Available: {list(_REGISTRY)}")
         return _REGISTRY[name](**kwargs)
 
     @staticmethod

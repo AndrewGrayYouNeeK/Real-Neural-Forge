@@ -47,4 +47,7 @@ def test_publish_workflow_waits_for_ci_and_keeps_tags():
     assert 'tags: ["v*.*.*"]' in text
     assert "needs: verify" in text
     assert "uses: ./.github/workflows/ci.yml" in text
-    assert "branches: [main]" not in text.split("push:", 1)[-1].split("workflow_dispatch:", 1)[0]
+    assert (
+        "branches: [main]"
+        not in text.split("push:", 1)[-1].split("workflow_dispatch:", 1)[0]
+    )

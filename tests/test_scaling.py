@@ -42,11 +42,22 @@ def _csv_cfg(tmp_path, val_split=0.25):
     path = tmp_path / "series.csv"
     pd.DataFrame({"value": values}).to_csv(path, index=False)
     cfg = load_config("config/config.yaml")
-    cfg["data"] = {"source": "csv", "path": str(path), "feature_columns": ["value"],
-                   "target_column": "value", "seq_len": 8, "val_split": val_split,
-                   "split_seed": 0}
-    cfg["training"].update(epochs=2, batch_size=16, device="cpu", seed=0,
-                           checkpoint_dir=str(tmp_path / "ckpt"))
+    cfg["data"] = {
+        "source": "csv",
+        "path": str(path),
+        "feature_columns": ["value"],
+        "target_column": "value",
+        "seq_len": 8,
+        "val_split": val_split,
+        "split_seed": 0,
+    }
+    cfg["training"].update(
+        epochs=2,
+        batch_size=16,
+        device="cpu",
+        seed=0,
+        checkpoint_dir=str(tmp_path / "ckpt"),
+    )
     cfg["model"].update(d_model=16, nhead=2, num_encoder_layers=1, dim_feedforward=32)
     return cfg
 
@@ -72,11 +83,16 @@ class TestCsvScalingPipeline:
 
         x, y = load_csv_timeseries(cfg["data"]["path"], ["value"], "value", 8)
         n_val = int(len(x) * 0.25)
-        train_ds, _ = random_split(range(len(x)), [len(x) - n_val, n_val],
-                                   generator=torch.Generator().manual_seed(0))
+        train_ds, _ = random_split(
+            range(len(x)),
+            [len(x) - n_val, n_val],
+            generator=torch.Generator().manual_seed(0),
+        )
         idx = list(train_ds.indices)
         expected = StandardScaler.fit(x[idx], y[idx])
-        assert ckpt["scaler"]["y_mean"] == pytest.approx(expected.y_mean.tolist(), rel=1e-5)
+        assert ckpt["scaler"]["y_mean"] == pytest.approx(
+            expected.y_mean.tolist(), rel=1e-5
+        )
         full = StandardScaler.fit(x, y)
         assert ckpt["scaler"]["y_mean"] != pytest.approx(full.y_mean.tolist(), rel=1e-7)
 
@@ -87,7 +103,8 @@ class TestCsvScalingPipeline:
         # so original-unit predictions must land near the data's range.
         assert result["metrics"]["mae"] < 300
         predictor = Predictor.from_checkpoint(
-            build_model(cfg), tmp_path / "ckpt" / "best_model.pt")
+            build_model(cfg), tmp_path / "ckpt" / "best_model.pt"
+        )
         assert predictor.scaler is not None
         out = predictor.predict(torch.full((8, 1), 1000.0))
         assert 700 < out.item() < 1300
@@ -95,8 +112,12 @@ class TestCsvScalingPipeline:
     def test_synthetic_data_unscaled_by_default(self, tmp_path):
         cfg = load_config("config/config.yaml")
         cfg["data"].update(n_samples=16, seq_len=8)
-        cfg["training"].update(epochs=1, batch_size=8, checkpoint_dir=str(tmp_path / "ckpt"))
-        cfg["model"].update(d_model=16, nhead=2, num_encoder_layers=1, dim_feedforward=32)
+        cfg["training"].update(
+            epochs=1, batch_size=8, checkpoint_dir=str(tmp_path / "ckpt")
+        )
+        cfg["model"].update(
+            d_model=16, nhead=2, num_encoder_layers=1, dim_feedforward=32
+        )
         _train(tmp_path, cfg)
         ckpt = torch.load(tmp_path / "ckpt" / "best_model.pt", weights_only=True)
         assert ckpt["scaler"] is None
@@ -112,13 +133,21 @@ class TestSplitMode:
         x, y = load_csv_timeseries(cfg["data"]["path"], ["value"], "value", 8)
         n_fit = len(x) - int(len(x) * 0.25)
         expected = StandardScaler.fit(x[:n_fit], y[:n_fit])
-        assert ckpt["scaler"]["y_mean"] == pytest.approx(expected.y_mean.tolist(), rel=1e-5)
+        assert ckpt["scaler"]["y_mean"] == pytest.approx(
+            expected.y_mean.tolist(), rel=1e-5
+        )
 
     def test_temporal_split_on_synthetic_data(self, tmp_path):
         cfg = load_config("config/config.yaml")
-        cfg["data"].update(n_samples=20, seq_len=8, val_split=0.25, split_mode="temporal")
-        cfg["training"].update(epochs=1, batch_size=8, checkpoint_dir=str(tmp_path / "c"))
-        cfg["model"].update(d_model=16, nhead=2, num_encoder_layers=1, dim_feedforward=32)
+        cfg["data"].update(
+            n_samples=20, seq_len=8, val_split=0.25, split_mode="temporal"
+        )
+        cfg["training"].update(
+            epochs=1, batch_size=8, checkpoint_dir=str(tmp_path / "c")
+        )
+        cfg["model"].update(
+            d_model=16, nhead=2, num_encoder_layers=1, dim_feedforward=32
+        )
         result = _train(tmp_path, cfg)
         assert "val_loss" in result["history"][0]
 

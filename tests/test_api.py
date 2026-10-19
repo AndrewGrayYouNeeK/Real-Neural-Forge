@@ -285,9 +285,7 @@ class TestTrainConfigPath:
         assert _state["training"]["status"] == "idle"
 
     def test_missing_config_is_not_found(self, client):
-        resp = client.post(
-            "/train", json={"config_path": "config/does-not-exist.yaml"}
-        )
+        resp = client.post("/train", json={"config_path": "config/does-not-exist.yaml"})
         assert resp.status_code == 404
         assert _state["training"]["status"] == "idle"
 
@@ -333,12 +331,17 @@ class TestTrainConfigPath:
         assert resp.status_code == 409
         run.assert_not_called()
 
-    def test_resolves_config_from_repo_root_when_cwd_differs(self, client, tmp_path, monkeypatch):
+    def test_resolves_config_from_repo_root_when_cwd_differs(
+        self, client, tmp_path, monkeypatch
+    ):
         monkeypatch.chdir(tmp_path)
         with patch("src.api._run_training") as run:
             resp = client.post("/train", json={"config_path": "config/config.yaml"})
         assert resp.status_code == 200
-        assert Path(run.call_args.args[0]) == (REPO_ROOT / "config" / "config.yaml").resolve()
+        assert (
+            Path(run.call_args.args[0])
+            == (REPO_ROOT / "config" / "config.yaml").resolve()
+        )
 
 
 def _write_cfg(path: Path, cfg: dict) -> None:
@@ -383,7 +386,9 @@ class TestPredictRobustness:
     def test_sequence_over_positional_limit(self, client):
         resp = client.post("/predict", json={"sequence": [[0.0]] * 513})
         assert resp.status_code == 422
-        assert resp.json()["detail"] == "sequence length 513 exceeds the maximum of 512."
+        assert (
+            resp.json()["detail"] == "sequence length 513 exceeds the maximum of 512."
+        )
 
     def test_limit_follows_loaded_model(self, client, tmp_path):
         cfg = yaml.safe_load((REPO_ROOT / "config" / "config.yaml").read_text())
@@ -400,7 +405,9 @@ class TestPredictRobustness:
             load_model("config/config.yaml")
         assert accepted.status_code == 200
         assert rejected.status_code == 422
-        assert rejected.json()["detail"] == "sequence length 5 exceeds the maximum of 4."
+        assert (
+            rejected.json()["detail"] == "sequence length 5 exceeds the maximum of 4."
+        )
 
     @pytest.mark.parametrize("literal", ["NaN", "Infinity", "-Infinity"])
     def test_non_finite_values_rejected(self, client, literal):
@@ -451,7 +458,9 @@ class TestCheckpointReporting:
             assert info["checkpoint_loaded"] is True
             assert info["checkpoint_stale"] is False
             loaded_ns = checkpoint.stat().st_mtime_ns
-            os.utime(checkpoint, ns=(loaded_ns + 1_000_000_000, loaded_ns + 1_000_000_000))
+            os.utime(
+                checkpoint, ns=(loaded_ns + 1_000_000_000, loaded_ns + 1_000_000_000)
+            )
             info = client.get("/model/info").json()
             assert info["checkpoint_loaded"] is True
             assert info["checkpoint_stale"] is True
@@ -459,7 +468,9 @@ class TestCheckpointReporting:
         finally:
             load_model("config/config.yaml")
 
-    def test_relative_checkpoint_loads_from_repo_root(self, client, tmp_path, monkeypatch):
+    def test_relative_checkpoint_loads_from_repo_root(
+        self, client, tmp_path, monkeypatch
+    ):
         cfg = yaml.safe_load((REPO_ROOT / "config" / "config.yaml").read_text())
         repo = tmp_path / "repo"
         checkpoint = repo / "checkpoints" / "best_model.pt"

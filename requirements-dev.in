@@ -1,0 +1,11 @@
+# Dev/test tools. Locked to requirements-dev.txt for CI.
+# httpx2 is what starlette.testclient imports; plain httpx only triggers
+# StarletteDeprecationWarning.
+
+-r requirements.in
+
+pytest>=7.4.0,<10
+pytest-cov>=4.1.0,<8
+httpx2>=2.0.0,<3
+ruff>=0.1.0,<1
+mypy>=1.5.0,<3

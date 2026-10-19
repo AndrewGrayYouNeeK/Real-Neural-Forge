@@ -47,7 +47,9 @@ def _sequence_limit(model: Any, cfg: dict[str, Any]) -> int:
     limit = getattr(model, "max_seq_len", None)
     if isinstance(limit, bool) or not isinstance(limit, int) or limit < 1:
         model_cfg = cfg.get("model")
-        configured = model_cfg.get("max_seq_len", 512) if isinstance(model_cfg, dict) else 512
+        configured = (
+            model_cfg.get("max_seq_len", 512) if isinstance(model_cfg, dict) else 512
+        )
         limit = int(configured)
     return limit if limit >= 1 else 512
 
@@ -232,7 +234,9 @@ def model_info() -> dict[str, Any]:
 
     param_count = sum(p.numel() for p in model.parameters())
     stored_path = _state.get("checkpoint_path")
-    checkpoint_path = stored_path if isinstance(stored_path, Path) else _checkpoint_file(cfg)
+    checkpoint_path = (
+        stored_path if isinstance(stored_path, Path) else _checkpoint_file(cfg)
+    )
     loaded = bool(_state.get("checkpoint_loaded"))
     loaded_mtime_ns = _state.get("checkpoint_mtime_ns")
     stale = False
@@ -257,7 +261,9 @@ def model_info() -> dict[str, Any]:
 
 def _require_store() -> ExperimentStore:
     if _store is None:
-        raise HTTPException(status_code=503, detail="Experiment store is not available.")
+        raise HTTPException(
+            status_code=503, detail="Experiment store is not available."
+        )
     return _store
 
 
@@ -346,7 +352,9 @@ def youneek_convert(at: str) -> dict[str, Any]:
     try:
         moment = parse_moment(at)
     except ValueError as exc:
-        raise HTTPException(status_code=422, detail=f"Invalid timestamp: {exc}") from exc
+        raise HTTPException(
+            status_code=422, detail=f"Invalid timestamp: {exc}"
+        ) from exc
     return snapshot(moment).as_dict()
 
 
@@ -355,7 +363,9 @@ def youneek_forecast_next_minute(at: str | None = None) -> dict[str, Any]:
     try:
         moment = parse_moment(at)
     except ValueError as exc:
-        raise HTTPException(status_code=422, detail=f"Invalid timestamp: {exc}") from exc
+        raise HTTPException(
+            status_code=422, detail=f"Invalid timestamp: {exc}"
+        ) from exc
     snap = snapshot(moment)
     return {"utc": snap.as_dict()["utc"], **snap.next_minute}
 
@@ -365,7 +375,9 @@ def youneek_calendar(at: str | None = None) -> dict[str, Any]:
     try:
         moment = parse_moment(at)
     except ValueError as exc:
-        raise HTTPException(status_code=422, detail=f"Invalid timestamp: {exc}") from exc
+        raise HTTPException(
+            status_code=422, detail=f"Invalid timestamp: {exc}"
+        ) from exc
     snap = snapshot(moment)
     return {"utc": snap.as_dict()["utc"], **snap.calendar}
 
@@ -375,7 +387,9 @@ def youneek_lunar(at: str | None = None) -> dict[str, Any]:
     try:
         moment = parse_moment(at)
     except ValueError as exc:
-        raise HTTPException(status_code=422, detail=f"Invalid timestamp: {exc}") from exc
+        raise HTTPException(
+            status_code=422, detail=f"Invalid timestamp: {exc}"
+        ) from exc
     snap = snapshot(moment)
     return {"utc": snap.as_dict()["utc"], **snap.lunar}
 

@@ -61,7 +61,9 @@ def test_trainer_resolves_relative_csv_from_repo_root(tmp_path, monkeypatch):
     repo = tmp_path / "repo"
     series = repo / "series.csv"
     series.parent.mkdir(parents=True)
-    series.write_text("value\n" + "\n".join(str(i) for i in range(30)) + "\n", encoding="utf-8")
+    series.write_text(
+        "value\n" + "\n".join(str(i) for i in range(30)) + "\n", encoding="utf-8"
+    )
 
     cfg = load_config("config/config.yaml")
     cfg["data"] = {

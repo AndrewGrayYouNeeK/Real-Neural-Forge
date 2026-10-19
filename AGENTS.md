@@ -28,8 +28,10 @@ Standard commands are documented in `README.md`; run them via the venv:
 - Run dev server: `.venv/bin/uvicorn src.api:app --reload --host 0.0.0.0 --port 8000`.
 
 ### Non-obvious caveats
-- Dependency versions are unpinned (`>=`), so the latest `ruff`/`mypy`/`numpy` get installed.
-  With current versions `ruff` and `mypy` are clean; CI runs mypy with `--python-version 3.12`.
+- Runtime and dev dependencies are locked in `requirements.txt` and `requirements-dev.txt`
+  (generated from `requirements.in` / `requirements-dev.in`). The lock is the newest set that
+  still installs on Python 3.10–3.13, and it pins the CPU torch wheel. CI runs mypy with
+  `--python-version 3.12`.
 - The API loads a model on startup: if `checkpoints/best_model.pt` is missing it serves an
   **untrained** model (predictions are effectively random) and `/model/info` reports
   `checkpoint_loaded: false`. Run training once to get a meaningful checkpoint.
