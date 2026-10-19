@@ -27,6 +27,11 @@ class PositionalEncoding(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         pe = cast(torch.Tensor, self.pe)
+        if x.size(1) > pe.size(1):
+            raise ValueError(
+                f"Sequence length {int(x.size(1))} exceeds the maximum positional "
+                f"length {int(pe.size(1))}."
+            )
         x = x + pe[:, : x.size(1), :]
         return cast(torch.Tensor, self.dropout(x))
 
@@ -49,6 +54,7 @@ class TimeSeriesTransformer(nn.Module):
         self.input_dim = input_dim
         self.output_dim = output_dim
         self.d_model = d_model
+        self.max_seq_len = max_seq_len
         self.input_projection = nn.Linear(input_dim, d_model)
         self.pos_encoding = PositionalEncoding(d_model, dropout, max_len=max_seq_len)
 

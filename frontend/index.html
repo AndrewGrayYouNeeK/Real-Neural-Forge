@@ -53,6 +53,14 @@
             <h2>Training</h2>
           </div>
           <p class="hint">Kick off a background training run using the current config.</p>
+          <label for="api-token">API token (optional)</label>
+          <input
+            id="api-token"
+            type="password"
+            autocomplete="off"
+            placeholder="Only required when the server sets a token"
+          />
+          <p class="hint">Saved in this browser and sent with training requests.</p>
           <button id="train-btn" class="btn primary">Start Training</button>
           <pre id="training-output" class="output"></pre>
         </div>

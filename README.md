@@ -66,7 +66,7 @@ cd Real-Neural-Forge
 
 ### GitHub Container Registry (recommended)
 
-After the [Publish image](https://github.com/AndrewGrayYouNeeK/Real-Neural-Forge/actions/workflows/publish.yml) workflow has run on `main`:
+After CI succeeds on `main`, the [Publish image](https://github.com/AndrewGrayYouNeeK/Real-Neural-Forge/actions/workflows/publish.yml) workflow pushes `:latest`:
 
 ```bash
 docker pull ghcr.io/andrewgrayyouneek/real-neural-forge:latest
@@ -75,15 +75,28 @@ docker compose -f docker-compose.ghcr.yml up
 
 The API and dashboard will be available at <http://localhost:8000>.
 
+Leave `NEURAL_FORGE_API_TOKEN` unset to keep `POST /train` open. Set it (for example in the compose `environment` block) when that endpoint should require a bearer token.
+
 The first package published to GHCR is private by default. If `docker pull` returns `denied`, open the package on GitHub → **Package settings** → **Change visibility** → **Public**.
 
 ### Docker (build locally)
 
 ```bash
+mkdir -p checkpoints data
 docker compose up --build
 ```
 
-The image declares a `HEALTHCHECK` against `/health`, so `docker ps` shows the container as `healthy` once the API is up. `.dockerignore` keeps the virtualenv, caches, git history and local checkpoints out of the build context.
+The image installs CPU PyTorch from the official CPU wheel index, so the `linux/amd64` build stays free of the large NVIDIA CUDA wheels. For a GPU image, point `TORCH_INDEX_URL` at a CUDA index:
+
+```bash
+TORCH_INDEX_URL=https://download.pytorch.org/whl/cu130 docker compose build
+```
+
+The same override is the `TORCH_INDEX_URL` repository variable used by the publish workflow. Leave it unset to publish the CPU image.
+
+The process runs as `forge` (uid 1000). The image creates `checkpoints/` and `data/` writable by that user. Create those directories on the host before `docker compose up` so the bind mounts are writable too; if they are owned by another user, `chown 1000:1000 checkpoints data`.
+
+The image declares a `HEALTHCHECK` against `/health`, so `docker ps` shows the container as `healthy` once the API is up. `.dockerignore` keeps the virtualenv, caches, git history, local checkpoints, and `data/` (including a local experiments database) out of the build context. The pattern is `/data`, so the `src/data` package is still copied.
 
 The API and dashboard will be available at <http://localhost:8000>.
 
@@ -136,7 +149,21 @@ training:
 inference:
   device: cpu
   checkpoint_path: checkpoints/best_model.pt
+
+api:
+  training_enabled: true
+
+storage:
+  db_path: data/experiments.db
 ```
+
+Relative paths in the configuration — `training.checkpoint_dir`, `inference.checkpoint_path`, `storage.db_path`, and a CSV `data.path` — are resolved from the repository root. The default config path (`config/config.yaml`) is resolved the same way, so the server and `python -m src.train` work from any working directory. Absolute paths are used as given.
+
+`storage.db_path` (default `data/experiments.db`) is the SQLite file used by both the API and the trainer.
+
+`api.training_enabled` defaults to `true` when the `api` section is omitted. Set it to `false` to reject `POST /train` with `403`.
+
+`POST /train` stays open when `NEURAL_FORGE_API_TOKEN` is unset, which is the localhost default. When that environment variable is a non-empty string, `POST /train` requires `Authorization: Bearer <token>` and otherwise returns `401`. The dashboard has an optional token field; it sends the header when a token is entered and shows a clear message on `401` or `403`. The token is not written into the YAML config, because training runs persist that file in the experiment store.
 
 `data.val_split` (default `0.0` in code, `0.2` in the shipped config) holds out a fraction of samples. `data.split_mode` picks how: `random` (seeded by `data.split_seed`; the default for synthetic data) or `temporal` (the most recent windows; the default for CSV data, whose overlapping windows would otherwise leak into validation); when set, the best checkpoint is selected on validation loss and the final mse/rmse/mae are reported on the validation set.
 
@@ -167,6 +194,8 @@ Returns `{"status": "ok"}` when the service is running.
 
 Returns architecture, parameter count, device, and checkpoint status.
 
+`checkpoint_loaded` is true only when this process actually loaded weights from a checkpoint. It stays false if the file was missing at load time, even if a checkpoint appears later (for example after training from the CLI while the server is running). `checkpoint_stale` is true when a checkpoint file on disk is newer than the weights in memory, or when a file is present that was never loaded. Restart the server, or finish a training run through `POST /train` (which reloads the model), to pick up that file. The OpenAPI `info.version` is the `[project].version` from `pyproject.toml`.
+
 ### `POST /predict`
 
 **Request body**
@@ -185,6 +214,8 @@ Returns architecture, parameter count, device, and checkpoint status.
 }
 ```
 
+Each step must contain `model.input_dim` finite numbers. A sequence longer than `model.max_seq_len` (512 in the shipped config), or any `NaN` or infinity, is rejected with `422`.
+
 ### `POST /train`
 
 Starts a background training job. Optional JSON body:
@@ -194,6 +225,8 @@ Starts a background training job. Optional JSON body:
 ```
 
 `config_path` is resolved from the repository root and must be an existing `.yaml` or `.yml` file inside `config/`. Paths outside that directory (absolute paths, `..` traversal, symlinks that leave `config/`) are rejected before a job starts. The file must be a mapping with `model` and `training` sections.
+
+When `NEURAL_FORGE_API_TOKEN` is set, send it as `Authorization: Bearer <token>`. A missing or wrong token returns `401` and does not start a job. When `api.training_enabled` is `false`, the endpoint returns `403` even if the token is valid. With the variable unset and training enabled, the endpoint behaves as before.
 
 ### `GET /training/status`
 
@@ -224,7 +257,7 @@ GitHub is the home for this project:
 | Published image | `ghcr.io/andrewgrayyouneek/real-neural-forge` |
 | Run the published image | `docker compose -f docker-compose.ghcr.yml up` |
 
-Tagged releases (`vX.Y.Z`) also publish matching image tags. Run the container on any host with Docker; no Vercel project is required.
+Tagged releases (`vX.Y.Z`) publish matching image tags after CI passes on that tag. Run the container on any host with Docker; no Vercel project is required.
 
 `vercel.json` remains only to disable leftover Vercel GitHub auto-deployments. If Vercel **or Cloudflare Workers** status checks still appear on pull requests, disconnect those apps:
 
@@ -255,6 +288,6 @@ mypy src/ --ignore-missing-imports
 
 ### CI/CD
 
-- **CI** (`.github/workflows/ci.yml`) runs tests, linting, formatting, type checks, coverage, and a Docker image smoke test on Python 3.10–3.13.
-- **Publish** (`.github/workflows/publish.yml`) pushes the image to GitHub Container Registry on every push to `main` and on version tags.
+- **CI** (`.github/workflows/ci.yml`) runs tests, linting, formatting, type checks, coverage, and a Docker image smoke test on Python 3.10–3.13 for every pull request and for pushes to `main` and `develop`.
+- **Publish** (`.github/workflows/publish.yml`) pushes `:latest` to GitHub Container Registry only after that CI workflow succeeds for a push to `main`. Version tags (`vX.Y.Z`) and manual runs publish after the same CI workflow completes successfully inside the publish run.
 - **Dependabot** (`.github/dependabot.yml`) opens weekly grouped PRs for GitHub Actions and the pip locks. Pip updates are resolved on Python 3.10 so they stay installable on the whole CI matrix.
