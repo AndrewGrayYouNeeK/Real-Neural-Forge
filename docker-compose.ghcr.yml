@@ -12,4 +12,6 @@ services:
       - ./frontend:/app/frontend:ro
     environment:
       - PYTHONUNBUFFERED=1
+      # Uncomment to require this bearer token on POST /train.
+      # - NEURAL_FORGE_API_TOKEN=change-me
     restart: unless-stopped

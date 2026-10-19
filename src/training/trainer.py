@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-from pathlib import Path
 from typing import Any
 
 import torch
@@ -11,12 +10,13 @@ import torch.nn as nn
 from torch.utils.data import DataLoader, Dataset, Subset, TensorDataset, random_split
 
 from src.data.scaling import StandardScaler
-from src.data.timeseries import make_sine_dataset
+from src.data.timeseries import load_csv_timeseries, make_sine_dataset
 from src.evaluation.metrics import mae, mse, rmse
 from src.models.registry import build_model
-from src.storage.experiments import ExperimentStore
+from src.storage.experiments import ExperimentStore, db_path_from_config
 from src.utils.checkpoint import save_checkpoint
 from src.utils.config import load_config
+from src.utils.paths import resolve_repo_path
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +27,7 @@ class TimeSeriesTrainer:
     def __init__(self, config_path: str = "config/config.yaml") -> None:
         self.config_path = config_path
         self.cfg = load_config(config_path)
-        self.store = ExperimentStore()
+        self.store = ExperimentStore(db_path_from_config(self.cfg))
 
     def _resolve_device(self, device_str: str) -> torch.device:
         if device_str == "cuda" and not torch.cuda.is_available():
@@ -54,10 +54,8 @@ class TimeSeriesTrainer:
 
         data_cfg = cfg.get("data", {})
         if data_cfg.get("source") == "csv" and data_cfg.get("path"):
-            from src.data.timeseries import load_csv_timeseries
-
             inputs, targets = load_csv_timeseries(
-                data_cfg["path"],
+                resolve_repo_path(data_cfg["path"]),
                 feature_columns=data_cfg.get("feature_columns", ["value"]),
                 target_column=data_cfg.get("target_column", "value"),
                 seq_len=data_cfg.get("seq_len", 64),
@@ -129,7 +127,7 @@ class TimeSeriesTrainer:
                     targets_l.append(by)
             return torch.cat(preds_l), torch.cat(targets_l)
 
-        checkpoint_dir = Path(t_cfg.get("checkpoint_dir", "checkpoints"))
+        checkpoint_dir = resolve_repo_path(t_cfg.get("checkpoint_dir", "checkpoints"))
         checkpoint_dir.mkdir(parents=True, exist_ok=True)
         best_loss = float("inf")
         log_interval = t_cfg.get("log_interval", 10)

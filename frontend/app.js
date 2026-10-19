@@ -7,6 +7,17 @@ async function fetchJson(url, options = {}) {
   return data;
 }
 
+const TOKEN_KEY = "neuralForgeApiToken";
+let holdTrainingMessage = false;
+
+function checkpointLabel(modelInfo) {
+  const loaded = Boolean(modelInfo.checkpoint_loaded);
+  const stale = Boolean(modelInfo.checkpoint_stale);
+  if (loaded && stale) return "newer file on disk";
+  if (stale) return "file not loaded";
+  return loaded ? "loaded" : "missing";
+}
+
 function renderStatus(modelInfo, health, training) {
   const grid = document.getElementById("status-grid");
   const cards = [
@@ -14,7 +25,7 @@ function renderStatus(modelInfo, health, training) {
     ["Architecture", modelInfo.architecture],
     ["Parameters", modelInfo.parameters.toLocaleString()],
     ["Device", modelInfo.device],
-    ["Checkpoint", modelInfo.checkpoint_loaded ? "loaded" : "missing"],
+    ["Checkpoint", checkpointLabel(modelInfo)],
     ["Training", training.status],
   ];
 
@@ -90,14 +101,17 @@ async function refreshDashboard() {
   renderStatus(modelInfo, health, training);
   renderYouneek(youneek);
   renderExperiments(experiments.experiments);
-  document.getElementById("training-output").textContent = JSON.stringify(
-    training,
-    null,
-    2
-  );
+  if (!holdTrainingMessage) {
+    document.getElementById("training-output").textContent = JSON.stringify(
+      training,
+      null,
+      2
+    );
+  }
 }
 
 document.getElementById("refresh-btn").addEventListener("click", () => {
+  holdTrainingMessage = false;
   refreshDashboard().catch((error) => alert(error.message));
 });
 
@@ -116,15 +130,60 @@ document.getElementById("predict-btn").addEventListener("click", async () => {
   }
 });
 
+const tokenInput = document.getElementById("api-token");
+tokenInput.value = localStorage.getItem(TOKEN_KEY) || "";
+tokenInput.addEventListener("change", () => {
+  const value = tokenInput.value.trim();
+  if (value) localStorage.setItem(TOKEN_KEY, value);
+  else localStorage.removeItem(TOKEN_KEY);
+});
+
+function trainingHeaders() {
+  const headers = { "Content-Type": "application/json" };
+  const token = tokenInput.value.trim();
+  if (token) {
+    localStorage.setItem(TOKEN_KEY, token);
+    headers.Authorization = `Bearer ${token}`;
+  } else {
+    localStorage.removeItem(TOKEN_KEY);
+  }
+  return headers;
+}
+
 document.getElementById("train-btn").addEventListener("click", async () => {
   const output = document.getElementById("training-output");
   try {
-    const result = await fetchJson("/train", {
+    const response = await fetch("/train", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: trainingHeaders(),
       body: JSON.stringify({ config_path: "config/config.yaml" }),
     });
-    output.textContent = JSON.stringify(result, null, 2);
+    let data = {};
+    try {
+      data = await response.json();
+    } catch {
+      data = {};
+    }
+    if (response.status === 401) {
+      holdTrainingMessage = true;
+      output.textContent =
+        "Unauthorized (401). Enter the API token configured on the server and try again.";
+      return;
+    }
+    if (response.status === 403) {
+      holdTrainingMessage = true;
+      output.textContent =
+        typeof data.detail === "string" ? data.detail : "Training is disabled on this server.";
+      return;
+    }
+    if (!response.ok) {
+      holdTrainingMessage = true;
+      const detail = typeof data.detail === "string" ? data.detail : response.statusText;
+      output.textContent = detail;
+      return;
+    }
+    holdTrainingMessage = false;
+    output.textContent = JSON.stringify(data, null, 2);
     setTimeout(() => refreshDashboard().catch(() => {}), 1500);
   } catch (error) {
     output.textContent = error.message;

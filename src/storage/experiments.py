@@ -4,27 +4,53 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from collections.abc import Iterator
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+
+from src.utils.paths import resolve_repo_path
 
 
 def _utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def db_path_from_config(cfg: dict[str, Any] | None) -> str | Path:
+    """Return the configured SQLite path, or the repository default."""
+    if isinstance(cfg, dict):
+        storage = cfg.get("storage")
+        if isinstance(storage, dict):
+            configured = storage.get("db_path")
+            if isinstance(configured, str | Path) and str(configured).strip():
+                return configured
+    return "data/experiments.db"
+
+
 class ExperimentStore:
     """SQLite-backed store for training runs and metrics."""
 
-    def __init__(self, db_path: str | Path = "data/experiments.db") -> None:
-        self.db_path = Path(db_path)
+    def __init__(self, db_path: str | Path | None = None) -> None:
+        raw = "data/experiments.db" if db_path is None else db_path
+        self.db_path = resolve_repo_path(raw)
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self._init_db()
 
-    def _connect(self) -> sqlite3.Connection:
+    @contextmanager
+    def _connect(self) -> Iterator[sqlite3.Connection]:
+        # sqlite3.Connection's own context manager commits or rolls back, but
+        # it never closes the handle. Close it here so every query releases it.
         conn = sqlite3.connect(self.db_path)
-        conn.row_factory = sqlite3.Row
-        return conn
+        try:
+            conn.row_factory = sqlite3.Row
+            yield conn
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            conn.close()
 
     def _init_db(self) -> None:
         with self._connect() as conn:
@@ -130,7 +156,7 @@ class ExperimentStore:
                 """,
                 (limit,),
             ).fetchall()
-        return [self._row_to_experiment(row) for row in rows]
+            return [self._row_to_experiment(row) for row in rows]
 
     def get_experiment(self, experiment_id: int) -> dict[str, Any] | None:
         with self._connect() as conn:
@@ -143,11 +169,11 @@ class ExperimentStore:
                 """,
                 (experiment_id,),
             ).fetchone()
-        if row is None:
-            return None
-        experiment = self._row_to_experiment(row)
-        experiment["config"] = json.loads(row["config_json"])
-        return experiment
+            if row is None:
+                return None
+            experiment = self._row_to_experiment(row)
+            experiment["config"] = json.loads(row["config_json"])
+            return experiment
 
     def get_metrics(self, experiment_id: int) -> list[dict[str, Any]]:
         with self._connect() as conn:
@@ -160,7 +186,7 @@ class ExperimentStore:
                 """,
                 (experiment_id,),
             ).fetchall()
-        return [dict(row) for row in rows]
+            return [dict(row) for row in rows]
 
     @staticmethod
     def _row_to_experiment(row: sqlite3.Row) -> dict[str, Any]:
