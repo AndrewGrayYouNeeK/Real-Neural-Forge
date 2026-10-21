@@ -37,7 +37,9 @@ def load_csv_timeseries(
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """Load sliding-window sequences from a CSV file."""
     df = pd.read_csv(path)
-    missing = [col for col in feature_columns + [target_column] if col not in df.columns]
+    missing = [
+        col for col in feature_columns + [target_column] if col not in df.columns
+    ]
     if missing:
         raise ValueError(f"Missing columns in CSV: {missing}")
 

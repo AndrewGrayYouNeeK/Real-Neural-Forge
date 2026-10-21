@@ -1,0 +1,34 @@
+--extra-index-url https://download.pytorch.org/whl/cpu
+
+# Direct runtime dependencies.
+# Upper bounds are the newest releases that still install on Python 3.10–3.13
+# (CI's full matrix). A compatible release that dropped 3.10 is called out below.
+#
+# Regenerate the locks (from the repo root). The CPU wheel index keeps NVIDIA
+# CUDA libraries out of the lock; torch is pinned to the CPU build, which still
+# runs on a GPU machine. CI, Docker, and `pip install -r requirements.txt`
+# all consume the generated files.
+#   pip install pip-tools
+#   pip-compile --no-strip-extras --resolver=backtracking --output-file=requirements.txt requirements.in
+#   pip-compile --no-strip-extras --resolver=backtracking --output-file=requirements-dev.txt requirements-dev.in
+
+torch>=2.0.0,<3
+fastapi>=0.100.0,<1
+uvicorn[standard]>=0.23.0,<1
+pyyaml>=6.0,<7
+numpy>=1.24.0,<2.3
+pandas>=2.0.0,<2.4
+pydantic>=2.0.0,<3
+
+# Transitive packages whose current majors dropped Python 3.10. Kept here so
+# `pip-compile` on 3.11+ does not lock a build the 3.10 CI job cannot install.
+starlette>=0.46.0,<1.8
+networkx>=2.5.1,<3.5
+websockets>=12,<17
+filelock>=3.12,<4.1.1
+
+# Editable build hook. Workers Builds installs the lock before Wrangler, and
+# this entry writes wrangler.jsonc when WRANGLER_CI_OVERRIDE_NAME is set.
+# It must stay editable so the hook runs against this checkout. A normal
+# install, including Docker, does not set that variable and writes nothing.
+-e ./workers_ci

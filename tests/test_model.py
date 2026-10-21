@@ -31,6 +31,11 @@ class TestPositionalEncoding:
         # Positions 0 and 1 should differ
         assert not torch.allclose(out[0, 0], out[0, 1])
 
+    def test_rejects_sequence_longer_than_table(self):
+        pe = PositionalEncoding(d_model=8, dropout=0.0, max_len=4)
+        with pytest.raises(ValueError, match="maximum positional length 4"):
+            pe(torch.zeros(2, 5, 8))
+
 
 class TestTimeSeriesTransformer:
     @pytest.fixture
@@ -50,6 +55,20 @@ class TestTimeSeriesTransformer:
         x = torch.randn(batch, seq_len, 1)
         out = default_model(x)
         assert out.shape == (batch, 1)
+
+    def test_forward_rejects_sequence_over_max_len(self):
+        model = TimeSeriesTransformer(
+            input_dim=1,
+            output_dim=1,
+            d_model=8,
+            nhead=2,
+            num_encoder_layers=1,
+            dim_feedforward=16,
+            dropout=0.0,
+            max_seq_len=4,
+        )
+        with pytest.raises(ValueError, match="maximum positional length 4"):
+            model(torch.zeros(1, 5, 1))
 
     def test_multi_feature_output_shape(self):
         model = TimeSeriesTransformer(
@@ -88,11 +107,7 @@ class TestTimeSeriesTransformer:
         loss = out.sum()
         loss.backward()
         # Check at least one gradient is non-zero
-        grads = [
-            p.grad
-            for p in default_model.parameters()
-            if p.grad is not None
-        ]
+        grads = [p.grad for p in default_model.parameters() if p.grad is not None]
         assert len(grads) > 0
         assert any(g.abs().sum().item() > 0 for g in grads)
 

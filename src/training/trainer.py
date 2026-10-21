@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-from pathlib import Path
 from typing import Any
 
 import torch
@@ -11,12 +10,13 @@ import torch.nn as nn
 from torch.utils.data import DataLoader, Dataset, Subset, TensorDataset, random_split
 
 from src.data.scaling import StandardScaler
-from src.data.timeseries import make_sine_dataset
+from src.data.timeseries import load_csv_timeseries, make_sine_dataset
 from src.evaluation.metrics import mae, mse, rmse
 from src.models.registry import build_model
-from src.storage.experiments import ExperimentStore
+from src.storage.experiments import ExperimentStore, db_path_from_config
 from src.utils.checkpoint import save_checkpoint
 from src.utils.config import load_config
+from src.utils.paths import resolve_repo_path
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +27,7 @@ class TimeSeriesTrainer:
     def __init__(self, config_path: str = "config/config.yaml") -> None:
         self.config_path = config_path
         self.cfg = load_config(config_path)
-        self.store = ExperimentStore()
+        self.store = ExperimentStore(db_path_from_config(self.cfg))
 
     def _resolve_device(self, device_str: str) -> torch.device:
         if device_str == "cuda" and not torch.cuda.is_available():
@@ -54,10 +54,8 @@ class TimeSeriesTrainer:
 
         data_cfg = cfg.get("data", {})
         if data_cfg.get("source") == "csv" and data_cfg.get("path"):
-            from src.data.timeseries import load_csv_timeseries
-
             inputs, targets = load_csv_timeseries(
-                data_cfg["path"],
+                resolve_repo_path(data_cfg["path"]),
                 feature_columns=data_cfg.get("feature_columns", ["value"]),
                 target_column=data_cfg.get("target_column", "value"),
                 seq_len=data_cfg.get("seq_len", 64),
@@ -93,7 +91,9 @@ class TimeSeriesTrainer:
             dataset = Subset(full_dataset, list(range(n_fit)))
             val_dataset = Subset(full_dataset, list(range(n_fit, len(full_dataset))))
         elif n_val:
-            generator = torch.Generator().manual_seed(int(data_cfg.get("split_seed", 0)))
+            generator = torch.Generator().manual_seed(
+                int(data_cfg.get("split_seed", 0))
+            )
             dataset, val_dataset = random_split(
                 full_dataset, [len(full_dataset) - n_val, n_val], generator=generator
             )
@@ -115,11 +115,12 @@ class TimeSeriesTrainer:
 
         def to_original(t: torch.Tensor) -> torch.Tensor:
             return scaler.inverse_targets(t) if scaler is not None else t
-        loader = DataLoader(
-            dataset, batch_size=t_cfg["batch_size"], shuffle=True
-        )
 
-        def evaluate(ds: Dataset[tuple[torch.Tensor, ...]]) -> tuple[torch.Tensor, torch.Tensor]:
+        loader = DataLoader(dataset, batch_size=t_cfg["batch_size"], shuffle=True)
+
+        def evaluate(
+            ds: Dataset[tuple[torch.Tensor, ...]],
+        ) -> tuple[torch.Tensor, torch.Tensor]:
             model.eval()
             preds_l: list[torch.Tensor] = []
             targets_l: list[torch.Tensor] = []
@@ -129,7 +130,7 @@ class TimeSeriesTrainer:
                     targets_l.append(by)
             return torch.cat(preds_l), torch.cat(targets_l)
 
-        checkpoint_dir = Path(t_cfg.get("checkpoint_dir", "checkpoints"))
+        checkpoint_dir = resolve_repo_path(t_cfg.get("checkpoint_dir", "checkpoints"))
         checkpoint_dir.mkdir(parents=True, exist_ok=True)
         best_loss = float("inf")
         log_interval = t_cfg.get("log_interval", 10)
@@ -137,7 +138,9 @@ class TimeSeriesTrainer:
         patience = int(t_cfg.get("patience", 0) or 0)
         max_grad_norm = float(t_cfg.get("max_grad_norm", 0) or 0)
         if patience < 0 or max_grad_norm < 0:
-            raise ValueError("training.patience and training.max_grad_norm must be >= 0")
+            raise ValueError(
+                "training.patience and training.max_grad_norm must be >= 0"
+            )
         epochs_without_improvement = 0
 
         experiment_id = self.store.create_experiment(
@@ -157,7 +160,9 @@ class TimeSeriesTrainer:
                     loss = criterion(preds, batch_y)
                     loss.backward()
                     if max_grad_norm > 0:
-                        torch.nn.utils.clip_grad_norm_(model.parameters(), max_grad_norm)
+                        torch.nn.utils.clip_grad_norm_(
+                            model.parameters(), max_grad_norm
+                        )
                     optimizer.step()
                     running_loss += loss.item() * batch_x.size(0)
 
@@ -209,7 +214,9 @@ class TimeSeriesTrainer:
 
             # Report metrics on the validation set when one exists, otherwise
             # on the full training set (deterministic, unshuffled).
-            preds, targets_all = evaluate(val_dataset if val_dataset is not None else dataset)
+            preds, targets_all = evaluate(
+                val_dataset if val_dataset is not None else dataset
+            )
             # Final metrics are reported in the data's original units.
             preds, targets_all = to_original(preds), to_original(targets_all)
             metrics = {

@@ -35,20 +35,14 @@ def prepare_metadata_for_build_wheel(metadata_directory, config_settings=None):
 
 def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
     _write()
-    return orig.build_wheel(
-        wheel_directory, config_settings, metadata_directory
-    )
+    return orig.build_wheel(wheel_directory, config_settings, metadata_directory)
 
 
 def prepare_metadata_for_build_editable(metadata_directory, config_settings=None):
     _write()
-    return orig.prepare_metadata_for_build_editable(
-        metadata_directory, config_settings
-    )
+    return orig.prepare_metadata_for_build_editable(metadata_directory, config_settings)
 
 
 def build_editable(wheel_directory, config_settings=None, metadata_directory=None):
     _write()
-    return orig.build_editable(
-        wheel_directory, config_settings, metadata_directory
-    )
+    return orig.build_editable(wheel_directory, config_settings, metadata_directory)

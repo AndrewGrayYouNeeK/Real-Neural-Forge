@@ -23,5 +23,3 @@ coverage.json
 coverage.xml
 .wrangler/
 .dev.vars*
-.wrangler/
-.dev.vars*

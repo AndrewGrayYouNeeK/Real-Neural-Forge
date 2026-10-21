@@ -19,8 +19,14 @@ class TestLoadConfig:
     def test_model_keys_present(self):
         cfg = load_config("config/config.yaml")
         expected = {
-            "input_dim", "output_dim", "d_model", "nhead",
-            "num_encoder_layers", "dim_feedforward", "dropout", "max_seq_len",
+            "input_dim",
+            "output_dim",
+            "d_model",
+            "nhead",
+            "num_encoder_layers",
+            "dim_feedforward",
+            "dropout",
+            "max_seq_len",
         }
         assert expected <= cfg["model"].keys()
 
@@ -63,9 +69,7 @@ class TestTrain:
 
         import yaml
 
-        with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".yaml", delete=False
-        ) as fh:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as fh:
             yaml.dump(cfg, fh)
             tmp_config = fh.name
 
@@ -86,9 +90,7 @@ class TestTrain:
 
         import yaml
 
-        with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".yaml", delete=False
-        ) as fh:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as fh:
             yaml.dump(cfg, fh)
             tmp_config = fh.name
 
@@ -115,9 +117,7 @@ class TestTrain:
 
         import yaml
 
-        with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".yaml", delete=False
-        ) as fh:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as fh:
             yaml.dump(cfg, fh)
             tmp_config = fh.name
 
@@ -140,9 +140,7 @@ class TestTrain:
 
         import yaml
 
-        with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".yaml", delete=False
-        ) as fh:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as fh:
             yaml.dump(cfg, fh)
             tmp_config = fh.name
 
@@ -251,10 +249,17 @@ class TestTrainerFailureHandling:
 class TestValidationSplit:
     def _cfg(self, tmp_path, val_split):
         cfg = load_config("config/config.yaml")
-        cfg["training"].update(epochs=2, batch_size=16, device="cpu",
-                               checkpoint_dir=str(tmp_path), log_interval=1)
+        cfg["training"].update(
+            epochs=2,
+            batch_size=16,
+            device="cpu",
+            checkpoint_dir=str(tmp_path),
+            log_interval=1,
+        )
         cfg["data"].update(n_samples=40, seq_len=8, val_split=val_split)
-        cfg["model"].update(d_model=16, nhead=2, num_encoder_layers=1, dim_feedforward=32)
+        cfg["model"].update(
+            d_model=16, nhead=2, num_encoder_layers=1, dim_feedforward=32
+        )
         return cfg
 
     def _trainer(self, tmp_path, cfg):
@@ -301,11 +306,17 @@ class TestReproducibility:
         losses = []
         for run in range(2):
             cfg = load_config("config/config.yaml")
-            cfg["training"].update(epochs=2, batch_size=8, device="cpu", seed=7,
-                                   checkpoint_dir=str(tmp_path / f"c{run}"))
+            cfg["training"].update(
+                epochs=2,
+                batch_size=8,
+                device="cpu",
+                seed=7,
+                checkpoint_dir=str(tmp_path / f"c{run}"),
+            )
             cfg["data"].update(n_samples=24, seq_len=8, val_split=0.25, seed=7)
-            cfg["model"].update(d_model=16, nhead=2, num_encoder_layers=1,
-                                dim_feedforward=32)
+            cfg["model"].update(
+                d_model=16, nhead=2, num_encoder_layers=1, dim_feedforward=32
+            )
             t = TimeSeriesTrainer.__new__(TimeSeriesTrainer)
             t.cfg = cfg
             t.store = ExperimentStore(str(tmp_path / f"e{run}.db"))
@@ -319,11 +330,18 @@ class TestEarlyStoppingAndClipping:
         from src.training.trainer import TimeSeriesTrainer
 
         cfg = load_config("config/config.yaml")
-        cfg["training"].update(epochs=30, batch_size=8, device="cpu", seed=0,
-                               checkpoint_dir=str(tmp_path / "ckpt"))
+        cfg["training"].update(
+            epochs=30,
+            batch_size=8,
+            device="cpu",
+            seed=0,
+            checkpoint_dir=str(tmp_path / "ckpt"),
+        )
         cfg["training"].update(training)
         cfg["data"].update(n_samples=24, seq_len=8, val_split=0.25, seed=0)
-        cfg["model"].update(d_model=16, nhead=2, num_encoder_layers=1, dim_feedforward=32)
+        cfg["model"].update(
+            d_model=16, nhead=2, num_encoder_layers=1, dim_feedforward=32
+        )
         t = TimeSeriesTrainer.__new__(TimeSeriesTrainer)
         t.cfg = cfg
         t.store = ExperimentStore(str(tmp_path / "exp.db"))
