@@ -1,0 +1,599 @@
+{
+  "total_train_seconds": 382.870669313,
+  "runs": [
+    {
+      "id": "air_ozone_berlin",
+      "title": "Berlin daily ozone",
+      "units": "\u00b5g/m\u00b3",
+      "config": "/workspace/config/realworld/air_ozone_berlin.yaml",
+      "n_rows": 1754,
+      "seq_len": 90,
+      "seasonal_period": 365,
+      "n_val": 332,
+      "lag1_correlation": 0.8452931456515376,
+      "model": {
+        "n": 332.0,
+        "mae": 7.344285685374555,
+        "rmse": 9.460501230806742,
+        "mse": 89.50108353809587
+      },
+      "baselines": {
+        "persistence": {
+          "n": 332.0,
+          "mae": 8.175075301204819,
+          "rmse": 10.38845552320606,
+          "mse": 107.9200081576305
+        },
+        "seasonal_naive": {
+          "n": 332.0,
+          "mae": 13.063880522088352,
+          "rmse": 16.929747357556643,
+          "mse": 286.6163455906961
+        },
+        "mean": {
+          "n": 332.0,
+          "mae": 16.221695166742922,
+          "rmse": 19.941208603337632,
+          "mse": 397.65180056182675
+        }
+      },
+      "best_simple_baseline": "persistence",
+      "skill_vs_persistence": 0.10162470499908727,
+      "skill_vs_seasonal_naive": 0.43781744842530756,
+      "skill_vs_best_simple_baseline": 0.10162470499908727,
+      "train_seconds": 11.28644921
+    },
+    {
+      "id": "air_pm25_berlin",
+      "title": "Berlin daily PM2.5",
+      "units": "\u00b5g/m\u00b3",
+      "config": "/workspace/config/realworld/air_pm25_berlin.yaml",
+      "n_rows": 1754,
+      "seq_len": 90,
+      "seasonal_period": 365,
+      "n_val": 332,
+      "lag1_correlation": 0.7706929439567909,
+      "model": {
+        "n": 332.0,
+        "mae": 2.504609043148148,
+        "rmse": 3.443433043826001,
+        "mse": 11.857231127312795
+      },
+      "baselines": {
+        "persistence": {
+          "n": 332.0,
+          "mae": 2.6877008032128513,
+          "rmse": 3.7114985110180436,
+          "mse": 13.775221197289156
+        },
+        "seasonal_naive": {
+          "n": 332.0,
+          "mae": 4.287700803212852,
+          "rmse": 6.246426212178991,
+          "mse": 39.017840424196784
+        },
+        "mean": {
+          "n": 332.0,
+          "mae": 4.458447573698451,
+          "rmse": 5.732309290525918,
+          "mse": 32.85936980224975
+        }
+      },
+      "best_simple_baseline": "persistence",
+      "skill_vs_persistence": 0.06812207662617698,
+      "skill_vs_seasonal_naive": 0.4158619833568147,
+      "skill_vs_best_simple_baseline": 0.06812207662617698,
+      "train_seconds": 8.388080426999977
+    },
+    {
+      "id": "air_pollen_berlin",
+      "title": "Berlin daily pollen index",
+      "units": "grains/m\u00b3",
+      "config": "/workspace/config/realworld/air_pollen_berlin.yaml",
+      "n_rows": 1678,
+      "seq_len": 90,
+      "seasonal_period": 365,
+      "n_val": 317,
+      "lag1_correlation": 0.802250774987742,
+      "model": {
+        "n": 317.0,
+        "mae": 16.102738722792182,
+        "rmse": 34.501952105408115,
+        "mse": 1190.3846990838756
+      },
+      "baselines": {
+        "persistence": {
+          "n": 317.0,
+          "mae": 12.703180862250264,
+          "rmse": 37.83159572267293,
+          "mse": 1431.2296349237647
+        },
+        "seasonal_naive": {
+          "n": 317.0,
+          "mae": 17.22331756046267,
+          "rmse": 45.583049652662,
+          "mse": 2077.814415637049
+        },
+        "mean": {
+          "n": 317.0,
+          "mae": 27.947950453948085,
+          "rmse": 57.66225414784025,
+          "mse": 3324.93555341012
+        }
+      },
+      "best_simple_baseline": "persistence",
+      "skill_vs_persistence": -0.267614694099515,
+      "skill_vs_seasonal_naive": 0.06506173004920124,
+      "skill_vs_best_simple_baseline": -0.267614694099515,
+      "train_seconds": 12.950308513999971
+    },
+    {
+      "id": "earthquakes_m45",
+      "title": "Global daily M4.5+ earthquake count",
+      "units": "events/day",
+      "config": "/workspace/config/realworld/earthquakes_m45.yaml",
+      "n_rows": 13442,
+      "seq_len": 60,
+      "seasonal_period": 365,
+      "n_val": 2676,
+      "lag1_correlation": 0.5354543383158128,
+      "model": {
+        "n": 2676.0,
+        "mae": 5.837752946289131,
+        "rmse": 12.617178270584104,
+        "mse": 159.19318751169968
+      },
+      "baselines": {
+        "persistence": {
+          "n": 2676.0,
+          "mae": 7.547085201793722,
+          "rmse": 14.863001686504457,
+          "mse": 220.90881913303437
+        },
+        "seasonal_naive": {
+          "n": 2676.0,
+          "mae": 9.914424514200299,
+          "rmse": 20.596332048970513,
+          "mse": 424.2088938714499
+        },
+        "mean": {
+          "n": 2676.0,
+          "mae": 6.800021423253796,
+          "rmse": 15.171504950281719,
+          "mse": 230.17456245642268
+        }
+      },
+      "best_simple_baseline": "mean",
+      "skill_vs_persistence": 0.22648906296941407,
+      "skill_vs_seasonal_naive": 0.41118590010667844,
+      "skill_vs_best_simple_baseline": 0.14150962431883363,
+      "train_seconds": 53.211517277999974
+    },
+    {
+      "id": "electricity_us48",
+      "title": "US48 hourly electricity demand",
+      "units": "MWh",
+      "config": "/workspace/config/realworld/electricity_us48.yaml",
+      "n_rows": 17520,
+      "seq_len": 168,
+      "seasonal_period": 168,
+      "n_val": 3470,
+      "lag1_correlation": 0.9828588382720379,
+      "model": {
+        "n": 3470.0,
+        "mae": 4694.897104569798,
+        "rmse": 6201.074936812248,
+        "mse": 38453330.37196103
+      },
+      "baselines": {
+        "persistence": {
+          "n": 3470.0,
+          "mae": 16964.289069110157,
+          "rmse": 19483.39838750097,
+          "mse": 379602812.7260754
+        },
+        "seasonal_naive": {
+          "n": 3470.0,
+          "mae": 27713.3709413037,
+          "rmse": 36095.95909478462,
+          "mse": 1302918262.9723647
+        },
+        "mean": {
+          "n": 3470.0,
+          "mae": 90716.43750695152,
+          "rmse": 115851.40863380015,
+          "mse": 13421548882.435743
+        }
+      },
+      "best_simple_baseline": "persistence",
+      "skill_vs_persistence": 0.7232482254078882,
+      "skill_vs_seasonal_naive": 0.8305909044946757,
+      "skill_vs_best_simple_baseline": 0.7232482254078882,
+      "train_seconds": 238.741366985
+    },
+    {
+      "id": "fred_cpi_inflation",
+      "title": "US CPI inflation (year over year)",
+      "units": "percent",
+      "config": "/workspace/config/realworld/fred_cpi_inflation.yaml",
+      "n_rows": 1352,
+      "seq_len": 24,
+      "seasonal_period": 12,
+      "n_val": 265,
+      "lag1_correlation": 0.9863647738421626,
+      "model": {
+        "n": 265.0,
+        "mae": 0.3531259157505571,
+        "rmse": 0.49170398362562057,
+        "mse": 0.24177280751330454
+      },
+      "baselines": {
+        "persistence": {
+          "n": 265.0,
+          "mae": 0.3368230053163426,
+          "rmse": 0.47016322401940175,
+          "mse": 0.22105345722031813
+        },
+        "seasonal_naive": {
+          "n": 265.0,
+          "mae": 1.6491582702921088,
+          "rmse": 2.2406030719366643,
+          "mse": 5.020302125972017
+        },
+        "mean": {
+          "n": 265.0,
+          "mae": 1.605606710402885,
+          "rmse": 2.023378911816061,
+          "mse": 4.0940622207819475
+        }
+      },
+      "best_simple_baseline": "persistence",
+      "skill_vs_persistence": -0.04840200988914889,
+      "skill_vs_seasonal_naive": 0.7858750599552768,
+      "skill_vs_best_simple_baseline": -0.04840200988914889,
+      "train_seconds": 1.4543749039999057
+    },
+    {
+      "id": "fred_gas",
+      "title": "US regular gasoline price",
+      "units": "USD/gallon",
+      "config": "/workspace/config/realworld/fred_gas.yaml",
+      "n_rows": 1882,
+      "seq_len": 52,
+      "seasonal_period": 52,
+      "n_val": 366,
+      "lag1_correlation": 0.998530791115947,
+      "model": {
+        "n": 366.0,
+        "mae": 0.10129500749984074,
+        "rmse": 0.15278631502317286,
+        "mse": 0.023343658058360212
+      },
+      "baselines": {
+        "persistence": {
+          "n": 366.0,
+          "mae": 0.048631147540983626,
+          "rmse": 0.07402438307488612,
+          "mse": 0.005479609289617487
+        },
+        "seasonal_naive": {
+          "n": 366.0,
+          "mae": 0.5599918032786885,
+          "rmse": 0.7179774434406819,
+          "mse": 0.5154916092896176
+        },
+        "mean": {
+          "n": 366.0,
+          "mae": 1.1861169961215159,
+          "rmse": 1.3421537609849614,
+          "mse": 1.8013767181260771
+        }
+      },
+      "best_simple_baseline": "persistence",
+      "skill_vs_persistence": -1.0829244758099725,
+      "skill_vs_seasonal_naive": 0.819113410398563,
+      "skill_vs_best_simple_baseline": -1.0829244758099725,
+      "train_seconds": 5.0201884960001735
+    },
+    {
+      "id": "fred_unemployment",
+      "title": "US unemployment rate",
+      "units": "percent",
+      "config": "/workspace/config/realworld/fred_unemployment.yaml",
+      "n_rows": 944,
+      "seq_len": 24,
+      "seasonal_period": 12,
+      "n_val": 184,
+      "lag1_correlation": 0.9706517208298365,
+      "model": {
+        "n": 184.0,
+        "mae": 0.22005064539287397,
+        "rmse": 0.8262957087408895,
+        "mse": 0.6827645982836089
+      },
+      "baselines": {
+        "persistence": {
+          "n": 184.0,
+          "mae": 0.20923913043478265,
+          "rmse": 0.8247199788281238,
+          "mse": 0.680163043478261
+        },
+        "seasonal_naive": {
+          "n": 184.0,
+          "mae": 1.0945652173913045,
+          "rmse": 1.984888563294084,
+          "mse": 3.9397826086956527
+        },
+        "mean": {
+          "n": 184.0,
+          "mae": 1.665296052631579,
+          "rmse": 1.9736559793938226,
+          "mse": 3.895317924996989
+        }
+      },
+      "best_simple_baseline": "persistence",
+      "skill_vs_persistence": -0.05167061694256625,
+      "skill_vs_seasonal_naive": 0.798960681468278,
+      "skill_vs_best_simple_baseline": -0.05167061694256625,
+      "train_seconds": 1.296756706999986
+    },
+    {
+      "id": "sports_arsenal",
+      "title": "Arsenal match goal difference",
+      "units": "goals",
+      "config": "/workspace/config/realworld/sports_arsenal.yaml",
+      "n_rows": 1269,
+      "seq_len": 10,
+      "seasonal_period": 38,
+      "n_val": 251,
+      "lag1_correlation": 0.01400130092704707,
+      "model": {
+        "n": 251.0,
+        "mae": 1.3992557644369117,
+        "rmse": 1.8455495395701846,
+        "mse": 3.40605310300772
+      },
+      "baselines": {
+        "persistence": {
+          "n": 251.0,
+          "mae": 1.9243027888446216,
+          "rmse": 2.5049751292989666,
+          "mse": 6.274900398406374
+        },
+        "seasonal_naive": {
+          "n": 251.0,
+          "mae": 1.9243027888446216,
+          "rmse": 2.4777897875073456,
+          "mse": 6.139442231075697
+        },
+        "mean": {
+          "n": 251.0,
+          "mae": 1.4129024178335774,
+          "rmse": 1.8480935392742606,
+          "mse": 3.415449729907263
+        }
+      },
+      "best_simple_baseline": "mean",
+      "skill_vs_persistence": 0.27285052407108734,
+      "skill_vs_seasonal_naive": 0.27285052407108734,
+      "skill_vs_best_simple_baseline": 0.009658595826872673,
+      "train_seconds": 1.140402025000185
+    },
+    {
+      "id": "sunspots_silso",
+      "title": "Monthly mean sunspot number",
+      "units": "sunspot number",
+      "config": "/workspace/config/realworld/sunspots_silso.yaml",
+      "n_rows": 3333,
+      "seq_len": 132,
+      "seasonal_period": 132,
+      "n_val": 640,
+      "lag1_correlation": 0.9179224391804299,
+      "model": {
+        "n": 640.0,
+        "mae": 16.698909372091293,
+        "rmse": 22.47061826820123,
+        "mse": 504.9286853552188
+      },
+      "baselines": {
+        "persistence": {
+          "n": 640.0,
+          "mae": 18.040625,
+          "rmse": 25.197827287288085,
+          "mse": 634.9305
+        },
+        "seasonal_naive": {
+          "n": 640.0,
+          "mae": 38.965937499999995,
+          "rmse": 53.61065950443064,
+          "mse": 2874.1028125
+        },
+        "mean": {
+          "n": 640.0,
+          "mae": 58.12513101095433,
+          "rmse": 69.39351990131185,
+          "mse": 4815.460604293764
+        }
+      },
+      "best_simple_baseline": "persistence",
+      "skill_vs_persistence": 0.07437190385082038,
+      "skill_vs_seasonal_naive": 0.5714485408674872,
+      "skill_vs_best_simple_baseline": 0.07437190385082038,
+      "train_seconds": 41.53700085799983
+    },
+    {
+      "id": "ucdp_monthly_events",
+      "title": "Global monthly conflict events",
+      "units": "events/month",
+      "config": "/workspace/config/realworld/ucdp_monthly_events.yaml",
+      "n_rows": 444,
+      "seq_len": 24,
+      "seasonal_period": 12,
+      "n_val": 84,
+      "lag1_correlation": 0.9600052518878573,
+      "model": {
+        "n": 84.0,
+        "mae": 216.91885811941964,
+        "rmse": 291.23255329417293,
+        "mse": 84816.40009824329
+      },
+      "baselines": {
+        "persistence": {
+          "n": 84.0,
+          "mae": 206.72619047619048,
+          "rmse": 275.15521593664704,
+          "mse": 75710.39285714286
+        },
+        "seasonal_naive": {
+          "n": 84.0,
+          "mae": 376.14285714285717,
+          "rmse": 484.14315572782317,
+          "mse": 234394.59523809524
+        },
+        "mean": {
+          "n": 84.0,
+          "mae": 1026.4119047619047,
+          "rmse": 1177.7381454154684,
+          "mse": 1387067.139166667
+        }
+      },
+      "best_simple_baseline": "persistence",
+      "skill_vs_persistence": -0.04930515876943553,
+      "skill_vs_seasonal_naive": 0.423307251486541,
+      "skill_vs_best_simple_baseline": -0.04930515876943553,
+      "train_seconds": 1.2123027659999934
+    },
+    {
+      "id": "ucdp_monthly_fatalities",
+      "title": "Global monthly conflict fatalities",
+      "units": "deaths/month",
+      "config": "/workspace/config/realworld/ucdp_monthly_fatalities.yaml",
+      "n_rows": 444,
+      "seq_len": 24,
+      "seasonal_period": 12,
+      "n_val": 84,
+      "lag1_correlation": 0.01945588416125247,
+      "model": {
+        "n": 84.0,
+        "mae": 8322.82042875744,
+        "rmse": 22750.769490195795,
+        "mse": 517597512.39602387
+      },
+      "baselines": {
+        "persistence": {
+          "n": 84.0,
+          "mae": 11903.27380952381,
+          "rmse": 32240.296321418282,
+          "mse": 1039436706.8928572
+        },
+        "seasonal_naive": {
+          "n": 84.0,
+          "mae": 11833.214285714286,
+          "rmse": 31060.868713896343,
+          "mse": 964777565.2619047
+        },
+        "mean": {
+          "n": 84.0,
+          "mae": 8991.430621693124,
+          "rmse": 23620.066239860083,
+          "mse": 557907529.1753781
+        }
+      },
+      "best_simple_baseline": "mean",
+      "skill_vs_persistence": 0.30079568344480556,
+      "skill_vs_seasonal_naive": 0.2966559864630177,
+      "skill_vs_best_simple_baseline": 0.0743608243300643,
+      "train_seconds": 0.8359505139997054
+    },
+    {
+      "id": "ucdp_onset_gaps",
+      "title": "Days between new armed-conflict onsets",
+      "units": "days",
+      "config": "/workspace/config/realworld/ucdp_onset_gaps.yaml",
+      "n_rows": 295,
+      "seq_len": 8,
+      "seasonal_period": 4,
+      "n_val": 57,
+      "lag1_correlation": 0.07095755610018563,
+      "model": {
+        "n": 57.0,
+        "mae": 99.6128821791264,
+        "rmse": 170.24371350941811,
+        "mse": 28982.921989476836
+      },
+      "baselines": {
+        "persistence": {
+          "n": 57.0,
+          "mae": 141.57894736842104,
+          "rmse": 239.7683092180098,
+          "mse": 57488.84210526316
+        },
+        "seasonal_naive": {
+          "n": 57.0,
+          "mae": 127.19298245614036,
+          "rmse": 219.03039923598206,
+          "mse": 47974.31578947369
+        },
+        "mean": {
+          "n": 57.0,
+          "mae": 109.02697921273773,
+          "rmse": 183.7558275361302,
+          "mse": 33766.204153488026
+        },
+        "exponential_trend": {
+          "n": 57.0,
+          "mae": 120.38124315723637,
+          "rmse": 180.07349648954872,
+          "mse": 32426.464137971514
+        }
+      },
+      "best_simple_baseline": "mean",
+      "skill_vs_persistence": 0.2964145868388841,
+      "skill_vs_seasonal_naive": 0.21683665045376488,
+      "skill_vs_best_simple_baseline": 0.08634649058048438,
+      "train_seconds": 1.0796798380001746
+    },
+    {
+      "id": "website_visits",
+      "title": "Example daily website visits",
+      "units": "visits/day",
+      "config": "/workspace/config/realworld/website_visits.yaml",
+      "n_rows": 1096,
+      "seq_len": 28,
+      "seasonal_period": 7,
+      "n_val": 213,
+      "lag1_correlation": 0.36268134318084627,
+      "model": {
+        "n": 213.0,
+        "mae": 33.3136270012654,
+        "rmse": 42.81964044437955,
+        "mse": 1833.5216077859448
+      },
+      "baselines": {
+        "persistence": {
+          "n": 213.0,
+          "mae": 147.84037558685446,
+          "rmse": 228.896208309364,
+          "mse": 52393.474178403754
+        },
+        "seasonal_naive": {
+          "n": 213.0,
+          "mae": 40.06103286384977,
+          "rmse": 49.871336805240986,
+          "mse": 2487.150234741784
+        },
+        "mean": {
+          "n": 213.0,
+          "mae": 182.31015158523815,
+          "rmse": 196.84122209781157,
+          "mse": 38746.46671695998
+        }
+      },
+      "best_simple_baseline": "seasonal_naive",
+      "skill_vs_persistence": 0.7746648919889003,
+      "skill_vs_seasonal_naive": 0.16842815524791632,
+      "skill_vs_best_simple_baseline": 0.16842815524791632,
+      "train_seconds": 3.67303885299998
+    }
+  ]
+}

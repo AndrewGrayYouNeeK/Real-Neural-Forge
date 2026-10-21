@@ -1,0 +1,41 @@
+model:
+  name: time_series_transformer
+  input_dim: 1
+  output_dim: 1
+  d_model: 32
+  nhead: 4
+  num_encoder_layers: 2
+  dim_feedforward: 64
+  dropout: 0.1
+  max_seq_len: 512
+data:
+  source: csv
+  path: data/realworld/fred_unemployment.csv
+  feature_columns:
+  - value
+  target_column: value
+  seq_len: 24
+  val_split: 0.2
+  split_mode: temporal
+  normalize: true
+  seed: 0
+  seasonal_period: 12
+training:
+  experiment_name: fred_unemployment
+  batch_size: 32
+  learning_rate: 0.001
+  epochs: 25
+  patience: 6
+  max_grad_norm: 1.0
+  device: cpu
+  seed: 0
+  checkpoint_dir: checkpoints/realworld/fred_unemployment
+  log_interval: 5
+storage:
+  db_path: data/realworld/experiments.db
+realworld:
+  id: fred_unemployment
+  title: US unemployment rate
+  units: percent
+  licence: Public domain (BLS), distributed by FRED
+  source: https://fred.stlouisfed.org/graph/fredgraph.csv?id=UNRATE

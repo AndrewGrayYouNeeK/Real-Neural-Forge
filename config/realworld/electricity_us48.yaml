@@ -1,0 +1,41 @@
+model:
+  name: time_series_transformer
+  input_dim: 1
+  output_dim: 1
+  d_model: 32
+  nhead: 4
+  num_encoder_layers: 2
+  dim_feedforward: 64
+  dropout: 0.1
+  max_seq_len: 512
+data:
+  source: csv
+  path: data/realworld/electricity_us48_hourly.csv
+  feature_columns:
+  - value
+  target_column: value
+  seq_len: 168
+  val_split: 0.2
+  split_mode: temporal
+  normalize: true
+  seed: 0
+  seasonal_period: 168
+training:
+  experiment_name: electricity_us48
+  batch_size: 128
+  learning_rate: 0.001
+  epochs: 6
+  patience: 3
+  max_grad_norm: 1.0
+  device: cpu
+  seed: 0
+  checkpoint_dir: checkpoints/realworld/electricity_us48
+  log_interval: 1
+storage:
+  db_path: data/realworld/experiments.db
+realworld:
+  id: electricity_us48
+  title: US48 hourly electricity demand
+  units: MWh
+  licence: Public domain (U.S. government work, EIA)
+  source: https://www.eia.gov/opendata/bulk/EBA.zip
