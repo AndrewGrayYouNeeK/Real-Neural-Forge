@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 import time
-from typing import Any
+from typing import Any, cast
 
 import torch
 import torch.nn as nn
@@ -19,6 +19,10 @@ from src.evaluation.baselines import (
     temporal_validation_target_rows,
 )
 from src.evaluation.metrics import mae, mse, rmse
+from src.forecasting.intervals import calibrate_intervals, pinball_loss
+from src.forecasting.output import horizon_targets, training_targets
+from src.forecasting.spec import ForecastSpec, forecast_spec_from_config
+from src.inference.predictor import Predictor
 from src.models.registry import build_model
 from src.storage.experiments import ExperimentStore, db_path_from_config
 from src.utils.checkpoint import save_checkpoint
@@ -60,18 +64,26 @@ class TimeSeriesTrainer:
         if seed is not None:
             torch.manual_seed(int(seed))
 
+        spec = forecast_spec_from_config(cfg)
         model = build_model(cfg).to(device)
         param_count = sum(p.numel() for p in model.parameters() if p.requires_grad)
         logger.info("Model parameters: %d", param_count)
 
         optimizer = torch.optim.Adam(model.parameters(), lr=t_cfg["learning_rate"])
-        criterion = nn.MSELoss()
+        mse_loss = nn.MSELoss()
+        quantiles = spec.quantiles
+
+        def criterion(preds: torch.Tensor, observed: torch.Tensor) -> torch.Tensor:
+            if quantiles:
+                return pinball_loss(preds, observed, quantiles)
+            return cast(torch.Tensor, mse_loss(preds, observed))
 
         data_cfg = cfg.get("data", {})
         seq_len = int(data_cfg.get("seq_len", 64))
         inputs, targets = load_series(cfg)
+        fit_targets = training_targets(targets, spec)
 
-        full_dataset = TensorDataset(inputs, targets)
+        full_dataset = TensorDataset(inputs, fit_targets)
         # CSV windows overlap and are ordered in time, so a random split leaks
         # near-duplicate windows into validation; hold out the most recent ones.
         split_mode = resolve_split_mode(data_cfg)
@@ -94,6 +106,12 @@ class TimeSeriesTrainer:
                 raise ValueError(
                     "data.report_baselines requires a temporal validation split."
                 )
+            if spec.horizon != 1:
+                raise ValueError(
+                    "data.report_baselines scores one-step labels. "
+                    f"forecast.horizon is {spec.horizon}; use horizon 1, or "
+                    "python -m src.compare for a multi-step table."
+                )
             baseline_frame = load_baseline_series(
                 resolve_repo_path(data_cfg["path"]),
                 target_column=data_cfg.get("target_column", "value"),
@@ -101,26 +119,26 @@ class TimeSeriesTrainer:
             )
         dataset: Dataset[tuple[torch.Tensor, ...]]
         val_dataset: Dataset[tuple[torch.Tensor, ...]] | None
+        val_indices: list[int] | None
         if val_idx:
             dataset = Subset(full_dataset, train_idx)
             val_dataset = Subset(full_dataset, val_idx)
+            val_indices = list(val_idx)
         else:
             dataset, val_dataset = full_dataset, None
+            val_indices = None
         n_train = len(train_idx)
 
         # Standardise features/targets (default on for CSV data). Statistics come
         # from the training split only so validation data never leaks into them.
         scaler: StandardScaler | None = None
         if data_cfg.get("normalize", data_cfg.get("source") == "csv"):
-            scaler = StandardScaler.fit(inputs[train_idx], targets[train_idx])
+            scaler = StandardScaler.fit(inputs[train_idx], fit_targets[train_idx])
             full_dataset.tensors = (
                 scaler.transform_inputs(inputs),
-                scaler.transform_targets(targets),
+                scaler.transform_targets(fit_targets),
             )
         scaler_state = scaler.state_dict() if scaler is not None else None
-
-        def to_original(t: torch.Tensor) -> torch.Tensor:
-            return scaler.inverse_targets(t) if scaler is not None else t
 
         loader = DataLoader(dataset, batch_size=t_cfg["batch_size"], shuffle=True)
 
@@ -136,6 +154,17 @@ class TimeSeriesTrainer:
                     targets_l.append(by)
             return torch.cat(preds_l), torch.cat(targets_l)
 
+        def _mean_loss(ds: Dataset[tuple[torch.Tensor, ...]]) -> float:
+            model.eval()
+            total = 0.0
+            count = 0
+            with torch.no_grad():
+                for bx, by in DataLoader(ds, batch_size=t_cfg["batch_size"]):
+                    loss = criterion(model(bx.to(device)), by.to(device))
+                    total += loss.item() * bx.size(0)
+                    count += bx.size(0)
+            return total / count
+
         checkpoint_dir = resolve_repo_path(t_cfg.get("checkpoint_dir", "checkpoints"))
         checkpoint_dir.mkdir(parents=True, exist_ok=True)
         best_loss = float("inf")
@@ -143,6 +172,7 @@ class TimeSeriesTrainer:
         history: list[dict[str, float]] = []
         patience = int(t_cfg.get("patience", 0) or 0)
         max_grad_norm = float(t_cfg.get("max_grad_norm", 0) or 0)
+        forecast_meta = _forecast_checkpoint(spec)
         if patience < 0 or max_grad_norm < 0:
             raise ValueError(
                 "training.patience and training.max_grad_norm must be >= 0"
@@ -178,8 +208,11 @@ class TimeSeriesTrainer:
                 # Select the best checkpoint on held-out loss when available.
                 select_loss = epoch_loss
                 if val_dataset is not None:
-                    vp, vt = evaluate(val_dataset)
-                    select_loss = mse(vp, vt)  # in scaled units, like train_loss
+                    if quantiles:
+                        select_loss = _mean_loss(val_dataset)
+                    else:
+                        vp, vt = evaluate(val_dataset)
+                        select_loss = mse(vp, vt)  # in scaled units, like train_loss
                     record["val_loss"] = select_loss
                     self.store.log_metric(experiment_id, "val_loss", select_loss, epoch)
                 history.append(record)
@@ -189,11 +222,13 @@ class TimeSeriesTrainer:
                         "Epoch %d/%d  loss=%.6f", epoch, t_cfg["epochs"], epoch_loss
                     )
                     if (
-                        data_cfg.get("report_baselines")
+                        not quantiles
+                        and data_cfg.get("report_baselines")
                         and scaler is not None
                         and val_dataset is not None
                     ):
                         # Target z-score RMSE converts by the training-split std.
+                        # Pinball loss is not an MSE, so this line is point models only.
                         original_rmse = (select_loss**0.5) * float(
                             scaler.y_std.reshape(-1)[0]
                         )
@@ -215,6 +250,7 @@ class TimeSeriesTrainer:
                         cfg,
                         checkpoint_path,
                         scaler=scaler_state,
+                        forecast=dict(forecast_meta),
                     )
                     self.store.complete_experiment(
                         experiment_id,
@@ -234,25 +270,25 @@ class TimeSeriesTrainer:
 
             # The checkpoint is the best epoch. Score that model, not whatever
             # weights the loop stopped on after the patience window.
-            best_checkpoint = checkpoint_dir / checkpoint_name
-            if best_checkpoint.exists():
-                saved = torch.load(
-                    best_checkpoint, map_location=device, weights_only=True
-                )
+            best_path = checkpoint_dir / checkpoint_name
+            if best_path.is_file():
+                saved = torch.load(best_path, map_location=device, weights_only=True)
                 model.load_state_dict(saved["model_state_dict"])
 
-            # Report metrics on the validation set when one exists, otherwise
-            # on the full training set (deterministic, unshuffled).
-            preds, targets_all = evaluate(
-                val_dataset if val_dataset is not None else dataset
+            metrics, point, observed = _served_metrics(
+                model,
+                inputs,
+                targets,
+                val_indices,
+                spec=spec,
+                scaler=scaler,
+                device=device,
+                forecast_meta=forecast_meta,
             )
-            # Final metrics are reported in the data's original units.
-            preds, targets_all = to_original(preds), to_original(targets_all)
-            metrics = {
-                "mse": mse(preds, targets_all),
-                "rmse": rmse(preds, targets_all),
-                "mae": mae(preds, targets_all),
-            }
+            if best_path.is_file():
+                saved = torch.load(best_path, map_location="cpu", weights_only=True)
+                saved["forecast"] = forecast_meta
+                torch.save(saved, best_path)
             for name, value in metrics.items():
                 self.store.log_metric(experiment_id, name, value)
 
@@ -265,9 +301,9 @@ class TimeSeriesTrainer:
                 baseline_scores = compare_to_baselines(
                     series_values,
                     target_rows,
-                    preds.detach().cpu().numpy(),
+                    point.detach().cpu().numpy(),
                     dates=series_dates,
-                    model_targets=targets_all.detach().cpu().numpy(),
+                    model_targets=observed.detach().cpu().numpy(),
                 )
                 logger.info(
                     "Validation comparison (original units):\n%s",
@@ -313,3 +349,87 @@ class TimeSeriesTrainer:
             "elapsed_seconds": elapsed_seconds,
             "baselines": baseline_scores,
         }
+
+
+def _forecast_checkpoint(spec: ForecastSpec) -> dict[str, Any]:
+    meta = spec.as_dict()
+    meta.update(
+        {
+            "interval_method": None,
+            "conformal_qhat": None,
+            "validation_coverage": None,
+            "raw_coverage": None,
+            "interval_width": None,
+            "coverage_horizon": spec.horizon,
+        }
+    )
+    return meta
+
+
+def _served_metrics(
+    model: nn.Module,
+    inputs: torch.Tensor,
+    targets: torch.Tensor,
+    val_indices: list[int] | None,
+    *,
+    spec: ForecastSpec,
+    scaler: StandardScaler | None,
+    device: torch.device,
+    forecast_meta: dict[str, Any],
+) -> tuple[dict[str, float], torch.Tensor, torch.Tensor]:
+    """Score the served horizon in original units and calibrate intervals.
+
+    Point metrics use the validation rows when a split exists, otherwise the
+    training rows. Interval offsets are fit only on a validation split, and
+    the quoted coverage is the later half of that split. The returned point
+    forecast and labels are the same tensors the metrics use.
+    """
+    eval_indices = val_indices if val_indices is not None else list(range(len(inputs)))
+    predictor = Predictor(model, device=device, scaler=scaler, spec=spec)
+    batch = predictor.forecast(inputs[eval_indices], horizon=spec.horizon)
+    observed = horizon_targets(targets[eval_indices], spec.horizon)
+    point = batch.point.detach().cpu()
+    metrics = {
+        "mse": mse(point, observed),
+        "rmse": rmse(point, observed),
+        "mae": mae(point, observed),
+    }
+    if val_indices is None:
+        return metrics, point, observed
+
+    ordered = sorted(val_indices)
+    if ordered == list(eval_indices):
+        cal_point = point
+        cal_lower = None if batch.lower is None else batch.lower.detach().cpu()
+        cal_upper = None if batch.upper is None else batch.upper.detach().cpu()
+        cal_targets = observed
+    else:
+        cal_batch = predictor.forecast(inputs[ordered], horizon=spec.horizon)
+        cal_point = cal_batch.point.detach().cpu()
+        cal_lower = None if cal_batch.lower is None else cal_batch.lower.detach().cpu()
+        cal_upper = None if cal_batch.upper is None else cal_batch.upper.detach().cpu()
+        cal_targets = horizon_targets(targets[ordered], spec.horizon)
+
+    method = "cqr" if spec.quantiles and cal_lower is not None else "residual"
+    calibration = calibrate_intervals(
+        point=cal_point,
+        targets=cal_targets,
+        nominal=spec.nominal_coverage,
+        method=method,
+        lower=cal_lower,
+        upper=cal_upper,
+    )
+    forecast_meta["interval_method"] = calibration.method
+    forecast_meta["conformal_qhat"] = list(calibration.qhat)
+    forecast_meta["validation_coverage"] = calibration.validation_coverage
+    forecast_meta["raw_coverage"] = calibration.raw_coverage
+    forecast_meta["interval_width"] = calibration.interval_width
+    forecast_meta["coverage_horizon"] = calibration.coverage_horizon
+    if calibration.validation_coverage is not None:
+        metrics["coverage"] = calibration.validation_coverage
+    if calibration.raw_coverage is not None:
+        metrics["raw_coverage"] = calibration.raw_coverage
+    if calibration.interval_width is not None:
+        metrics["interval_width"] = calibration.interval_width
+    metrics["nominal_coverage"] = calibration.nominal_coverage
+    return metrics, point, observed

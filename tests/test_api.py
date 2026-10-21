@@ -765,3 +765,192 @@ class TestAppVersion:
     def test_version_comes_from_pyproject(self, client):
         assert app.version == project_version() == _project_version_from_file()
         assert client.get("/openapi.json").json()["info"]["version"] == app.version
+
+
+class TestForecastApi:
+    def test_default_predict_response_is_unchanged(self, client):
+        resp = client.post("/predict", json={"sequence": [[0.1], [0.2], [0.3], [0.4]]})
+        assert resp.status_code == 200
+        assert set(resp.json()) == {"prediction"}
+        assert len(resp.json()["prediction"]) == 1
+
+    def test_explicit_one_step_horizon_stays_a_point(self, client):
+        resp = client.post(
+            "/predict",
+            json={"sequence": [[0.1], [0.2], [0.3]], "horizon": 1},
+        )
+        assert resp.status_code == 200
+        assert set(resp.json()) == {"prediction"}
+
+    def test_multi_step_predict_extends_the_response(self, client):
+        resp = client.post(
+            "/predict",
+            json={"sequence": [[0.1], [0.2], [0.3], [0.4]], "horizon": 4},
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert len(body["forecast"]) == 4
+        assert body["prediction"] == body["forecast"][0]
+        assert body["horizon"] == 4
+        assert body["strategy"] == "recursive"
+        assert "lower" not in body
+        assert body["p50"] == [step[0] for step in body["forecast"]]
+        assert "p10" not in body
+
+    def test_forecast_endpoint_defaults_to_configured_horizon(self, client):
+        resp = client.post("/forecast", json={"sequence": [[0.1], [0.2], [0.3]]})
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["horizon"] == 1
+        assert body["strategy"] == "direct"
+        assert body["forecast"] == [body["prediction"]]
+        assert body["p50"] == [body["prediction"][0]]
+
+    def test_model_info_reports_forecast_settings(self, client):
+        info = client.get("/model/info").json()
+        assert info["horizon"] == 1
+        assert info["forecast_strategy"] == "direct"
+        assert info["quantiles"] == []
+        assert "lstm" in info["available_models"]
+
+    def test_horizon_zero_is_rejected(self, client):
+        resp = client.post("/predict", json={"sequence": [[0.1]], "horizon": 0})
+        assert resp.status_code == 422
+
+    def test_recursive_without_a_target_slot_is_rejected(self, client, tmp_path):
+        cfg = yaml.safe_load((REPO_ROOT / "config" / "config.yaml").read_text())
+        cfg["model"]["input_dim"] = 2
+        cfg["model"]["output_dim"] = 1
+        cfg["forecast"] = {
+            "horizon": 1,
+            "strategy": "direct",
+            "target_feature_index": None,
+        }
+        cfg["inference"]["checkpoint_path"] = str(tmp_path / "missing.pt")
+        cfg["storage"]["db_path"] = str(tmp_path / "exp.db")
+        config_path = tmp_path / "config.yaml"
+        _write_cfg(config_path, cfg)
+        try:
+            load_model(config_path)
+            resp = client.post(
+                "/predict",
+                json={"sequence": [[0.1, 0.2], [0.3, 0.4]], "horizon": 3},
+            )
+        finally:
+            load_model("config/config.yaml")
+        assert resp.status_code == 422
+        assert "target_feature_index" in resp.json()["detail"]
+
+    def test_loaded_quantile_checkpoint_returns_intervals(self, client, tmp_path):
+        cfg = yaml.safe_load((REPO_ROOT / "config" / "config.yaml").read_text())
+        cfg["model"].update(
+            d_model=8, nhead=2, num_encoder_layers=1, dim_feedforward=16
+        )
+        cfg["forecast"] = {
+            "horizon": 2,
+            "strategy": "direct",
+            "quantiles": [0.1, 0.5, 0.9],
+        }
+        checkpoint = tmp_path / "quantiles.pt"
+        model = build_model(cfg)
+        torch.save(
+            {
+                "epoch": 1,
+                "model_state_dict": model.state_dict(),
+                "optimizer_state_dict": {},
+                "loss": 0.1,
+                "config": cfg,
+                "scaler": None,
+                "forecast": {
+                    "horizon": 2,
+                    "strategy": "direct",
+                    "quantiles": [0.1, 0.5, 0.9],
+                    "season_length": None,
+                    "target_feature_index": 0,
+                    "nominal_coverage": 0.8,
+                    "n_lags": None,
+                    "interval_method": "cqr",
+                    "conformal_qhat": [0.2, 0.4],
+                    "validation_coverage": 0.7,
+                    "coverage_horizon": 2,
+                },
+            },
+            checkpoint,
+        )
+        cfg["inference"]["checkpoint_path"] = str(checkpoint)
+        cfg["storage"]["db_path"] = str(tmp_path / "exp.db")
+        config_path = tmp_path / "config.yaml"
+        _write_cfg(config_path, cfg)
+        try:
+            load_model(config_path)
+            multi = client.post(
+                "/forecast",
+                json={"sequence": [[0.1], [0.2], [0.3], [0.4]]},
+            )
+            one = client.post(
+                "/predict",
+                json={
+                    "sequence": [[0.1], [0.2], [0.3], [0.4]],
+                    "horizon": 1,
+                    "include_intervals": True,
+                },
+            )
+        finally:
+            load_model("config/config.yaml")
+        body = multi.json()
+        assert multi.status_code == 200
+        assert body["horizon"] == 2
+        assert body["interval_method"] == "cqr"
+        assert len(body["lower"]) == 2
+        assert len(body["upper"]) == 2
+        assert body["validation_coverage"] == 0.7
+        assert body["quantiles"] == [0.1, 0.5, 0.9]
+        assert body["p50"] == [step[0] for step in body["forecast"]]
+        assert len(body["p10"]) == len(body["p90"]) == 2
+        assert body["p10"][0] <= body["p50"][0] <= body["p90"][0]
+        one_body = one.json()
+        assert one.status_code == 200
+        assert "forecast" not in one_body
+        assert len(one_body["lower"]) == 1
+        assert one_body["p50"] == [one_body["prediction"][0]]
+        assert len(one_body["p10"]) == len(one_body["p90"]) == 1
+        assert "validation_coverage" not in one_body
+
+    def test_comparison_endpoint_returns_the_latest_stored_table(
+        self, client, tmp_path
+    ):
+        cfg = yaml.safe_load((REPO_ROOT / "config" / "config.yaml").read_text())
+        cfg["storage"]["db_path"] = str(tmp_path / "exp.db")
+        cfg["inference"]["checkpoint_path"] = str(tmp_path / "missing.pt")
+        config_path = tmp_path / "config.yaml"
+        _write_cfg(config_path, cfg)
+        try:
+            load_model(config_path)
+            empty = client.get("/comparison")
+            assert empty.status_code == 200
+            assert empty.json()["models"] == []
+            store = api_module._store
+            assert store is not None
+            older = store.create_experiment(
+                name="old:comparison", config={}, model_name="comparison"
+            )
+            store.complete_experiment(
+                older,
+                status="completed",
+                metrics={"persistence.mae": 1.0, "horizon": 1.0},
+            )
+            latest = store.create_experiment(
+                name="new:comparison", config={}, model_name="comparison"
+            )
+            store.complete_experiment(
+                latest,
+                status="completed",
+                metrics={"linear_lags.mae": 0.25, "linear_lags.rmse": 0.4},
+            )
+            found = client.get("/comparison")
+        finally:
+            load_model("config/config.yaml")
+        assert found.status_code == 200
+        body = found.json()
+        assert body["experiment_id"] == latest
+        assert body["models"] == [{"name": "linear_lags", "mae": 0.25, "rmse": 0.4}]

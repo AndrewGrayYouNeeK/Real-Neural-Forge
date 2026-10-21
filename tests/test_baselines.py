@@ -236,6 +236,34 @@ class TestBaselineReporting:
         with pytest.raises(ValueError, match="temporal validation"):
             _trainer(tmp_path, cfg).train()
 
+    def test_multi_step_horizon_rejected_before_training(self, tmp_path):
+        path = tmp_path / "series.csv"
+        pd.DataFrame(
+            {
+                "date": pd.date_range("2020-01-01", periods=40, freq="D").strftime(
+                    "%Y-%m-%d"
+                ),
+                "value": np.arange(40, dtype=float),
+            }
+        ).to_csv(path, index=False)
+        cfg = _tiny_model(load_config("config/config.yaml"))
+        cfg["training"]["checkpoint_dir"] = str(tmp_path / "ckpt")
+        cfg["forecast"] = {"horizon": 7, "strategy": "direct"}
+        cfg["data"] = {
+            "source": "csv",
+            "path": str(path),
+            "date_column": "date",
+            "feature_columns": ["value"],
+            "target_column": "value",
+            "seq_len": 4,
+            "val_split": 0.25,
+            "split_mode": "temporal",
+            "report_baselines": True,
+        }
+        with pytest.raises(ValueError, match="forecast.horizon"):
+            _trainer(tmp_path, cfg).train()
+        assert not (tmp_path / "ckpt").exists()
+
 
 def test_build_model_accepts_weather_width():
     cfg = load_config("config/weather.yaml")
