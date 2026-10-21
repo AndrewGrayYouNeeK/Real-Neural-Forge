@@ -1,0 +1,25 @@
+{
+  "source": "https://epoch.ai/data/notable_ai_models.csv",
+  "licence": "CC BY 4.0",
+  "attribution": "Epoch AI, 'Data on AI Models' (notable AI models), https://epoch.ai/data/ai-models, CC BY.",
+  "n_notable_rows": 1078,
+  "n_frontier_with_compute": 114,
+  "n_frontier_post_2010": 72,
+  "monthly_rows": 193,
+  "date_start": "2010-09-01",
+  "date_end": "2026-09-01",
+  "series_cutoff": "2010-01-01",
+  "descriptive_doubling_post_2010": {
+    "slope_log10_per_year": 0.664199295769676,
+    "doubling_time_years": 0.4532223951173372,
+    "r2": 0.9729071551778323,
+    "n_models": 72
+  },
+  "descriptive_doubling_all_frontier_models": {
+    "slope_log10_per_year": 0.3130543997542759,
+    "doubling_time_years": 0.9615900492063585,
+    "r2": 0.8910435909827416,
+    "n_models": 114
+  },
+  "note": "The monthly series is the cumulative maximum of frontier-model training compute from 2010 onward. descriptive_doubling figures use every model in that scope, including months later held out for testing. The training script refits the slope on the training window only."
+}

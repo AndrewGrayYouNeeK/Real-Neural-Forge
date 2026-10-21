@@ -1,0 +1,38 @@
+# Research comparison. The racing trainer owns the split, so the weekly
+# champion job leaves this file alone.
+retrain:
+  enabled: false
+
+model:
+  name: time_series_transformer
+  input_dim: 9
+  output_dim: 1
+  d_model: 32
+  nhead: 4
+  num_encoder_layers: 2
+  dim_feedforward: 64
+  dropout: 0.1
+  max_seq_len: 16
+
+data:
+  path: data/raw/horse_racing/performances.csv.gz
+  history_len: 6
+  test_fraction: 0.2
+  val_fraction: 0.1
+  split_mode: temporal
+  normalize: true
+  seed: 0
+
+training:
+  experiment_name: horse_racing
+  batch_size: 512
+  learning_rate: 0.001
+  epochs: 6
+  patience: 2
+  max_grad_norm: 1.0
+  device: cpu
+  checkpoint_dir: checkpoints/horse_racing
+  seed: 0
+
+output:
+  results: results/horse_racing.json

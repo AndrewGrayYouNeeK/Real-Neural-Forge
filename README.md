@@ -1299,3 +1299,168 @@ Commodity results use the same return baseline. Front-month futures include cont
 A lower RMSE than persistence on one holdout, especially by a fraction of a percent, is not a trading edge. The model does not see order flow, news, or funding costs, and the commodity futures are front-month contracts. Discontinued ECB currencies (for example the old Romanian leu, or the ruble after the ECB stopped publishing it) are scored on the last 20% of their own sample, which is not 2026. Crypto coins with less than two years of daily candles are listed and not trained. Pegged currencies (the Danish krone, the Hong Kong dollar, and others) mostly import the dollar's move against the peg partner, so their errors are not independent of the euro or the dollar.
 
 Retrain with the commands above. Live rankings and the latest ECB file move, so a later run will not reproduce these digits exactly; the seed, the split, and the checkpoint selection are fixed.
+## Domain forecasts
+
+Horse racing, AI progress, and the quantum series below use the existing `time_series_transformer`. Each run is a temporal split (the last `test_fraction` of windows or races is untouched by fitting, early stopping, and baseline coefficients; `val_fraction` is the slice immediately before that block). Inputs are standardised from the training split only. `training.seed` is 0. Each of these configs sets `retrain.enabled: false`, so the weekly champion job does not train them. Checkpoints go under `checkpoints/` and are not committed. Small derived tables live in `datasets/`; metrics live in `results/`.
+
+```bash
+python -m scripts.plot_domain_forecasts
+```
+
+That writes the comparison charts. matplotlib is used only by the plot script and is not part of the API lock.
+
+### Horse racing
+
+Public Hong Kong Jockey Club results, with Singapore rows dropped. The fetch script downloads `performances.csv.gz` from [eprochasson/horserace_data](https://github.com/eprochasson/horserace_data) into `data/raw/horse_racing/`, which is gitignored. That repository has no licence file (the GitHub licence API returned 404 on 2026-10-21). Its README says the tables were scraped from public HKJC and Singapore Turf Club pages and are provided without a warranty. This project does not redistribute the raw table.
+
+```bash
+python -m scripts.fetch_horse_racing
+python -m scripts.train_horse_racing --config config/horse_racing.yaml
+```
+
+The kept table is 273,977 Hong Kong runners in 24,005 races from 1979-09-22 to 2018-06-27 (median field 12). Each runner is a sequence of up to six earlier runs plus one current-race token. The current token has days since the last run, weight, draw, and the jockey and trainer strike rates from races already run. It omits the current result and the current odds. Settlement still uses the published dividends, so the market comparison is on form. The win pick is the runner with the lowest predicted finish percentile. Top-3 hit rate is how often that single pick finished in the first three. Probabilities are a softmax of the negated scores; the temperature (0.2) is chosen on the validation races. Flat-stake profit is the published decimal dividend minus one when the pick wins, and minus one otherwise. Those dividends are stake-inclusive, and the test-set mean overround is 0.230, close to the 0.212 implied by HKJC's 17.5% win-pool deduction. The take is not applied a second time.
+
+The test block is 4,606 races from 2012-09-26 to 2018-06-27. Training took 49.8 seconds on CPU and stopped at epoch 3.
+
+| | Win pick | Top-3 hit | Log loss | Brier | Flat-stake ROI |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Model | 22.5% | 52.8% | 2.257 | 0.873 | −25.0% |
+| Favourite (lowest odds) | 30.4% | 60.7% | 2.020 | 0.820 | −15.1% |
+| Uniform pick | 8.2% | 24.6% | 2.511 | 0.918 | |
+
+Log loss and Brier for the favourite column are the market probabilities after normalising the implied odds. The model is ahead of a uniform pick and behind the market on every column. A one-unit stake on the model lost 1,149.7 units; the same stake on the favourite lost 695.3. `beats_market` is false.
+
+Not betting advice. This is a historical comparison of a forecasting model with the closing market. A simulated return is not a reason to bet, and public form usually does not beat the odds once the track take is included.
+
+### AI progress
+
+Three public series, each scored against one-step persistence, a log-linear (or already-log10 linear) trend fit on the training window, and the training-window mean.
+
+**Frontier training compute.** [Epoch AI, Data on AI Models](https://epoch.ai/data/ai-models) (`notable_ai_models.csv`, CC BY 4.0). The monthly series is the cumulative maximum of frontier-model training compute from 2010-09 through 2026-09 (193 months, 72 frontier models with compute on or after 2010). Earlier systems stay in `datasets/ai_progress/frontier_models.csv` and are left out of the forecast series.
+
+```bash
+python -m scripts.fetch_epoch_ai_models
+python -m scripts.train_domain_series --config config/ai_frontier_compute.yaml
+```
+
+Test months are 2023-10 through 2026-09 (36 months). Training took 1.4 seconds and stopped at epoch 12. Errors are on log10 FLOP.
+
+| | MAE | RMSE |
+| --- | ---: | ---: |
+| Model | 0.896 | 0.975 |
+| Persistence | 0.046 | 0.167 |
+| Log-linear | 0.495 | 0.557 |
+| Training mean | 5.305 | 5.331 |
+
+The record is a step function, so persistence is the best one-step forecast. On the training window the log10 series rises by 0.700 per year (R² 0.944), a doubling time of 0.43 years (about 5.2 months). A fit that also includes the test months, reported only as a description of the post-2010 frontier, gives 0.45 years (R² 0.973, 72 models). Across all 114 frontier models with compute, including pre-2010 systems, the descriptive doubling time is 0.96 years (R² 0.891).
+
+**arXiv submissions.** Monthly counts for `cs.AI`, `cs.LG`, and `cs.CL` from the public arXiv API, January 2012 through September 2026 (177 months). The script waits at least three seconds between requests and stores totals only, not paper text. Provenance is `datasets/ai_progress/arxiv_provenance.json`.
+
+```bash
+python -m scripts.fetch_arxiv_monthly_counts
+python -m scripts.train_domain_series --config config/ai_arxiv_counts.yaml
+```
+
+The same fetch also writes the `quant-ph` series used below. Test months are 2024-01 through 2026-09 (33 months). Training took 1.5 seconds and stopped at epoch 19. Errors are in submissions per month. Doubling times are the training-window log-linear fit.
+
+| Category | Model MAE / RMSE | Persistence | Log-linear | Training mean | Doubling |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| cs.AI | 2132 / 2403 | 670 / 816 | 890 / 1101 | 3393 / 3590 | 2.20 years |
+| cs.LG | 1304 / 1602 | 864 / 1083 | 8161 / 8796 | 2900 / 3047 | 1.73 years |
+| cs.CL | 1228 / 1336 | 556 / 660 | 1459 / 1703 | 1702 / 1781 | 1.80 years |
+
+Persistence is the best one-step forecast in every category. The cs.LG training slope (R² 0.931) doubles in 1.73 years and then overshoots the test period, which is why its test error is the worst of the four. The model beats the training-mean baseline in all three categories.
+
+**GitHub repositories.** Unauthenticated search for `topic:machine-learning created:` each month from 2015-01 through 2026-09 (141 months, 10 requests per minute, no token). Repositories that never set the topic are missing, so the level is an undercount. No month was flagged `incomplete_results`. Provenance is `datasets/ai_progress/github_provenance.json`.
+
+```bash
+python -m scripts.fetch_github_ai_repos
+python -m scripts.train_domain_series --config config/ai_github_repos.yaml
+```
+
+Test months are 2024-08 through 2026-09 (26 months). Training took 1.2 seconds and stopped at epoch 17.
+
+| | MAE | RMSE |
+| --- | ---: | ---: |
+| Model | 2085 | 3212 |
+| Persistence | 564 | 974 |
+| Log-linear | 2258 | 2382 |
+| Training mean | 3501 | 4632 |
+
+Persistence is again the best one-step forecast. The training-window slope is 0.301 nats per year (R² 0.682), a doubling time of 2.30 years. Counts jump in 2026 (above 11,000 in July), and both the model and the log-linear trend miss that jump.
+
+### Quantum
+
+**Computing progress.** Annual records from [Awesome Quantum Computing Experiments](https://github.com/francois-marie/awesome-quantum-computing-experiments) (MIT). `qubit_count.csv` supplies the best reported physical qubit count. `entangled_state_error_exp.csv` mixes two-qubit gate error and entangled-state error; the series is the running minimum of that column, and fidelity is one minus the error. This dataset has no quantum-volume column. Some 2024–2026 neutral-atom rows are marked "Not rearranged" (6,100 and 11,000). A second series drops those rows before the cumulative maximum (2024 record 2,088, 2025 record 2,400, carried through 2026).
+
+```bash
+python -m scripts.fetch_quantum_hardware
+python -m scripts.train_domain_series --config config/quantum_qubits.yaml
+python -m scripts.train_domain_series --config config/quantum_qubits_rearranged.yaml
+python -m scripts.train_domain_series --config config/quantum_gate_error.yaml
+```
+
+Both qubit series and the error series are 29 annual points from 1998 through 2026. The test block is 2022–2026 (5 years). Training took 0.38s, 0.39s, and 0.43s, stopping at epochs 57, 57, and 67. Errors are on the log10 record.
+
+| Series | Model MAE / RMSE | Persistence | Log-linear | Training mean | Train-window time |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| All qubit records | 1.532 / 1.672 | 0.327 / 0.583 | 1.353 / 1.472 | 2.417 / 2.509 | doubling 4.10 years |
+| Excluding unrearranged | 1.226 / 1.293 | 0.194 / 0.366 | 1.047 / 1.097 | 2.111 / 2.151 | doubling 4.10 years |
+| Best reported error | 0.385 / 0.508 | 0.155 / 0.266 | 0.211 / 0.220 | 1.618 / 1.656 | halving 2.58 years |
+
+The training-window qubit slope is 0.073 log10 per year (R² 0.765). It is the same for both qubit series because the unrearranged rows sit in the test years. Persistence is the best one-step forecast on all three series. The error slope is −0.116 log10 per year (R² 0.803). The best error in the file is about 8.4×10⁻⁵ in 2025, a fidelity of about 0.9999. The 2024–2026 atom-array jumps sit well above the 1998–2021 trend, which is why the log-linear qubit forecast and the transformer both miss the test block.
+
+**Research activity.** Monthly `quant-ph` counts from the same arXiv fetch, 2012-01 through 2026-09.
+
+```bash
+python -m scripts.train_domain_series --config config/quantum_arxiv.yaml
+```
+
+Test months are 2024-01 through 2026-09. Training took 1.3 seconds and stopped at epoch 13.
+
+| | MAE | RMSE |
+| --- | ---: | ---: |
+| Model | 419 | 509 |
+| Persistence | 139 | 184 |
+| Log-linear | 317 | 403 |
+| Training mean | 725 | 782 |
+
+Persistence is the best one-step forecast. The training-window slope is 0.068 nats per year (R² 0.841), a doubling time of 10.3 years, much slower than the CS categories above.
+
+**Quantum randomness.** A sanity check in the same spirit as a lottery draw. The keyless ANU QRNG endpoint did not respond, and the current API requires a key, so it is not used. The series is the concatenated symbol codes from [ProCreations/quantum-randomness](https://huggingface.co/datasets/ProCreations/quantum-randomness) (`quantum_random_1000_final.csv`, MIT): 1,024 short slices attributed to the ANU QRNG, 6,144 symbols over an alphabet of 64. Timestamps in the file are microseconds apart inside one dump. The trainer maps the symbol index onto a synthetic day axis so the shared year code has a defined scale; those dates are not a sampling clock, and a doubling time on them is not a physical result.
+
+```bash
+python -m scripts.fetch_quantum_random
+python -m scripts.train_domain_series --config config/quantum_random.yaml
+```
+
+The test block is 1,226 symbols. Training took 2.5 seconds and stopped at epoch 2.
+
+| | MAE | RMSE |
+| --- | ---: | ---: |
+| Model | 18.60 | 21.65 |
+| Persistence | 25.47 | 31.11 |
+| Log-linear | 18.52 | 21.79 |
+| Training mean | 18.56 | 21.63 |
+
+The model does not beat the training mean (`beats_constant_mean` is false; RMSE 21.650 against 21.635). The log-linear training R² is about 5.5×10⁻⁵. Persistence is worse, which is what uncorrelated noise should do. The transformer cannot predict the next quantum-random symbol.
+
+**Cosmic-ray neutrons.** The space series above has no neutron-monitor record, so the Oulu station from NMDB is included here. Daily `corr_for_efficiency` values, reduced to months with at least 20 days, from 1964-04 through 2026-10 (751 months). October 2026 is a partial month: the fetch date was 2026-10-21 and the month still cleared the 20-day rule. The query is keyless (`wget=1` on the NMDB nest interface).
+
+We acknowledge the NMDB database (www.nmdb.eu), founded under the European Union's FP7 programme (contract no. 213007), and the PIs of the neutron monitor at Oulu (Sodankylä Geophysical Observatory of the University of Oulu). The series is free for non-commercial research, education, and public services. The station readme is <https://cosmicrays.oulu.fi/readme.html>.
+
+```bash
+python -m scripts.fetch_oulu_neutrons
+python -m scripts.train_domain_series --config config/quantum_oulu_neutrons.yaml
+```
+
+The input window is 36 months, shorter than an ~11-year solar cycle. The test block is 2014-12 through 2026-10 (143 months). Training took 4.3 seconds and stopped at epoch 19.
+
+| | MAE | RMSE |
+| --- | ---: | ---: |
+| Model | 0.743 | 1.006 |
+| Persistence | 0.734 | 1.022 |
+| Log-linear | 6.228 | 6.874 |
+| Training mean | 6.703 | 7.629 |
+
+The model and persistence are close (the model is slightly better on RMSE and slightly worse on MAE). Both follow the solar cycle. The log-linear fit on the training window has R² 0.021 and a slope of 0.0007 nats per year, so its doubling time of 979 years is not a physical timescale. A straight exponential is the wrong baseline for this series.

@@ -1,0 +1,42 @@
+# Research comparison. The domain trainer owns the split, so the weekly
+# champion job leaves this file alone.
+retrain:
+  enabled: false
+
+model:
+  name: time_series_transformer
+  input_dim: 1
+  output_dim: 1
+  d_model: 32
+  nhead: 4
+  num_encoder_layers: 2
+  dim_feedforward: 64
+  dropout: 0.1
+  max_seq_len: 64
+
+data:
+  path: datasets/quantum/oulu_neutrons_monthly.csv
+  date_column: date
+  feature_columns: ["count_rate"]
+  seq_len: 36
+  test_fraction: 0.2
+  val_fraction: 0.1
+  split_mode: temporal
+  normalize: true
+  transform: none
+  already_log10: false
+  seed: 0
+
+training:
+  experiment_name: quantum_oulu_neutrons
+  batch_size: 32
+  learning_rate: 0.001
+  epochs: 30
+  patience: 8
+  max_grad_norm: 1.0
+  device: cpu
+  checkpoint_dir: checkpoints/quantum_oulu_neutrons
+  seed: 0
+
+output:
+  results: results/quantum_oulu_neutrons.json
