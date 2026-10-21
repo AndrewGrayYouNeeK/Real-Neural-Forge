@@ -1,0 +1,51 @@
+# Seven-step quantile forecast on the synthetic sine.
+# The sample period of that sine is (seq_len + horizon - 1) / 2.
+# Scheduled retraining scores one-step labels, so this demo stays out of that job.
+retrain:
+  enabled: false
+model:
+  name: time_series_transformer
+  input_dim: 1
+  output_dim: 1
+  d_model: 64
+  nhead: 4
+  num_encoder_layers: 3
+  dim_feedforward: 256
+  dropout: 0.1
+  max_seq_len: 512
+
+data:
+  source: synthetic
+  n_samples: 1024
+  seq_len: 64
+  noise: 0.05
+  val_split: 0.2
+  split_mode: temporal
+  split_seed: 0
+  seed: 0
+
+training:
+  experiment_name: forecast-7
+  batch_size: 32
+  learning_rate: 0.001
+  epochs: 8
+  device: cpu
+  checkpoint_dir: checkpoints/forecast
+  log_interval: 1
+  seed: 0
+
+inference:
+  device: cpu
+  checkpoint_path: checkpoints/forecast/best_model.pt
+
+api:
+  training_enabled: true
+
+storage:
+  db_path: data/experiments.db
+
+forecast:
+  horizon: 7
+  strategy: direct
+  quantiles: [0.1, 0.5, 0.9]
+  season_length: 35

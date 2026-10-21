@@ -25,6 +25,7 @@ A production-ready transformer pipeline for time-series prediction, built with P
 .
 ├── config/
 │   ├── config.yaml
+│   ├── forecast.yaml
 │   ├── lottery.yaml
 │   └── weather.yaml
 ├── scripts/
@@ -38,6 +39,7 @@ A production-ready transformer pipeline for time-series prediction, built with P
 │   └── styles.css
 ├── src/
 │   ├── api.py
+│   ├── compare.py
 │   ├── dashboard_data.py
 │   ├── model.py
 │   ├── train.py
@@ -172,6 +174,10 @@ api:
 
 storage:
   db_path: data/experiments.db
+
+forecast:
+  horizon: 1
+  strategy: direct
 ```
 
 Relative paths in the configuration — `training.checkpoint_dir`, `inference.checkpoint_path`, `storage.db_path`, and a CSV `data.path` — are resolved from the repository root. The default config path (`config/config.yaml`) is resolved the same way, so the server and `python -m src.train` work from any working directory. Absolute paths are used as given.
@@ -207,12 +213,44 @@ data:
 
 CSV data is standardised (per-feature z-score) by default; set `data.normalize: false` to disable it, or `true` to also scale synthetic data. The mean/std are fitted on the training split only, saved in the checkpoint, and applied automatically by `/predict`, so requests and responses stay in the CSV's original units. Final mse/rmse/mae are reported in original units; per-epoch `train_loss`/`val_loss` are in scaled units.
 
-Set `data.report_baselines: true` on a CSV run with a temporal validation split to also score two reference forecasts on the same validation days, in original units:
+Set `data.report_baselines: true` on a one-step CSV run (`forecast.horizon` 1 or omitted) with a temporal validation split to also score two reference forecasts on the same validation days, in original units:
 
 - **Persistence** — tomorrow equals today (the previous observation).
 - **Seasonal naive** — the same calendar day one year earlier. 29 February uses 28 February when the previous year is not a leap year. This requires `data.date_column`.
 
-The logged model metrics are from the best checkpoint (lowest validation loss), which is the file written to `training.checkpoint_dir`.
+The logged model metrics are from the best checkpoint (lowest validation loss), which is the file written to `training.checkpoint_dir`. A horizon longer than 1 is rejected for this flag, because those reference rows are the next observation only. `python -m src.compare` scores multi-step horizons.
+
+### Forecasting
+
+`forecast.horizon` is how many future steps to predict (default `1`). `forecast.strategy` is `direct` (one multi-output head) or `recursive` (a one-step model rolled forward). With `horizon: 1` and `strategy: direct` and no `quantiles`, the network, checkpoints, and `POST /predict` response are unchanged.
+
+`forecast.quantiles`, for example `[0.1, 0.5, 0.9]`, trains a non-crossing quantile head with pinball loss. The outer levels are the prediction interval. After training, conformalized quantile regression fits an offset on the earlier half of the validation rows (in time order) and `coverage` in the experiment metrics is the fraction of the later half that falls inside the adjusted interval. `raw_coverage` is the uncalibrated quantile interval on the full validation set. Neither number is fit on the training rows. They are omitted when there is no validation split, and `coverage` is omitted when the validation split is too small to hold out a report half.
+
+Without quantiles, a validation split still fits a residual conformal interval around the point forecast (`interval_method: residual`) and records that same holdout coverage. `forecast.nominal_coverage` (default `0.8`, or the gap between the outer quantiles) is the coverage the offset targets.
+
+`forecast.season_length` is the period, in steps, used by the in-window seasonal-naive baseline. For the bundled sine generator the period is `(seq_len + horizon - 1) / 2` samples (32 with the default window and a one-step horizon, 35 for `config/forecast.yaml`). On a daily CSV, leave it unset: the comparison then uses the same calendar day one year earlier when `data.date_column` is set and the horizon is 1.
+
+`forecast.target_feature_index` tells recursive forecasts which input feature receives the prediction when `input_dim` is not `output_dim`. Other features are held at their last observed value. CSV configs infer the index from `feature_columns` and `target_column` when the target is one of the features. Set it explicitly to `null` to disable that inference.
+
+`config/forecast.yaml` is a 7-step p10/p50/p90 example. Train it with:
+
+```bash
+python -m src.train --config config/forecast.yaml
+```
+
+### Model comparison
+
+```bash
+python -m src.compare --config config/config.yaml --epochs 5 --season-length 32
+python -m src.compare --config config/forecast.yaml --epochs 5
+python -m src.compare --config config/weather.yaml
+```
+
+The command fits persistence, seasonal naive (in-window when a season length fits the input window, otherwise the calendar baseline on a dated one-step CSV), ordinary least squares on target lags, a small LSTM, and the model named in the config. Every model is scored on the same temporal holdout — the last `data.val_split` fraction of windows, or the last 20% when that split is 0 — with mse, rmse, and mae in original units. `coverage` and `width` are the conformal interval on the later half of that holdout; the earlier half only chooses the offset. `--epochs` limits neural training for the comparison and does not change `training.epochs` for `python -m src.train`. The comparison scores the weights after that many epochs. It does not reload the best checkpoint and it does not write `checkpoints/best_model.pt`.
+
+The bundled sine windows are drawn independently (a random phase per window). Their temporal split is the last generated windows, not one continuous series. The baselines still read only inside each window.
+
+Results are written to the experiment store as one `comparison` run. Metrics are flat floats such as `persistence.mse` and `time_series_transformer.coverage`. `evaluation.lstm_hidden_size` (default 32), `evaluation.lstm_layers` (default 1), and `evaluation.epochs` override the LSTM baseline and the comparison's epoch budget.
 
 ## Daily weather series
 
@@ -261,6 +299,8 @@ Returns architecture, parameter count, device, and checkpoint status.
 
 On startup, a non-empty `NEURAL_FORGE_CHECKPOINT_URL` is downloaded before the model loads. `NEURAL_FORGE_CONFIG` selects the YAML file (default `config/config.yaml`). `checkpoint_loaded` is true only when this process actually loaded weights from a checkpoint. It stays false if the file was missing at load time, even if a checkpoint appears later (for example after training from the CLI while the server is running). `checkpoint_stale` is true when a checkpoint file on disk is newer than the weights in memory, or when a file is present that was never loaded. Restart the server, or finish a training run through `POST /train` (which reloads the model), to pick up that file. The OpenAPI `info.version` is the `[project].version` from `pyproject.toml`.
 
+The payload also includes `horizon`, `forecast_strategy`, and `quantiles` for the loaded forecast settings.
+
 ### `POST /predict`
 
 **Request body**
@@ -280,6 +320,52 @@ On startup, a non-empty `NEURAL_FORGE_CHECKPOINT_URL` is downloaded before the m
 ```
 
 Each step must contain `model.input_dim` finite numbers. A sequence longer than `model.max_seq_len` (512 in the shipped config), or any `NaN` or infinity, is rejected with `422`.
+
+Optional fields:
+
+```json
+{
+  "sequence": [[0.1], [0.2], [0.3], [0.4], [0.5]],
+  "horizon": 7,
+  "include_intervals": true
+}
+```
+
+When `horizon` is omitted or `1` and `include_intervals` is false, the response is still `{"prediction": [0.612]}`. `prediction` is always the first-step point forecast (the quantile nearest 0.5 when a quantile head is loaded) and stays a flat list of floats.
+
+When `horizon` is greater than 1, the response adds the full path. Intervals are included for a multi-step request, or for a one-step request when `include_intervals` is true, and only when the checkpoint can bound every requested step:
+
+```json
+{
+  "prediction": [0.61],
+  "forecast": [[0.61], [0.58]],
+  "horizon": 2,
+  "strategy": "direct",
+  "lower": [[0.4], [0.22]],
+  "upper": [[0.8], [0.91]],
+  "p10": [0.4, 0.22],
+  "p50": [0.61, 0.58],
+  "p90": [0.8, 0.91],
+  "quantiles": [0.1, 0.5, 0.9],
+  "nominal_coverage": 0.8,
+  "validation_coverage": 0.78,
+  "interval_method": "cqr"
+}
+```
+
+`validation_coverage` is present only when the requested horizon is the one measured at training time. `interval_method` is `cqr` (quantile bounds plus a conformal offset), `residual` (conformal absolute error around the point forecast), or `quantile` (raw quantile bounds, no offset yet).
+
+`p50` is the point forecast for the first target channel, one value per step. `p10` and `p90` are that same channel's served interval endpoints: the outer quantiles when a quantile head is loaded, otherwise the conformal bounds. They are omitted on a one-step `POST /predict` that does not ask for intervals, so that response stays `{"prediction": [0.612]}`. The forecast dashboard reads these three lists.
+
+A horizon longer than a direct head is rolled forward recursively when the prediction can be written back into the window (`input_dim == output_dim`, or `forecast.target_feature_index`). Otherwise the API returns `422`.
+
+### `POST /forecast`
+
+Same request body as `/predict`. `horizon` defaults to the configured forecast horizon instead of 1. The response always includes `horizon`, `strategy`, `prediction`, `forecast`, and `p50`, plus interval fields when the checkpoint has them.
+
+### `GET /comparison`
+
+Returns the latest comparison already stored by `python -m src.compare` for the loaded experiment database. It does not train a model. `models` is a list of rows with `name` and the stored metrics (`mae`, `rmse`, `mse`, and coverage when present). The list is empty when no comparison run has been stored.
 
 ### `POST /train`
 

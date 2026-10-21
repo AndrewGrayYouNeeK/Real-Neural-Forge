@@ -17,17 +17,19 @@ def save_checkpoint(
     config: dict[str, Any],
     path: str | Path,
     scaler: dict[str, Any] | None = None,
+    forecast: dict[str, Any] | None = None,
 ) -> None:
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    torch.save(
-        {
-            "epoch": epoch,
-            "model_state_dict": model.state_dict(),
-            "optimizer_state_dict": optimizer.state_dict(),
-            "loss": loss,
-            "config": config,
-            "scaler": scaler,
-        },
-        path,
-    )
+    payload: dict[str, Any] = {
+        "epoch": epoch,
+        "model_state_dict": model.state_dict(),
+        "optimizer_state_dict": optimizer.state_dict(),
+        "loss": loss,
+        "config": config,
+        "scaler": scaler,
+    }
+    # Omit the key on legacy saves so older readers see the same payload.
+    if forecast is not None:
+        payload["forecast"] = forecast
+    torch.save(payload, path)

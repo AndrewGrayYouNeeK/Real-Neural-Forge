@@ -6,6 +6,8 @@ from typing import cast
 import torch
 import torch.nn as nn
 
+from src.forecasting.head import ForecastHead
+
 
 class PositionalEncoding(nn.Module):
     """Inject positional information into token embeddings."""
@@ -49,12 +51,21 @@ class TimeSeriesTransformer(nn.Module):
         dim_feedforward: int = 256,
         dropout: float = 0.1,
         max_seq_len: int = 512,
+        horizon: int = 1,
+        quantiles: tuple[float, ...] | list[float] | None = None,
     ):
         super().__init__()
+        if horizon < 1:
+            raise ValueError(f"horizon must be >= 1, got {horizon}.")
         self.input_dim = input_dim
         self.output_dim = output_dim
         self.d_model = d_model
         self.max_seq_len = max_seq_len
+        self.horizon = horizon
+        # None (not an empty tuple) marks the legacy one-step point head.
+        self.quantiles = (
+            tuple(float(level) for level in quantiles) if quantiles else None
+        )
         self.input_projection = nn.Linear(input_dim, d_model)
         self.pos_encoding = PositionalEncoding(d_model, dropout, max_len=max_seq_len)
 
@@ -68,7 +79,14 @@ class TimeSeriesTransformer(nn.Module):
         self.transformer_encoder = nn.TransformerEncoder(
             encoder_layer, num_layers=num_encoder_layers
         )
-        self.output_projection = nn.Linear(d_model, output_dim)
+        # Keep nn.Linear for the one-step point model so checkpoints written
+        # before forecast horizons still load into output_projection.*.
+        if self.quantiles is None and horizon == 1:
+            self.output_projection: nn.Module = nn.Linear(d_model, output_dim)
+        else:
+            self.output_projection = ForecastHead(
+                d_model, output_dim, horizon, self.quantiles or ()
+            )
 
     def forward(
         self, x: torch.Tensor, src_key_padding_mask: torch.Tensor | None = None

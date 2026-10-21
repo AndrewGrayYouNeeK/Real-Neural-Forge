@@ -2,15 +2,19 @@
 
 from __future__ import annotations
 
+import inspect
 from collections.abc import Callable
 from typing import Any
 
 import torch.nn as nn
 
+from src.forecasting.spec import forecast_spec_from_config
+from src.models.lstm import LSTMForecaster
 from src.models.transformer import TimeSeriesTransformer
 
 _REGISTRY: dict[str, Callable[..., nn.Module]] = {
     "time_series_transformer": TimeSeriesTransformer,
+    "lstm": LSTMForecaster,
 }
 
 
@@ -27,7 +31,8 @@ class ModelRegistry:
     def build(name: str, **kwargs: Any) -> nn.Module:
         if name not in _REGISTRY:
             raise KeyError(f"Unknown model '{name}'. Available: {list(_REGISTRY)}")
-        return _REGISTRY[name](**kwargs)
+        factory = _REGISTRY[name]
+        return factory(**_accepted_kwargs(factory, kwargs))
 
     @staticmethod
     def list_models() -> list[str]:
@@ -35,10 +40,16 @@ class ModelRegistry:
 
 
 def build_model(cfg: dict[str, Any]) -> nn.Module:
-    """Build a model from a configuration dictionary."""
+    """Build a model from a configuration dictionary.
+
+    Forecast horizon and quantiles come from the ``forecast`` section. They
+    are passed through only when they change the head, so a config without
+    that section still builds the historical one-step point model.
+    """
     model_cfg = cfg["model"]
     name = model_cfg.get("name", "time_series_transformer")
-    kwargs = {
+    spec = forecast_spec_from_config(cfg)
+    kwargs: dict[str, Any] = {
         key: model_cfg[key]
         for key in (
             "input_dim",
@@ -49,7 +60,24 @@ def build_model(cfg: dict[str, Any]) -> nn.Module:
             "dim_feedforward",
             "dropout",
             "max_seq_len",
+            "hidden_size",
+            "num_layers",
         )
         if key in model_cfg
     }
+    if spec.model_horizon != 1:
+        kwargs["horizon"] = spec.model_horizon
+    if spec.quantiles:
+        kwargs["quantiles"] = spec.quantiles
     return ModelRegistry.build(name, **kwargs)
+
+
+def _accepted_kwargs(
+    factory: Callable[..., nn.Module], kwargs: dict[str, Any]
+) -> dict[str, Any]:
+    parameters = inspect.signature(factory).parameters
+    if any(
+        param.kind is inspect.Parameter.VAR_KEYWORD for param in parameters.values()
+    ):
+        return kwargs
+    return {key: value for key, value in kwargs.items() if key in parameters}

@@ -50,3 +50,9 @@ api:
 
 storage:
   db_path: data/experiments.db
+
+# horizon 1 and strategy direct keep the one-step model and POST /predict response.
+# Set quantiles to [0.1, 0.5, 0.9] to train prediction intervals. See config/forecast.yaml.
+forecast:
+  horizon: 1
+  strategy: direct

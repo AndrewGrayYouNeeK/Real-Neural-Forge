@@ -17,7 +17,8 @@ from pydantic import BaseModel, Field
 
 from src import __version__
 from src.dashboard_data import recent_series, validation_predictions
-from src.inference.predictor import Predictor
+from src.forecasting.spec import MAX_HORIZON, forecast_spec_from_config
+from src.inference.predictor import ForecastBatch, Predictor
 from src.models.registry import ModelRegistry, build_model
 from src.serving.checkpoint import checkpoint_destination, prepare_runtime_checkpoint
 from src.storage.experiments import ExperimentStore, db_path_from_config
@@ -65,12 +66,15 @@ def load_model(config_path: str | Path = "config/config.yaml") -> None:
         device_str = "cpu"
     device = torch.device(device_str)
 
+    spec = forecast_spec_from_config(cfg)
     model = build_model(cfg)
     checkpoint_path = _checkpoint_file(cfg)
 
     if checkpoint_path.is_file():
         loaded_mtime_ns = checkpoint_path.stat().st_mtime_ns
-        predictor = Predictor.from_checkpoint(model, checkpoint_path, device=device)
+        predictor = Predictor.from_checkpoint(
+            model, checkpoint_path, device=device, spec=spec
+        )
         logger.info("Loaded checkpoint from %s", checkpoint_path)
         _state["predictor"] = predictor
         _state["model"] = predictor.model
@@ -82,7 +86,7 @@ def load_model(config_path: str | Path = "config/config.yaml") -> None:
         )
         model.to(device)
         model.eval()
-        _state["predictor"] = Predictor(model, device=device)
+        _state["predictor"] = Predictor(model, device=device, spec=spec)
         _state["model"] = model
         _state["checkpoint_loaded"] = False
         _state["checkpoint_mtime_ns"] = None
@@ -118,10 +122,44 @@ class PredictRequest(BaseModel):
         description="Time-series input as a 2-D list of shape [seq_len, input_dim].",
         examples=[[[0.0], [0.1], [0.2]]],
     )
+    horizon: int | None = Field(
+        default=None,
+        ge=1,
+        le=MAX_HORIZON,
+        description=(
+            "Future steps to return. Omit it, or pass 1, to keep the historical "
+            "one-step prediction list."
+        ),
+    )
+    include_intervals: bool = Field(
+        default=False,
+        description="Include lower and upper bounds when this checkpoint has them.",
+    )
 
 
 class PredictResponse(BaseModel):
     prediction: list[float]
+    forecast: list[list[float]] | None = None
+    horizon: int | None = None
+    strategy: str | None = None
+    lower: list[list[float]] | None = None
+    upper: list[list[float]] | None = None
+    # First target channel, so the dashboard can plot a path and a band.
+    # p50 is the point forecast. p10 and p90 are the served interval endpoints
+    # (outer quantiles, or conformal bounds when the head has no quantiles).
+    p10: list[float] | None = None
+    p50: list[float] | None = None
+    p90: list[float] | None = None
+    quantiles: list[float] | None = None
+    nominal_coverage: float | None = None
+    validation_coverage: float | None = None
+    interval_method: str | None = None
+
+
+class ForecastResponse(PredictResponse):
+    horizon: int
+    strategy: str
+    forecast: list[list[float]]
 
 
 class TrainRequest(BaseModel):
@@ -255,6 +293,9 @@ def model_info() -> dict[str, Any]:
         "checkpoint_path": str(checkpoint_path),
         "input_dim": cfg.get("model", {}).get("input_dim"),
         "output_dim": cfg.get("model", {}).get("output_dim"),
+        "horizon": _loaded_spec().horizon,
+        "forecast_strategy": _loaded_spec().strategy,
+        "quantiles": list(_loaded_spec().quantiles),
     }
 
 
@@ -306,6 +347,52 @@ def experiment_predictions(
     if payload is None:
         raise HTTPException(status_code=404, detail="Experiment not found.")
     return payload
+
+
+def _comparison_models(metrics: dict[str, Any]) -> list[dict[str, Any]]:
+    """Turn ``persistence.mae`` keys into one row per model."""
+    rows: dict[str, dict[str, Any]] = {}
+    for key, value in metrics.items():
+        if not isinstance(key, str) or "." not in key:
+            continue
+        if isinstance(value, bool) or not isinstance(value, int | float):
+            continue
+        name, metric = key.split(".", 1)
+        row = rows.get(name)
+        if row is None:
+            row = {"name": name}
+            rows[name] = row
+        row[metric] = float(value)
+    return list(rows.values())
+
+
+@app.get("/comparison", tags=["evaluation"])
+def latest_comparison() -> dict[str, Any]:
+    """Latest ``python -m src.compare`` result already stored for this config.
+
+    This does not fit a new model. The dashboard reads ``models`` as rows with
+    ``name`` and ``mae`` / ``rmse`` / ``mse``.
+    """
+    experiments = _require_store().list_experiments(limit=200)
+    for experiment in experiments:
+        if experiment.get("model_name") != "comparison":
+            continue
+        metrics = experiment.get("metrics")
+        if not isinstance(metrics, dict):
+            continue
+        models = _comparison_models(metrics)
+        if not models:
+            continue
+        return {
+            "experiment_id": experiment["id"],
+            "name": experiment.get("name"),
+            "models": models,
+            "horizon": metrics.get("horizon"),
+            "n_train": metrics.get("n_train"),
+            "n_val": metrics.get("n_val"),
+            "nominal_coverage": metrics.get("nominal_coverage"),
+        }
+    return {"models": []}
 
 
 @app.get("/experiments/{experiment_id}", tags=["experiments"])
@@ -430,15 +517,23 @@ def youneek_lunar(at: str | None = None) -> dict[str, Any]:
     return {"utc": snap.as_dict()["utc"], **snap.lunar}
 
 
-@app.post("/predict", response_model=PredictResponse, tags=["inference"])
-def predict(body: PredictRequest) -> PredictResponse:
+def _loaded_spec():
+    predictor: Predictor | None = _state.get("predictor")
+    if predictor is None:
+        return forecast_spec_from_config(_state.get("config", {}))
+    return predictor.spec
+
+
+def _require_predictor() -> Predictor:
     predictor: Predictor | None = _state.get("predictor")
     if predictor is None:
         raise HTTPException(status_code=503, detail="Model not loaded.")
+    return predictor
 
+
+def _validated_sequence(body: PredictRequest, predictor: Predictor) -> torch.Tensor:
     cfg: dict = _state["config"]
     expected_input_dim: int = cfg["model"]["input_dim"]
-
     if not body.sequence:
         raise HTTPException(status_code=422, detail="sequence must not be empty.")
     for index, step in enumerate(body.sequence):
@@ -464,7 +559,82 @@ def predict(body: PredictRequest) -> PredictResponse:
                     f"step {index} has {len(step)} feature(s)."
                 ),
             )
+    return torch.tensor(body.sequence, dtype=torch.float32)
 
-    x = torch.tensor(body.sequence, dtype=torch.float32)
-    output = predictor.predict(x)
-    return PredictResponse(prediction=output.squeeze(0).tolist())
+
+def _first_channel(rows: list[list[float]]) -> list[float]:
+    return [float(row[0]) for row in rows]
+
+
+def _forecast_payload(
+    result: ForecastBatch,
+    *,
+    include_path: bool,
+    include_intervals: bool,
+) -> dict[str, Any]:
+    point = result.point[0].detach().cpu()
+    payload: dict[str, Any] = {"prediction": point[0].tolist()}
+    # A one-step /predict call stays {"prediction": [...]} unless intervals
+    # were requested. /forecast always returns the full path.
+    if include_path or result.horizon > 1:
+        payload["forecast"] = point.tolist()
+        payload["horizon"] = result.horizon
+        payload["strategy"] = result.strategy
+        payload["p50"] = _first_channel(payload["forecast"])
+    if include_intervals and result.lower is not None and result.upper is not None:
+        payload["lower"] = result.lower[0].detach().cpu().tolist()
+        payload["upper"] = result.upper[0].detach().cpu().tolist()
+        payload["p10"] = _first_channel(payload["lower"])
+        payload["p90"] = _first_channel(payload["upper"])
+        if "p50" not in payload:
+            payload["p50"] = [float(payload["prediction"][0])]
+        if result.quantiles:
+            payload["quantiles"] = list(result.quantiles)
+        if result.nominal_coverage is not None:
+            payload["nominal_coverage"] = result.nominal_coverage
+        if result.validation_coverage is not None:
+            payload["validation_coverage"] = result.validation_coverage
+        if result.interval_method is not None:
+            payload["interval_method"] = result.interval_method
+    return payload
+
+
+def _run_forecast(body: PredictRequest, *, horizon: int) -> ForecastBatch:
+    predictor = _require_predictor()
+    sequence = _validated_sequence(body, predictor)
+    try:
+        return predictor.forecast(sequence, horizon=horizon)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@app.post(
+    "/predict",
+    response_model=PredictResponse,
+    response_model_exclude_none=True,
+    tags=["inference"],
+)
+def predict(body: PredictRequest) -> PredictResponse:
+    steps = 1 if body.horizon is None else body.horizon
+    result = _run_forecast(body, horizon=steps)
+    return PredictResponse(
+        **_forecast_payload(
+            result,
+            include_path=False,
+            include_intervals=body.include_intervals or steps > 1,
+        )
+    )
+
+
+@app.post(
+    "/forecast",
+    response_model=ForecastResponse,
+    response_model_exclude_none=True,
+    tags=["inference"],
+)
+def forecast(body: PredictRequest) -> ForecastResponse:
+    steps = _loaded_spec().horizon if body.horizon is None else body.horizon
+    result = _run_forecast(body, horizon=steps)
+    return ForecastResponse(
+        **_forecast_payload(result, include_path=True, include_intervals=True)
+    )
