@@ -1,5 +1,4 @@
-# Opted out of scheduled retraining. The CSVs are local downloads,
-# and several of them are too large for the weekly champion job.
+# Left out of weekly retraining: holdout MAE beat the baselines, but the EIA bulk extract does not fit the 10-minute dataset cap.
 retrain:
   enabled: false
 

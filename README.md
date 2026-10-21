@@ -809,7 +809,9 @@ python -m scripts.realworld.train_eval
 
 `fetch_all` stops at the first failed download. The website step always refreshes the committed synthetic example; a Cloudflare download runs only when `CLOUDFLARE_API_TOKEN` is set together with `CLOUDFLARE_ACCOUNT_ID` (optional `CLOUDFLARE_SITE_TAG`) or `CLOUDFLARE_ZONE_ID`, and that live file is not what the default config trains on.
 
-One CPU run of `train_eval` on this machine took **383 seconds (6.4 minutes)**. Electricity accounts for 239 of those seconds. Each config sets `retrain.enabled: false`, so the weekly champion job leaves these series alone. The downloads are local, and the electricity bulk file is large.
+One CPU run of `train_eval` on this machine took **383 seconds (6.4 minutes)**. Electricity accounts for 239 of those seconds.
+
+The weekly champion job includes Berlin ozone, Berlin PM2.5, and the daily M4.5+ earthquake counts. On the holdout below, each of those has a lower MAE than persistence, the seasonal naive, and the mean, and each fetch fits the job's 10-minute dataset cap. A checkpoint from that job is promoted only when the fresh run still beats those three baselines. The other configs set `retrain.enabled: false`. Pollen, CPI inflation, gasoline, unemployment, Arsenal goal difference, and monthly conflict events lose to at least one baseline. US48 demand beats the baselines, and the EIA bulk extract does not fit the time cap. Sunspots beat the baselines, and the series is CC BY-NC, so it stays out of the public champion release. Monthly fatalities and onset gaps are aggregate conflict series and are not published as an operational forecast. The website file is synthetic.
 
 ### Sources and licences
 

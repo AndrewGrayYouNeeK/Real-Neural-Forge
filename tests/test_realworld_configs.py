@@ -24,6 +24,15 @@ EXPECTED = {
     "website_visits",
 }
 
+# Holdout MAE beat persistence, seasonal naive, and the mean, and the fetch
+# fits the weekly job. Conflict series, the synthetic site, the CC BY-NC
+# sunspot file, and the EIA bulk extract stay out.
+WEEKLY_RETRAIN = {
+    "air_ozone_berlin",
+    "air_pm25_berlin",
+    "earthquakes_m45",
+}
+
 
 def test_every_realworld_config_is_temporal_normalized_and_seeded():
     paths = sorted((REPO_ROOT / "config" / "realworld").glob("*.yaml"))
@@ -45,7 +54,12 @@ def test_every_realworld_config_is_temporal_normalized_and_seeded():
         assert int(training["patience"]) > 0
         assert float(training["max_grad_norm"]) > 0
         assert training["device"] == "cpu"
-        assert cfg["retrain"]["enabled"] is False
+        weekly = meta["id"] in WEEKLY_RETRAIN
+        assert cfg["retrain"]["enabled"] is weekly
+        if weekly:
+            assert cfg["retrain"]["baselines"] == ["persistence", "mean", "seasonal"]
+            assert int(data["season_length"]) == int(data["seasonal_period"])
+            assert str(data["fetch"]).startswith("python -m scripts.realworld.fetch_")
         assert model["name"] == "time_series_transformer"
         assert meta["id"]
         assert meta["title"]

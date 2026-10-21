@@ -1,5 +1,4 @@
-# Opted out of scheduled retraining. The CSVs are local downloads,
-# and several of them are too large for the weekly champion job.
+# Left out of weekly retraining: an aggregate conflict series is not published as an operational forecast.
 retrain:
   enabled: false
 

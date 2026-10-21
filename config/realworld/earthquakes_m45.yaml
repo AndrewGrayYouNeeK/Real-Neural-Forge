@@ -1,7 +1,11 @@
-# Opted out of scheduled retraining. The CSVs are local downloads,
-# and several of them are too large for the weekly champion job.
+# Included in the weekly job: holdout MAE beat persistence, seasonal naive, and the mean, and the USGS fetch fits the dataset cap. Promotion still requires the fresh run to beat those baselines.
 retrain:
-  enabled: false
+  enabled: true
+  metric: mae
+  baselines:
+    - persistence
+    - mean
+    - seasonal
 
 model:
   name: time_series_transformer
@@ -25,6 +29,9 @@ data:
   normalize: true
   seed: 0
   seasonal_period: 365
+  season_length: 365
+  fetch: python -m scripts.realworld.fetch_earthquakes
+  fetch_timeout_seconds: 480
 training:
   experiment_name: earthquakes_m45
   batch_size: 64
