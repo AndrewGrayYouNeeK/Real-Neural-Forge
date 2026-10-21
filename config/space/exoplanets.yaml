@@ -1,0 +1,57 @@
+model:
+  name: time_series_transformer
+  input_dim: 1
+  output_dim: 1
+  d_model: 16
+  nhead: 2
+  num_encoder_layers: 1
+  dim_feedforward: 32
+  dropout: 0.0
+  max_seq_len: 64
+
+data:
+  source: csv
+  path: data/space/exoplanets_yearly.csv
+  feature_columns: [discoveries]
+  target_column: discoveries
+  seq_len: 5
+  val_split: 0.2
+  split_mode: temporal
+  split_seed: 0
+  normalize: true
+  report_baselines: true
+  seed: 0
+
+training:
+  experiment_name: space_exoplanets
+  batch_size: 8
+  learning_rate: 0.001
+  epochs: 80
+  patience: 10
+  max_grad_norm: 1.0
+  device: cpu
+  checkpoint_dir: checkpoints/space/exoplanets
+  log_interval: 20
+  seed: 0
+
+inference:
+  device: cpu
+  checkpoint_path: checkpoints/space/exoplanets/best_model.pt
+
+api:
+  training_enabled: true
+
+storage:
+  db_path: data/space/experiments.db
+
+space:
+  id: exoplanets
+  title: Exoplanet discoveries per year
+  units: count
+  lags: []
+  storm_threshold: null
+  drift: true
+  chart: true
+
+retrain:
+  enabled: false

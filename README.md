@@ -686,3 +686,111 @@ python -m scripts.run_powerball_month --month 2026-11 --no-fetch
 ```
 
 The second command leaves an existing month file alone and rebuilds the scorecard. `config/lottery_tickets.yaml` is the model used for both tickets. Checkpoints from these runs are not written.
+
+## Space
+
+Outer-space series for the same time-series transformer. Every forecast is one step ahead: the next day, the next month, or the next year. The label day is not an input. Metrics below are in the original units, from the checkpoint with the lowest scaled validation loss. Seed is 0. Device is CPU. This run took **251.1 seconds** in total.
+
+Checkpoints go to `checkpoints/space/<id>/` and the experiment rows go to `data/space/experiments.db`. Both are gitignored, and neither replaces `checkpoints/best_model.pt`. The CSVs under `data/space/` are gitignored too. The score file that matches this section is `results/space_forecast.json`. The four SVG charts are `results/space/charts/` (each series drawn at 480 points).
+
+Fetch, then train, from the repository root:
+
+```bash
+python -m scripts.fetch_space
+python -m scripts.train_space
+```
+
+`python -m src.space.fetch` and `python -m src.space.train` are the same commands. `--refresh` re-downloads the raw files. `--only f107,kp` trains a subset. A later fetch moves the end dates forward and will change the holdout.
+
+Each config sets `retrain.enabled: false`. The weekly champion job trains every enabled file under `config/`. These series stay out of that job: one fetch script builds all of them, and the CSVs are not in git.
+
+Configs live in `config/space/`. Each one uses a temporal 20% holdout, z-score normalization fit on the training split only, early stopping, gradient clipping at 1.0, and `training.seed: 0`. Daily models see 27 days (one solar rotation) and may train for 20 epochs with patience 5. Monthly models see 24 months and may train for 40 epochs with patience 6. The univariate network has 67,137 parameters (d_model 64, 4 heads, 2 layers). The exoplanet model is smaller (2,273 parameters, 5-year windows, 80 epochs, patience 10) because the series has 34 points.
+
+`data.report_baselines` scores persistence (tomorrow equals today) and, when the CSV has a `date` column, the calendar seasonal naive (the same month-day one year earlier, or the same month one year earlier). Feb 29 uses Feb 28. Two further lags are scored for the solar series: **27 days**, and **4018 days** (`round(11 × 365.25)`, one Schwabe cycle). Monthly flare counts use **132 months**. Launches, close approaches, and NEO discoveries use a drift baseline instead of those solar lags: yesterday plus the mean step fit only on rows before the first validation label. The yearly exoplanet file has no `date` column, because a one-year lag on 1 January dates is the same forecast as persistence.
+
+### Sources and licences
+
+The SILSO sunspot number is a column in the CelesTrak file and is not read. Another batch trains that series.
+
+| Series | What is counted | Source | Licence |
+| --- | --- | --- | --- |
+| Daily Kp and Ap | Max of the eight 3-hour Kp values, and the daily Ap | GFZ Kp (Matzka et al. 2021, doi:10.5880/Kp.0001), taken from the CelesTrak redistribution [`SW-All.csv`](https://celestrak.org/SpaceData/SW-All.csv) because the GFZ host did not answer here. Format notes: [SpaceWx-format.php](https://celestrak.org/SpaceData/SpaceWx-format.php). The direct file is [`Kp_ap_Ap_SN_F107_since_1932.txt`](https://www-app3.gfz-potsdam.de/kp_index/Kp_ap_Ap_SN_F107_since_1932.txt). | GFZ Helmholtz Centre for Geosciences, CC BY 4.0. Cite GFZ and CelesTrak. |
+| Daily F10.7 | Observed 10.7 cm flux, sfu | Same CelesTrak file, column `F10.7_OBS`. Measurements: Natural Resources Canada, Dominion Radio Astrophysical Observatory (Penticton). | U.S. government redistribution via NOAA SWPC is public domain. Cite Penticton and CelesTrak. |
+| Solar-wind speed and density, Dst | Daily mean speed (km/s), density (n/cm³), and Dst (nT) | NASA OMNI2 daily file [`omni_01_av.dat`](https://spdf.gsfc.nasa.gov/pub/data/omni/low_res_omni/omni_01_av.dat). Layout: [`omni2.text`](https://spdf.gsfc.nasa.gov/pub/data/omni/low_res_omni/omni2.text). | Public domain, U.S. government work. Cite King and Papitashvili, NASA/GSFC. Dst in this file is the daily mean of the Kyoto WDC index, not the daily minimum. |
+| Flare counts | Monthly B, C, M, and X class counts | NOAA NCEI GOES XRS reports, 1975 through [`goes-xrs-report_2017-ytd.txt`](https://www.ngdc.noaa.gov/stp/space-weather/solar-data/solar-features/solar-flares/x-rays/goes/xrs/). The directory has no later year file. | Public domain, U.S. government work. |
+| Close approaches | Monthly approaches within 0.05 AU | JPL SBDB Close-Approach Data API, [`cad.api`](https://ssd-api.jpl.nasa.gov/cad.api) | Public domain, U.S. government work. |
+| NEO discoveries | Monthly counts by `first_obs` | JPL SBDB Query API, [`sbdb_query.api`](https://ssd-api.jpl.nasa.gov/sbdb_query.api), classes APO, AMO, ATE, IEO | Public domain, U.S. government work. |
+| Orbital launch attempts | Monthly attempts | Jonathan McDowell, GCAT [`launch.tsv`](https://planet4589.org/space/gcat/tsv/launch/launch.tsv). Column notes: [lcols.html](https://planet4589.org/space/gcat/web/launch/lcols.html). | Creative Commons CC-BY. Cite "data from GCAT (J. McDowell, planet4589.org/space/gcat)". |
+| Exoplanet discoveries | Planets per discovery year | NASA Exoplanet Archive TAP, table `pscomppars`, [`TAP/sync`](https://exoplanetarchive.ipac.caltech.edu/TAP/sync) | Free to use. Cite the NASA Exoplanet Archive. |
+
+### What each file contains
+
+The fetch on **2026-10-21** wrote these spans. The open day, month, or year is dropped, and a trailing event-month that does not reach the last day of the month is dropped too.
+
+- **Kp.** 25,222 days, 1957-10-01 through 2026-10-20, no gaps filled. Kp in the file is in tenths and is divided by 10. The target is the day's maximum 3-hour value. Daily Ap is stored as `ap` and is not a training target. 3,777 days (15.0%) have Kp ≥ 5.0. A day with Kp 5− (4.7) is quiet under that cutoff. NOAA's G1 scale starts at Kp 5−, so these storm counts are a stricter subset of G1 days.
+- **F10.7.** The same 25,222 days. Rows flagged `OBS` or `INT` with flux above 0 are kept (60 days are the file's own `INT` interpolations). `PRD` and `PRM` predictions are dropped. Seven days in the full record exceed 400 sfu. The largest is 938.6 on 2011-03-07, a flare-contaminated Penticton observation, and it sits before the validation window.
+- **Solar wind and Dst.** Speed and density need at least 4 plasma hours and are not fill values. The contiguous suffix is 11,663 days, 1994-11-07 through 2026-10-12, with 87 days linearly filled where the hole was at most 5 days. Dst is kept on its own calendar: 23,300 days, 1963-01-01 through 2026-10-16, with no filled days.
+- **Flares.** 501 months, 1975-09 through 2017-05. Totals: 22,776 B, 47,800 C, 6,335 M, 469 X. Empty months inside the span are zeros. The trained targets are the C, M, and X counts.
+- **Close approaches.** 1,521 months, 1900-01 through 2026-09, 33,304 approaches within 0.05 AU. The count includes approaches, before discovery, of objects that are in the catalog now, so the rise is mostly catalog growth.
+- **NEO discoveries.** 1,596 months, 1893-10 through 2026-09, 42,564 distinct designations. `first_obs` is the start of the orbit arc. The monthly count mostly tracks survey effort.
+- **Launches.** 828 months, 1957-10 through 2026-09, 7,414 attempts. `LaunchCode` prefix `O` (orbital) or `D` (deep space) is kept, including failures. Missile, suborbital, atmospheric, test, and near-orbital rows are excluded. A trailing `?` on a vague GCAT time is ignored and the numeric day is kept.
+- **Exoplanets.** 34 years, 1992 through 2025, 6,090 planets. Missing years are zeros. 2026 is dropped as an open year. Discovery year 2014 has 872 planets and 2016 has 1,504, which are catalog releases (Kepler) rather than a smooth discovery rate.
+
+### Validation results
+
+Cells are **MAE / RMSE**. The epoch column is the best epoch and how many epochs ran before early stopping.
+
+Daily solar indices. The 27-day, 11-year, and 1-year columns are seasonal-naive lags.
+
+| Series | Validation | n | Train | Epoch | Model | Persistence | 27-day | 11-year | 1-year |
+| --- | --- | ---: | ---: | --- | ---: | ---: | ---: | ---: | ---: |
+| F10.7 (sfu) | 2013-01-03 to 2026-10-20 | 5039 | 40.3s | 4/9 | 4.4375 / 8.7429 | 4.5310 / 9.9623 | 14.8019 / 22.9756 | 25.5354 / 42.6028 | 26.2382 / 38.0930 |
+| Kp maximum | 2013-01-03 to 2026-10-20 | 5039 | 44.3s | 5/10 | 0.8609 / 1.1298 | 0.9939 / 1.3398 | 1.2221 / 1.6140 | 1.5278 / 1.9504 | 1.4491 / 1.8406 |
+| Dst daily mean (nT) | 2014-01-19 to 2026-10-16 | 4654 | 35.0s | 3/8 | 7.4785 / 12.4289 | 8.4175 / 14.1839 | 12.6887 / 20.5044 | 16.0408 / 23.0616 | 15.6186 / 22.5513 |
+| Solar-wind speed (km/s) | 2020-05-30 to 2026-10-12 | 2327 | 42.6s | 15/20 | 38.7088 / 53.7716 | 45.8569 / 62.8073 | 73.8582 / 99.5875 | 96.8580 / 126.7139 | 95.7589 / 123.7986 |
+| Solar-wind density (n/cm³) | 2020-05-30 to 2026-10-12 | 2327 | 41.2s | 16/20 | 2.3546 / 3.3495 | 2.8200 / 4.2597 | 3.3446 / 4.7822 | 3.9494 / 5.4243 | 4.0230 / 5.5678 |
+
+On these five series the transformer has lower MAE and lower RMSE than persistence, the 27-day rotation, the 11-year lag, and the calendar year. The F10.7 margin over persistence is 0.09 sfu of MAE. Yesterday's flux already carries the rotation and the cycle, which is why those longer lags lose by a wide margin on a one-day horizon. Pearson correlation of the F10.7 forecast with the holdout is 0.980. For Kp it is 0.550.
+
+Monthly and yearly counts. The last column is the 132-month solar cycle for flares, and the drift baseline for the other rows. The exoplanet row has no 12-month score.
+
+| Series | Validation | n | Train | Epoch | Model | Persistence | 12-month | Cycle or drift |
+| --- | --- | ---: | ---: | --- | ---: | ---: | ---: | ---: |
+| C-class flares | 2009-07 to 2017-05 | 95 | 2.1s | 14/20 | 31.9908 / 42.8771 | 37.2526 / 49.8964 | 57.8105 / 75.3519 | 79.8737 / 97.9434 |
+| M-class flares | 2009-07 to 2017-05 | 95 | 1.2s | 5/11 | 5.8292 / 9.1097 | 6.9895 / 10.8773 | 8.0105 / 12.7076 | 11.8842 / 17.0377 |
+| X-class flares | 2009-07 to 2017-05 | 95 | 1.1s | 5/11 | 0.7531 / 1.0898 | 0.6947 / 1.4510 | 0.7789 / 1.4582 | 1.2316 / 2.1692 |
+| Launch attempts | 2013-06 to 2026-09 | 160 | 1.7s | 4/10 | 4.8192 / 6.6532 | 4.0188 / 5.1448 | 3.5000 / 4.4441 | 4.0188 / 5.1446 |
+| Close approaches | 2001-11 to 2026-09 | 299 | 2.9s | 3/9 | 51.2750 / 74.9283 | 18.5217 / 28.0782 | 13.7458 / 20.3365 | 18.5219 / 28.0781 |
+| NEO discoveries | 2000-08 to 2026-09 | 314 | 4.9s | 9/15 | 110.2570 / 144.1762 | 39.0096 / 58.0285 | 33.2866 / 46.0913 | 39.0098 / 58.0284 |
+| Exoplanet discoveries | 2021 to 2025 | 5 | 0.2s | 13/23 | 76.2774 / 109.2830 | 129.6000 / 175.3910 | same as persistence | 134.5714 / 175.4733 |
+
+C-class and M-class monthly counts are the two flare series where the transformer beats persistence and both seasonal lags. The holdout is the late GOES XRS catalog (cycle 24), and the catalog itself ends in May 2017. X-class months are sparse (median 0 in the full record). Persistence has the lower MAE (0.6947 against 0.7531). The transformer has the lower RMSE (1.0898 against 1.4510).
+
+Launch attempts, close approaches, and NEO discoveries are the series where a naive forecast wins. For launches the same month a year earlier has MAE 3.50, persistence 4.02, and the transformer 4.82. The validation window is the years when the monthly rate climbed, and last year's count tracks that climb. Drift matches persistence because the mean historical step is about zero next to the month-to-month scatter. Close approaches and discoveries rise because the catalog and the surveys grow. The 12-month lag has the lowest error on both. The discovery forecast is anti-correlated with the holdout (Pearson −0.37): the network does not follow the survey-effort trend.
+
+The exoplanet comparison is five years, 2021–2025, after the Kepler release spikes of 2014 (872) and 2016 (1,504). On those five points the transformer MAE is 76.3 and persistence is 129.6. That is a short trend check on a catalog-release process. It is the whole yearly record the archive returned, and it is too short to treat as a settled forecast skill.
+
+### Storm days (Kp ≥ 5)
+
+A storm day is a day with maximum Kp ≥ 5.0. The alarm fires when the forecast itself is ≥ 5.0. On the Kp holdout (2013-01-03 to 2026-10-20) there are **432 storm days out of 5,039** (8.6%).
+
+| Forecast | Alarms | Hits | Precision | Recall | F1 |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Transformer | 61 | 36 | 0.5902 | 0.0833 | 0.1460 |
+| Persistence | 432 | 150 | 0.3472 | 0.3472 | 0.3472 |
+| 27-day lag | 429 | 88 | 0.2051 | 0.2037 | 0.2044 |
+| 11-year lag | 479 | 41 | 0.0856 | 0.0949 | 0.0900 |
+
+Persistence is the better storm detector. The transformer raises 61 alarms and catches 36 of the 432 storm days. When it does alarm, precision is 0.59, and the missed storms dominate the F1. The chart in `results/space/charts/kp.svg` shows the forecast sitting under the Kp 5 line through most of the window. Regression skill (MAE 0.86 against persistence 0.99) comes from tracking the quiet-day level, which is where most days are.
+
+### Does solar wind help the Kp forecast?
+
+`config/space/kp_solar_wind.yaml` predicts the same daily Kp maximum from the previous 27 days of Kp, speed, and density. `config/space/kp_omni_window.yaml` is the paired run: Kp history only, on the same OMNI dates, the same 27-day window, and the same holdout (2020-05-30 to 2026-10-12, 2,327 days, 236 storm days). Speed and density from the label day are not inputs.
+
+| Forecast | Train | MAE | RMSE | Alarms | Hits | Precision | Recall | F1 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Kp history only | 21.2s, epoch 5/10 | 0.8860 | 1.1798 | 11 | 6 | 0.5455 | 0.0254 | 0.0486 |
+| Kp, speed, and density | 12.4s, epoch 1/6 | 0.8753 | 1.1548 | 40 | 26 | 0.6500 | 0.1102 | 0.1884 |
+| Persistence |  | 1.0339 | 1.3987 | 236 | 85 | 0.3602 | 0.3602 | 0.3602 |
+
+Adding speed and density lowers MAE by 0.011 Kp and raises storm-day recall from 6/236 to 26/236. Both models beat persistence on MAE and RMSE. Persistence still catches more storm days (85 hits, F1 0.36 against 0.19). The wind features help a little on this split. They do not turn the regression model into a reliable storm alarm. The Kp-only model trained on the longer 1957–2026 record (the first storm table) is a different window, so its MAE of 0.8609 is not the comparison to use here.
