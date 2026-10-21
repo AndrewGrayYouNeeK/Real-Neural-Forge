@@ -1,3 +1,13 @@
+# dataset.id is the champion and forecast name. Other YAML files under config/
+# are picked up automatically; set dataset.enabled: false to skip one.
+dataset:
+  id: default
+
+# Scheduled retraining promotes a checkpoint only when its validation metric
+# is strictly better than the current champion and the baselines.
+retrain:
+  metric: mae
+
 model:
   name: time_series_transformer
   input_dim: 1

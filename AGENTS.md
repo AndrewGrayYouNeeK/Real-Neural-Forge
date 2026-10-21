@@ -21,10 +21,11 @@ are written to `checkpoints/`.
 
 ### Lint / type-check / test / run
 Standard commands are documented in `README.md`; run them via the venv:
-- Tests: `.venv/bin/pytest` (201 tests, all passing).
+- Tests: `.venv/bin/pytest` (236 tests, all passing).
 - Lint: `.venv/bin/ruff check src/ tests/ workers_ci/`.
 - Type check: `.venv/bin/mypy src/ workers_ci/ --ignore-missing-imports`.
 - Train (creates `checkpoints/best_model.pt`, ~1 min on CPU): `.venv/bin/python -m src.train --config config/config.yaml`.
+- Retrain locally: `.venv/bin/python -m src.retrain --all --max-epochs 8`. Champions land in `champions/`, forecast JSON in `forecasts/`. The weekly workflow publishes the same files to the `champions` GitHub Release.
 - Run dev server: `.venv/bin/uvicorn src.api:app --reload --host 0.0.0.0 --port 8000`.
 
 ### Non-obvious caveats
@@ -35,8 +36,13 @@ Standard commands are documented in `README.md`; run them via the venv:
   `wrangler.jsonc` only when `WRANGLER_CI_OVERRIDE_NAME` is set; Docker and other
   normal installs leave the tree unchanged. CI runs mypy with
   `--python-version 3.12`.
-- The API loads a model on startup: if `checkpoints/best_model.pt` is missing it serves an
-  **untrained** model (predictions are effectively random) and `/model/info` reports
-  `checkpoint_loaded: false`. Run training once to get a meaningful checkpoint.
+- The API loads a model on startup. `NEURAL_FORGE_CHECKPOINT_URL` downloads a champion
+  first when it is set. If `checkpoints/best_model.pt` is missing and that variable is
+  unset, the server uses an **untrained** model (predictions are effectively random) and
+  `/model/info` reports `checkpoint_loaded: false`.
+- `deploy/cloudflare/` is the Containers Worker `real-neural-forge-api`. Do not add a
+  root `wrangler.jsonc`; `workers_ci` writes that file only when
+  `WRANGLER_CI_OVERRIDE_NAME` is set, for the `real-neural-forge` and `youneek-xyz`
+  dashboard builds.
 - The dashboard is served by the same FastAPI process at `/`; static assets are mounted at
   `/assets`. No separate frontend build/server is needed.

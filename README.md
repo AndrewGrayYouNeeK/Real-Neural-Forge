@@ -25,15 +25,20 @@ A production-ready transformer pipeline for time-series prediction, built with P
 .
 ├── config/
 │   ├── config.yaml
+│   ├── lottery.yaml
 │   └── weather.yaml
 ├── scripts/
-│   └── fetch_weather.py
+│   ├── fetch_powerball.py
+│   ├── fetch_weather.py
+│   └── run_lottery_experiment.py
 ├── frontend/
 │   ├── index.html
 │   ├── app.js
+│   ├── chart.js
 │   └── styles.css
 ├── src/
 │   ├── api.py
+│   ├── dashboard_data.py
 │   ├── model.py
 │   ├── train.py
 │   ├── models/
@@ -41,17 +46,24 @@ A production-ready transformer pipeline for time-series prediction, built with P
 │   ├── training/
 │   ├── evaluation/
 │   ├── inference/
+│   ├── retrain/
+│   ├── serving/
 │   ├── storage/
 │   └── utils/
 ├── tests/
+├── deploy/
+│   └── cloudflare/          # Worker that fronts the container (not the dashboard Workers)
 ├── .github/
 │   ├── dependabot.yml
 │   └── workflows/
 │       ├── ci.yml
-│       └── publish.yml
+│       ├── publish.yml
+│       └── retrain.yml
 ├── Dockerfile
 ├── docker-compose.yml
 ├── docker-compose.ghcr.yml
+├── fly.toml
+├── render.yaml
 ├── requirements.in
 ├── requirements.txt
 ├── requirements-dev.in
@@ -176,6 +188,12 @@ Relative paths in the configuration — `training.checkpoint_dir`, `inference.ch
 
 For reproducible runs, set `data.seed` (seeds the synthetic dataset) and `training.seed` (seeds model initialisation, shuffling and dropout); both are `0` in the shipped config and unset (random) by default in code.
 
+`dataset.id` names the series for scheduled retraining. It defaults to the file stem. The shipped `config/config.yaml` uses `default`. `dataset.enabled: false` or `retrain.enabled: false` skips that file. Any other `.yaml` or `.yml` under `config/` that has `model` and `training` sections is picked up with no code change.
+
+`retrain.metric` is `mae`, `rmse`, or `mse` (default `mae`, lower is better). `retrain.baselines` defaults to `persistence` and `mean`. A positive integer `data.season_length` also adds a seasonal naive baseline. `retrain.val_fraction` (default `0.2`) is the latest-window holdout when `data.val_split` is `0`.
+
+Fresh data is optional. Set `data.fetch` to a list of strings, a string split with `shlex` (no shell), or a mapping with `command` / `script` / `argv` and `timeout_seconds`. `data.fetch_script` and a top-level `fetch` key work the same way. If none of those is set, a conventional script is used when the file exists: `scripts/fetch_<id>.py`, `scripts/fetch_<file stem>.py`, `scripts/<id>_fetch.py`, `scripts/fetch_<id>.sh`, or the same names under `data/`. The stem of `data.path` is included, so `config/lottery.yaml` (`data/powerball.csv`) runs `scripts/fetch_powerball.py` and `config/weather.yaml` runs `scripts/fetch_weather.py`. `.py` scripts run with the current interpreter, with the repo root on `PYTHONPATH`.
+
 To train from CSV instead of synthetic data:
 
 ```yaml
@@ -241,7 +259,7 @@ Returns `{"status": "ok"}` when the service is running.
 
 Returns architecture, parameter count, device, and checkpoint status.
 
-`checkpoint_loaded` is true only when this process actually loaded weights from a checkpoint. It stays false if the file was missing at load time, even if a checkpoint appears later (for example after training from the CLI while the server is running). `checkpoint_stale` is true when a checkpoint file on disk is newer than the weights in memory, or when a file is present that was never loaded. Restart the server, or finish a training run through `POST /train` (which reloads the model), to pick up that file. The OpenAPI `info.version` is the `[project].version` from `pyproject.toml`.
+On startup, a non-empty `NEURAL_FORGE_CHECKPOINT_URL` is downloaded before the model loads. `NEURAL_FORGE_CONFIG` selects the YAML file (default `config/config.yaml`). `checkpoint_loaded` is true only when this process actually loaded weights from a checkpoint. It stays false if the file was missing at load time, even if a checkpoint appears later (for example after training from the CLI while the server is running). `checkpoint_stale` is true when a checkpoint file on disk is newer than the weights in memory, or when a file is present that was never loaded. Restart the server, or finish a training run through `POST /train` (which reloads the model), to pick up that file. The OpenAPI `info.version` is the `[project].version` from `pyproject.toml`.
 
 ### `POST /predict`
 
@@ -323,9 +341,117 @@ GitHub is the home for this project:
 
 Tagged releases (`vX.Y.Z`) publish matching image tags after CI passes on that tag. Run the container on any host with Docker.
 
-Cloudflare Workers builds this repository for `real-neural-forge` and `youneek-xyz`. Each build sets `WRANGLER_CI_OVERRIDE_NAME`. Installing the locked dependencies runs the editable `workers_ci` hook, which writes `wrangler.jsonc` for that Worker and points assets at `frontend/`. Installs that do not set the variable, including the Docker image build, leave the tree unchanged.
+Cloudflare Workers builds this repository for `real-neural-forge` and `youneek-xyz`. Each build sets `WRANGLER_CI_OVERRIDE_NAME`. Installing the locked dependencies runs the editable `workers_ci` hook, which writes `wrangler.jsonc` for that Worker and points assets at `frontend/`. Installs that do not set the variable, including the Docker image build, leave the tree unchanged. Do not commit a `wrangler.jsonc` at the repository root, and do not point those two Workers Builds at `deploy/cloudflare/`. That directory is a different Worker, `real-neural-forge-api`, described below.
 
 `vercel.json` stays so a leftover Vercel GitHub app cannot auto-deploy this repository. The running app is the container image above.
+
+## Automatic retraining
+
+`.github/workflows/retrain.yml` runs every Monday at 06:00 UTC and can be started from the Actions tab. For each enabled config it fetches fresh data when a fetch command or conventional script exists, retrains on CPU, and scores the new checkpoint on the latest temporal holdout. The checkpoint is promoted only when its metric is strictly better than the current champion and strictly better than every baseline. The first champion still has to beat the baselines. A run that loses, including one that errors, still writes `forecast-<id>.json` with that decision so a briefing can read it. `config/weather.yaml` and `config/lottery.yaml` are included with the shipped config. The Powerball series is a negative control and should lose to the mean baseline, so it stays unpromoted while its forecast file is still published.
+
+Nothing large is committed. The rolling GitHub Release `champions` (a prerelease, and not the repository's latest software release) stores:
+
+| Asset | What it is |
+| --- | --- |
+| `champion-<dataset_id>.pt` | Promoted weights |
+| `forecast-<dataset_id>.json` | Latest forecast summary for that dataset |
+| `forecasts-index.json` | One entry per dataset, for a daily briefing |
+| `metrics-history.json` | Append-only promotion history (newest 400 rows per dataset) |
+
+The release is anchored by a git tag named `champions`. That tag is not a software version. The first run creates it; later runs replace the assets in place, so the release has to stay mutable. The workflow token has `contents: write` for that. A ruleset that blocks tag creation has to allow this tag.
+
+Public URLs, after the first successful run:
+
+```text
+https://github.com/AndrewGrayYouNeeK/Real-Neural-Forge/releases/download/champions/forecast-default.json
+https://github.com/AndrewGrayYouNeeK/Real-Neural-Forge/releases/download/champions/forecasts-index.json
+https://github.com/AndrewGrayYouNeeK/Real-Neural-Forge/releases/download/champions/champion-default.pt
+https://github.com/AndrewGrayYouNeeK/Real-Neural-Forge/releases/download/champions/metrics-history.json
+```
+
+Replace `default` with the dataset id. The same JSON is uploaded as the `latest-forecasts` workflow artifact (kept 90 days). A private repository needs a token with contents read to download the release.
+
+The scheduled job uses GitHub-hosted `ubuntu-latest`, stops at 60 minutes, and caps each dataset at 8 epochs and 10 minutes. On a private repository the free plan includes 2,000 minutes per month; a weekly run of this size stays inside that allowance. Raise the `max_epochs` input on a manual run when a dataset needs a longer fit. Manual `datasets` accepts `all` or a comma-separated list of ids or config paths.
+
+The same command runs locally:
+
+```bash
+python -m src.retrain --all --max-epochs 8 \
+  --release-dir release-assets --pull-release --publish
+```
+
+`--publish` needs the GitHub CLI authenticated with permission to write releases. Omit `--pull-release` and `--publish` to keep champions under `champions/` and forecasts under `forecasts/`. `--dry-run` prints the datasets and fetch commands as JSON and does not train.
+
+Forecast JSON uses `schema_version` 1. `forecast.values` is the next model output (`forecast.horizon` is its length, so a later multi-step head shows up without a schema change). `forecast.as_of` is `beyond_last_observation` for CSV data and `last_window` for synthetic data. `promoted`, `decision`, `serving`, `candidate`, `champion`, and `baselines` describe the gate. `decision` is one of `promoted`, `kept_champion`, `rejected_baseline`, `champion_unevaluable`, or `error`.
+
+## Live hosting
+
+Workers cannot run PyTorch. The API container is a different Cloudflare product from the dashboard Workers. This repository does not deploy it. The steps below are what the owner runs, and they create paid resources.
+
+### Cloudflare Containers
+
+Plan: **Workers Paid** ($5 USD per month). Containers are not available on the free Workers plan. The included allowance and overages are on the [Containers pricing](https://developers.cloudflare.com/containers/platform/pricing/) page.
+
+Instance: `standard-1` (1/2 vCPU, 4 GiB RAM, 8 GB disk) with `max_instances` 1. The CPU PyTorch image does not fit `lite` (256 MiB) or reliably fit `basic` (1 GiB). The container sleeps after 10 minutes with no requests, which stops compute charges until the next request. Memory is billed from the provisioned size while the instance is awake.
+
+The Worker name is `real-neural-forge-api`. Leave the existing Workers Builds for `real-neural-forge` and `youneek-xyz` on the repository root so they keep publishing `frontend/`.
+
+GHCR is not a registry Containers pulls from directly. Push the image CI already published into Cloudflare's registry, then deploy the Worker from `deploy/cloudflare/`:
+
+```bash
+docker pull ghcr.io/andrewgrayyouneek/real-neural-forge:latest
+docker tag ghcr.io/andrewgrayyouneek/real-neural-forge:latest real-neural-forge:latest
+cd deploy/cloudflare
+npm install
+npx wrangler login
+npx wrangler containers push real-neural-forge:latest
+```
+
+`wrangler containers push` prints `registry.cloudflare.com/<ACCOUNT_ID>/real-neural-forge:latest`. Replace `REPLACE_ACCOUNT_ID` in `deploy/cloudflare/wrangler.jsonc` with that account id. To serve a dataset other than `default`, change `vars.NEURAL_FORGE_CONFIG` and `vars.NEURAL_FORGE_CHECKPOINT_URL` in that file. The URL pattern is the champion asset above.
+
+Secrets are not in git. From `deploy/cloudflare/`:
+
+```bash
+npx wrangler secret put NEURAL_FORGE_API_TOKEN
+npx wrangler secret put NEURAL_FORGE_CHECKPOINT_TOKEN
+```
+
+| Secret or variable | Required | Purpose |
+| --- | --- | --- |
+| `NEURAL_FORGE_API_TOKEN` | Yes on a public URL | Bearer token for `POST /train`. Use a long random string. If it is unset, that endpoint is open. |
+| `NEURAL_FORGE_CHECKPOINT_TOKEN` | Only when the champions release is private | GitHub fine-grained PAT with contents read. Sent only to `github.com`, `api.github.com`, and `uploads.github.com`. Omit it for a public release. |
+| `NEURAL_FORGE_CHECKPOINT_URL` | Before the first real deploy | Set in `wrangler.jsonc` `vars`, not as a secret. Startup fails when this is set and the download fails, so run **Retrain champions** once before the first deploy (or clear the URL to boot an untrained model). |
+| `NEURAL_FORGE_CONFIG` | No | Config path inside the image. Default `config/config.yaml`. |
+| `NEURAL_FORGE_CHECKPOINT_PATH` | No | Where the file is saved. Default is `inference.checkpoint_path`. |
+| `NEURAL_FORGE_CHECKPOINT_MAX_BYTES` | No | Download cap. Default 256 MiB. |
+
+Then:
+
+```bash
+npx wrangler deploy
+```
+
+The container needs outbound internet so it can download the champion. A restart picks up a newly promoted file. Changing a secret does not affect an already-running instance until it sleeps and starts again.
+
+### Fly.io (one command after the token is filled in)
+
+`fly.toml` runs the published GHCR image, listens on port 8000, checks `/health`, and stops the machine when it is idle. The VM is a shared CPU with 2 GB RAM, which is a paid Fly machine (the free allowance, if any remains on the account, may not cover it). App names are global; edit `app` in `fly.toml` when `real-neural-forge` is taken.
+
+```bash
+fly auth login
+fly launch --copy-config --ha=false --yes --no-deploy \
+  && fly secrets set \
+       NEURAL_FORGE_API_TOKEN="replace-with-a-long-random-string" \
+       NEURAL_FORGE_CHECKPOINT_URL="https://github.com/AndrewGrayYouNeeK/Real-Neural-Forge/releases/download/champions/champion-default.pt" \
+       NEURAL_FORGE_CHECKPOINT_TOKEN="github-token-or-omit-this-line-when-the-release-is-public" \
+  && fly deploy --ha=false
+```
+
+Omit `NEURAL_FORGE_CHECKPOINT_TOKEN` when the release is public. This block is the whole launch; it is not run by CI.
+
+### Render
+
+`render.yaml` is a blueprint for a paid Standard web service (2 GB RAM) using the same image and the same environment variables. `NEURAL_FORGE_API_TOKEN` and `NEURAL_FORGE_CHECKPOINT_TOKEN` are `sync: false`, so Render asks for them in the dashboard instead of reading them from git. Applying the blueprint is a manual step in the Render dashboard (**New Blueprint Instance**) or `render blueprint apply` after `render login`. CI does not apply it.
 
 ## Development
 
@@ -350,7 +476,9 @@ mypy src/ workers_ci/ --ignore-missing-imports
 
 - **CI** (`.github/workflows/ci.yml`) runs tests, linting, formatting, type checks, coverage, and a Docker image smoke test on Python 3.10–3.13 for every pull request and for pushes to `main` and `develop`.
 - **Publish** (`.github/workflows/publish.yml`) pushes `:latest` to GitHub Container Registry only after that CI workflow succeeds for a push to `main`. Version tags (`vX.Y.Z`) and manual runs publish after the same CI workflow completes successfully inside the publish run.
+- **Retrain** (`.github/workflows/retrain.yml`) fetches, retrains, and promotes champion checkpoints weekly. It also runs from the Actions tab. Forecast JSON and checkpoints are release assets, not commits.
 - **Dependabot** (`.github/dependabot.yml`) opens weekly grouped PRs for GitHub Actions and the pip locks. Pip updates resolve with the Python in `.python-version` (3.10) so they stay installable on the whole CI matrix.
+- **actionlint** lints `.github/workflows/` in CI.
 
 ## Lottery sanity check
 
