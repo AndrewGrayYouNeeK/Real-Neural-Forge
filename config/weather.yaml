@@ -1,0 +1,53 @@
+# Daily maximum temperature at New York Central Park (NOAA GHCND:USW00094728).
+# Public-domain U.S. government work (17 U.S.C. § 105). Fetch the CSV first:
+#   python -m scripts.fetch_weather
+# The file is written to data/ (gitignored) and is not committed.
+
+model:
+  name: time_series_transformer
+  input_dim: 3
+  output_dim: 1
+  d_model: 64
+  nhead: 4
+  num_encoder_layers: 2
+  dim_feedforward: 128
+  dropout: 0.1
+  max_seq_len: 512
+
+data:
+  source: csv
+  path: data/weather_central_park.csv
+  date_column: date
+  feature_columns: ["temperature_c", "doy_sin", "doy_cos"]
+  target_column: temperature_c
+  seq_len: 28
+  val_split: 0.2
+  split_mode: temporal
+  split_seed: 0
+  normalize: true
+  # Score persistence and same-calendar-day seasonal naive on the validation days.
+  report_baselines: true
+  seed: 0
+
+training:
+  experiment_name: weather_central_park_tmax
+  batch_size: 64
+  learning_rate: 0.001
+  epochs: 20
+  patience: 5
+  max_grad_norm: 1.0
+  device: cpu
+  # Separate from checkpoints/best_model.pt, which the API loads on startup.
+  checkpoint_dir: checkpoints/weather
+  log_interval: 1
+  seed: 0
+
+inference:
+  device: cpu
+  checkpoint_path: checkpoints/weather/best_model.pt
+
+api:
+  training_enabled: true
+
+storage:
+  db_path: data/weather_experiments.db

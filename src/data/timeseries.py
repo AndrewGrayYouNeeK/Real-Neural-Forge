@@ -9,6 +9,20 @@ import pandas as pd
 import torch
 
 
+def resolve_val_count(n_items: int, val_split: float) -> int:
+    """Return how many items a validation split holds out.
+
+    ``n_val = int(n_items * val_split)``. A positive split that would leave
+    either side empty is rejected so callers can rely on both sides existing.
+    """
+    if not 0.0 <= val_split < 1.0:
+        raise ValueError(f"data.val_split must be in [0, 1), got {val_split}")
+    n_val = int(n_items * val_split)
+    if val_split > 0 and (n_val == 0 or n_val == n_items):
+        raise ValueError("data.val_split leaves an empty train or validation set.")
+    return n_val
+
+
 def make_sine_dataset(
     n_samples: int,
     seq_len: int,
