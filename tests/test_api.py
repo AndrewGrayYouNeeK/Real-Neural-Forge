@@ -745,6 +745,8 @@ class TestForecastDashboard:
         assert page.status_code == 200
         html = page.text
         assert 'id="forecast-chart"' in html
+        assert 'id="powerball-summary"' in html
+        assert 'id="powerball-body"' in html
         assert "/assets/chart.js" in html
         assert 'id="api-token"' in html
         for path in ("/assets/app.js", "/assets/chart.js"):
@@ -759,6 +761,28 @@ class TestForecastDashboard:
         assert "neuralForgeApiToken" in app_js
         assert "Authorization" in app_js
         assert "Bearer " in app_js
+
+
+class TestPowerballScorecard:
+    def test_missing_file_is_available_false(self, client, monkeypatch, tmp_path):
+        monkeypatch.setattr(
+            api_module, "POWERBALL_SCORECARD", str(tmp_path / "missing.json")
+        )
+        response = client.get("/powerball/scorecard")
+        assert response.status_code == 200
+        body = response.json()
+        assert body["available"] is False
+        assert "summary" in body
+
+    def test_published_file_is_available(self, client, monkeypatch, tmp_path):
+        path = tmp_path / "scorecard.json"
+        path.write_text('{"summary": "Scored 1 draws.", "cumulative": {}}')
+        monkeypatch.setattr(api_module, "POWERBALL_SCORECARD", str(path))
+        response = client.get("/powerball/scorecard")
+        assert response.status_code == 200
+        body = response.json()
+        assert body["available"] is True
+        assert body["summary"] == "Scored 1 draws."
 
 
 class TestAppVersion:

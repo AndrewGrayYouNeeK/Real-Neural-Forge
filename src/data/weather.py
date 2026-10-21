@@ -155,6 +155,106 @@ def write_weather_csv(frame: pd.DataFrame, path: str | Path) -> Path:
     return destination
 
 
+_METRIC_COLUMN_NAMES = {
+    "TMAX": "tmax_c",
+    "TMIN": "tmin_c",
+    "PRCP": "prcp_mm",
+}
+
+
+def build_station_url(
+    *,
+    station: str,
+    start_date: str,
+    end_date: str,
+    data_types: tuple[str, ...] = ("TMAX",),
+) -> str:
+    """Daily Summaries URL for one station and one or more GHCNd variables.
+
+    ``data_types`` use the NCEI names (``TMAX``, ``TMIN``, ``PRCP``). Metric
+    units are degrees Celsius and millimetres.
+    """
+    if not data_types:
+        raise ValueError("data_types must name at least one GHCNd variable.")
+    query = urllib.parse.urlencode(
+        {
+            "dataset": "daily-summaries",
+            "stations": station,
+            "startDate": start_date,
+            "endDate": end_date,
+            "dataTypes": ",".join(data_types),
+            "units": "metric",
+            "format": "csv",
+            "includeStationName": "false",
+        },
+        safe=",",
+    )
+    return f"{SOURCE_URL}?{query}"
+
+
+def parse_station_observations(
+    csv_text: str,
+    *,
+    station: str,
+    data_types: tuple[str, ...] = ("TMAX",),
+) -> pd.DataFrame:
+    """Parse a multi-variable Daily Summaries CSV.
+
+    Dates may contain gaps. Missing measurements stay as NaN; callers decide
+    whether a gap can be carried forward. Column names are ``date`` plus
+    ``tmax_c``, ``tmin_c``, and ``prcp_mm`` for the requested variables.
+    """
+    if not data_types:
+        raise ValueError("data_types must name at least one GHCNd variable.")
+    unknown = [name for name in data_types if name not in _METRIC_COLUMN_NAMES]
+    if unknown:
+        raise ValueError(f"Unsupported GHCNd variables: {unknown}")
+    frame = pd.read_csv(io.StringIO(csv_text))
+    required = ["STATION", "DATE", *data_types]
+    missing = [column for column in required if column not in frame.columns]
+    if missing:
+        raise ValueError(f"NOAA daily summaries response is missing columns: {missing}")
+    if frame.empty:
+        raise ValueError("NOAA daily summaries response contained no observations.")
+    stations = set(frame["STATION"].astype(str))
+    if stations != {station}:
+        raise ValueError(f"Expected only station {station}, found {sorted(stations)}")
+
+    parsed = pd.DataFrame({"date": pd.to_datetime(frame["DATE"], format="%Y-%m-%d")})
+    for data_type in data_types:
+        parsed[_METRIC_COLUMN_NAMES[data_type]] = pd.to_numeric(
+            frame[data_type], errors="coerce"
+        )
+    parsed = parsed.sort_values("date").reset_index(drop=True)
+    if bool(parsed["date"].duplicated().any()):
+        raise ValueError("Weather series contains duplicate dates.")
+    if not bool(parsed["date"].is_monotonic_increasing):
+        raise ValueError("Weather dates must be sorted ascending.")
+    return parsed
+
+
+def fetch_station_observations(
+    *,
+    station: str,
+    data_types: tuple[str, ...],
+    start_date: str,
+    end_date: str,
+    timeout: float = 120.0,
+) -> pd.DataFrame:
+    """Download one station's daily observations from NOAA NCEI."""
+    url = build_station_url(
+        station=station,
+        start_date=start_date,
+        end_date=end_date,
+        data_types=data_types,
+    )
+    return parse_station_observations(
+        download_noaa_csv(url, timeout=timeout),
+        station=station,
+        data_types=data_types,
+    )
+
+
 def fetch_weather(
     output: str | Path = DEFAULT_OUTPUT,
     *,

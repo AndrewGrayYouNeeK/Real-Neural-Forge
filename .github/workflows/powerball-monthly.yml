@@ -1,0 +1,77 @@
+name: Powerball monthly scorecard
+
+# Refresh the public draw file, log tickets for the upcoming month, and
+# rescore any logged month whose draws are now in the results. The job opens
+# a pull request. It does not push to main and it does not buy tickets.
+on:
+  schedule:
+    - cron: "0 16 1 * *"
+  workflow_dispatch:
+    inputs:
+      month:
+        description: "Month to log, YYYY-MM. Empty uses the upcoming month."
+        required: false
+        type: string
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  scorecard:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: python -m pip install -r requirements.txt
+
+      - name: Choose the forecast month
+        run: |
+          set -eu
+          # github.event.inputs is empty on the monthly schedule.
+          month="${{ github.event.inputs.month }}"
+          if [ -z "$month" ]; then
+            day="$(date -u +%d)"
+            if [ "$day" = "01" ]; then
+              month="$(date -u +%Y-%m)"
+            else
+              month="$(date -u -d "$(date -u +%Y-%m-01) +1 month" +%Y-%m)"
+            fi
+          fi
+          echo "month=$month" >> "$GITHUB_ENV"
+
+      - name: Log tickets and rebuild the scorecard
+        run: python -m scripts.run_powerball_month --month "$month"
+
+      - name: Open a pull request with the log
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -eu
+          if [ -z "$(git status --porcelain -- predictions/powerball)" ]; then
+            echo "No scorecard changes."
+            exit 0
+          fi
+          branch="predictions/powerball-${month}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -B "$branch"
+          git add predictions/powerball
+          git commit -m "Update the Powerball scorecard for ${month}"
+          if git ls-remote --exit-code --heads origin "$branch" >/dev/null; then
+            git push --force-with-lease origin "$branch"
+          else
+            git push -u origin "$branch"
+          fi
+          gh pr create --base main --head "$branch" \
+            --title "Update the Powerball scorecard for ${month}" \
+            --body "Monthly log of model, weather, pattern, and random-control tickets. Scores use published draws only. No tickets are purchased." \
+            || gh pr view --head "$branch"

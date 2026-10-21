@@ -1,0 +1,97 @@
+{
+  "rows": 1422,
+  "feature_columns_weather": [
+    "white_1",
+    "white_2",
+    "white_3",
+    "white_4",
+    "white_5",
+    "powerball",
+    "tmax_c",
+    "tmin_c",
+    "prcp_mm",
+    "central_park_tmax_c"
+  ],
+  "plain": {
+    "training": {
+      "epochs_ran": 12,
+      "best_scaled_loss": 0.893412172794342,
+      "n_windows": 1406,
+      "n_fit": 1125,
+      "n_val": 281,
+      "seed": 0
+    },
+    "metrics": {
+      "n": 281,
+      "powerball_mae": 6.836329936981201,
+      "powerball_hits": 18,
+      "powerball_hit_rate": 0.06405693950177936,
+      "powerball_hit_z": 2.231096948656882,
+      "chance_powerball_hit_rate": 0.038461538461538464,
+      "mean_white_matches": 0.35587188612099646,
+      "chance_white_matches": 0.36231884057971014,
+      "full_ticket_hits": 0,
+      "prize_tickets": 19
+    },
+    "feature_columns": [
+      "white_1",
+      "white_2",
+      "white_3",
+      "white_4",
+      "white_5",
+      "powerball"
+    ]
+  },
+  "weather": {
+    "training": {
+      "epochs_ran": 12,
+      "best_scaled_loss": 0.8918176889419556,
+      "n_windows": 1406,
+      "n_fit": 1125,
+      "n_val": 281,
+      "seed": 0
+    },
+    "metrics": {
+      "n": 281,
+      "powerball_mae": 6.831542015075684,
+      "powerball_hits": 18,
+      "powerball_hit_rate": 0.06405693950177936,
+      "powerball_hit_z": 2.231096948656882,
+      "chance_powerball_hit_rate": 0.038461538461538464,
+      "mean_white_matches": 0.3665480427046263,
+      "chance_white_matches": 0.36231884057971014,
+      "full_ticket_hits": 0,
+      "prize_tickets": 19
+    },
+    "feature_columns": [
+      "white_1",
+      "white_2",
+      "white_3",
+      "white_4",
+      "white_5",
+      "powerball",
+      "tmax_c",
+      "tmin_c",
+      "prcp_mm",
+      "central_park_tmax_c"
+    ]
+  },
+  "powerball_mae_weather_minus_plain": -0.004787921905517578,
+  "central_park": "included from USW00094728",
+  "tallahassee_station": "USW00093805",
+  "weather_licence": "Public domain (U.S. government work, 17 U.S.C. \u00a7 105). NOAA NCEI Daily Summaries, GHCNd, metric units.",
+  "draws_source": {
+    "dataset": "Lottery Powerball Winning Numbers: Beginning 2010",
+    "dataset_id": "d6yy-54nr",
+    "page": "https://data.ny.gov/Government-Finance/Lottery-Powerball-Winning-Numbers-Beginning-2010/d6yy-54nr",
+    "api": "https://data.ny.gov/resource/d6yy-54nr.json",
+    "publisher": "New York State Gaming Commission",
+    "licence": "OPEN-NY Terms of Use",
+    "licence_url": "https://data.ny.gov/api/views/77gx-ii52/files/ef0c1840-ad54-4240-92fd-6397c49fde46?filename=OPEN-NY_20Terms_20of_20Use.pdf",
+    "licence_summary": "OPEN-NY Terms of Use (last modified March 8, 2013) grant a non-exclusive, revocable licence to use content published on data.ny.gov. Those terms do not require attribution, share-alike, or pre-approval. The dataset view does not attach a separate SPDX licence.",
+    "matrix_start": "2015-10-07",
+    "white_ball_range": "1-69",
+    "powerball_range": "1-26"
+  },
+  "note": "Both models see the same draws. The weather model also sees Tallahassee observations on the dates inside each input window. Early stopping uses this holdout, so squared error is slightly optimistic for both. A gap near zero means weather did not change the Powerball forecast."
+}

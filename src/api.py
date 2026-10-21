@@ -1,12 +1,13 @@
 """FastAPI REST endpoint for time-series inference."""
 
+import json
 import logging
 import math
 import os
 import secrets
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import torch
 import yaml
@@ -24,7 +25,7 @@ from src.serving.checkpoint import checkpoint_destination, prepare_runtime_check
 from src.storage.experiments import ExperimentStore, db_path_from_config
 from src.training.trainer import TimeSeriesTrainer
 from src.utils.config import load_config
-from src.utils.paths import REPO_ROOT
+from src.utils.paths import REPO_ROOT, resolve_repo_path
 from src.youneek import parse_moment, snapshot
 
 logger = logging.getLogger("uvicorn.error")
@@ -310,6 +311,33 @@ def _require_store() -> ExperimentStore:
 @app.get("/experiments", tags=["experiments"])
 def list_experiments(limit: int = Query(20, ge=1, le=500)) -> dict[str, Any]:
     return {"experiments": _require_store().list_experiments(limit=limit)}
+
+
+POWERBALL_SCORECARD = "predictions/powerball/scorecard.json"
+
+
+def read_powerball_scorecard(path: str | Path | None = None) -> dict[str, Any]:
+    """Return the public scorecard, or an empty card when the file is absent."""
+    destination = resolve_repo_path(POWERBALL_SCORECARD if path is None else path)
+    if not destination.is_file():
+        return {
+            "available": False,
+            "summary": "No Powerball scorecard has been published.",
+        }
+    loaded = json.loads(destination.read_text())
+    if not isinstance(loaded, dict):
+        raise HTTPException(
+            status_code=500, detail="Powerball scorecard is not a JSON object."
+        )
+    payload = cast(dict[str, Any], loaded)
+    payload["available"] = True
+    return payload
+
+
+@app.get("/powerball/scorecard", tags=["lottery"])
+def powerball_scorecard() -> dict[str, Any]:
+    """Logged tickets scored against published draws. A missing file is not an error."""
+    return read_powerball_scorecard()
 
 
 @app.get("/series/recent", tags=["dashboard"])

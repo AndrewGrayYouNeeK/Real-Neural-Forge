@@ -619,3 +619,70 @@ MSE skill against the historical mean is **0.83%**, **0.71%**, and **0.76%** on 
 ### Takeaway
 
 The next Powerball is unpredictable. Rounded forecasts from three seeds hit the true number **9**, **13**, and **13** times out of 278, against **10.7** hits expected from a uniform 1–26 guess, and every rate sits inside two null standard errors of chance. The rounded historical mean, a forecast that always says 14, records more hits than the network. A lag-1 correlation of -0.067 leaves the transformer copying that mean. Lottery draws are independent for any purpose that needs the next number, and this evaluation reports that result.
+
+## Monthly Powerball scorecard
+
+The same draw file feeds a public log. On the 1st of each month a GitHub Actions workflow (`.github/workflows/powerball-monthly.yml`, 16:00 UTC, or a manual run) writes one ticket per strategy for every Monday, Wednesday, and Saturday in that month, then scores any logged draw whose winning numbers are now in the file. The job opens a pull request with `GITHUB_TOKEN`. It does not push to `main`, and it does not buy a ticket.
+
+Logs live in [`predictions/powerball/`](predictions/powerball/). [`scorecard.json`](predictions/powerball/scorecard.json) is rebuilt from those logs. A month file is not rewritten after it exists, so a later result cannot change the ticket. The dashboard reads `GET /powerball/scorecard` and shows an empty card when the file is absent.
+
+Each draw date carries seven tickets. Five white balls are unique and sorted, from 1–69, plus a Powerball from 1–26.
+
+- **model** — the transformer, trained on the six numbers only.
+- **model_weather** — the same model with draw-day weather on the dates already inside the input window.
+- **most_hit**, **hot_pairs**, **neighbors**, **overdue** — counts, co-occurrence, one step off the last draw (the Powerball stays as drawn), and the longest gaps.
+- **random** — one uniform ticket. The seed is `crc32("powerball-control-{month}-{YYYY-MM-DD}")`, so the control is public and stable.
+
+Model and pattern tickets are the one forecast from data through the day before the month, copied onto every draw that month. Only the random ticket changes with the date. Weather on the draw being forecast is not an input. A gap of more than two days stays missing; those rows are dropped, not filled with zeros.
+
+### Weather
+
+Powerball draws are held in Tallahassee. The weather model uses NOAA NCEI Daily Summaries for GHCNd station **USW00093805** (Tallahassee airport): daily maximum temperature, minimum temperature, and precipitation, metric units. Central Park **USW00094728** maximum temperature is added only when every training draw has an observation within two days. Both series are U.S. government works (17 U.S.C. § 105). On the 1,422-draw file ending **2026-10-19**, Tallahassee had no gap over two days, and Central Park covered every draw, so the weather model saw ten inputs: the six numbers, three Tallahassee fields, and Central Park.
+
+### Does weather change the forecast?
+
+Weather leaves the Powerball forecast where the plain model already had it. `results/lottery_weather_holdout.json` trains both models on the same 1,422 weather-complete draws. The temporal holdout is the last **281** windows (1,125 fit, seed 0, at most 12 epochs). The checkpoint is the lowest scaled validation loss on that holdout, so the squared error is slightly optimistic, and the protocol is the same for both models.
+
+| Forecast | Powerball MAE | Powerball hits | z vs 1/26 | Mean white matches |
+| --- | ---: | ---: | ---: | ---: |
+| Plain model | 6.836 | 18/281 (6.41%) | 2.23 | 0.356 |
+| Weather model | 6.832 | 18/281 (6.41%) | 2.23 | 0.367 |
+| Always 14 | 6.865 | 18/281 (6.41%) | 2.23 | — |
+| Chance | — | 10.8/281 (3.85%) | 0.00 | 0.362 |
+
+Weather minus plain is **−0.0048** MAE. The hit counts are equal. Mean white-ball matches sit on **25/69 = 0.362**. The holdout contains **18** Powerballs equal to 14, and the training mean **13.540** rounds to 14, so 18 hits is what that constant forecast scores. Neither network hit a full ticket. Draws do not depend on the weather in Tallahassee, and this comparison does not find that they do.
+
+### First logged months
+
+These files were written on **2026-10-21**. October is a backfill: its tickets use draws through **2026-09-30** only, even though October results were already public. November uses draws through **2026-10-19** (the latest row in the file; the 21 October draw was not published yet) and is the coming month. The October draw on the 21st and the four after it are still unscored. November has nothing to score.
+
+The same model and pattern tickets are repeated for all 13 dates in the month. October:
+
+| Strategy | Whites | Powerball |
+| --- | --- | ---: |
+| model | 12 23 35 48 59 | 13 |
+| model_weather | 12 23 35 48 60 | 14 |
+| most_hit | 21 23 28 61 64 | 14 |
+| hot_pairs | 3 16 21 32 37 | 14 |
+| neighbors | 5 7 24 34 45 | 13 |
+| overdue | 1 22 34 43 51 | 19 |
+
+November:
+
+| Strategy | Whites | Powerball |
+| --- | --- | ---: |
+| model | 12 24 37 47 58 | 13 |
+| model_weather | 12 23 36 47 59 | 13 |
+| most_hit | 21 28 32 61 64 | 14 |
+| hot_pairs | 3 16 21 32 37 | 14 |
+| neighbors | 9 32 33 43 49 | 23 |
+| overdue | 27 43 60 63 66 | 21 |
+
+Eight October draws had results. Chance on eight tickets is **2.90** white-ball matches and **0.31** Powerball hits. The plain model scored 5 white matches and 0 Powerball hits. The weather model scored 4 and 1. The one weather hit is 3 October, Powerball 14, the $4 Powerball-only tier, and the most-hit and hot-pair tickets hit that same 14. The random control scored 5 white matches and 0 Powerball hits. Eight draws cannot separate any of these from chance. The scorecard says the same thing in [`predictions/powerball/scorecard.json`](predictions/powerball/scorecard.json).
+
+```bash
+python -m scripts.run_powerball_month --month 2026-10 --holdout-output results/lottery_weather_holdout.json
+python -m scripts.run_powerball_month --month 2026-11 --no-fetch
+```
+
+The second command leaves an existing month file alone and rebuilds the scorecard. `config/lottery_tickets.yaml` is the model used for both tickets. Checkpoints from these runs are not written.

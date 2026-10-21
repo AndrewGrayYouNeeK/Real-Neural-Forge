@@ -14,9 +14,11 @@ from src.data.weather import (
     STATION_NAME,
     add_calendar_features,
     build_download_url,
+    build_station_url,
     fetch_weather,
     main,
     parse_noaa_daily_summaries,
+    parse_station_observations,
 )
 
 _TWO_DAYS = (
@@ -128,3 +130,43 @@ def test_main_records_source_and_licence(tmp_path, monkeypatch, capsys):
     assert "Public domain" in printed
     assert SOURCE_URL in printed
     assert destination.exists()
+
+
+def test_station_url_keeps_commas_between_data_types():
+    url = build_station_url(
+        station="USW00093805",
+        start_date="2015-10-04",
+        end_date="2026-10-21",
+        data_types=("TMAX", "TMIN", "PRCP"),
+    )
+    assert "stations=USW00093805" in url
+    assert "dataTypes=TMAX,TMIN,PRCP" in url
+    assert "TMAX%2C" not in url
+    assert "units=metric" in url
+
+
+def test_station_parser_allows_gaps_and_ignores_the_station_name():
+    text = (
+        '"STATION","NAME","DATE","TMAX","TMIN","PRCP"\n'
+        '"USW00093805","TALLAHASSEE","2026-10-01","28.3","16.1","0.0"\n'
+        '"USW00093805","TALLAHASSEE","2026-10-03","25.0","14.0","12.7"\n'
+    )
+    frame = parse_station_observations(
+        text, station="USW00093805", data_types=("TMAX", "TMIN", "PRCP")
+    )
+    assert list(frame.columns) == ["date", "tmax_c", "tmin_c", "prcp_mm"]
+    assert frame["date"].dt.strftime("%Y-%m-%d").tolist() == [
+        "2026-10-01",
+        "2026-10-03",
+    ]
+    assert frame["prcp_mm"].tolist() == [0.0, 12.7]
+
+    duplicated = (
+        '"STATION","DATE","TMAX"\n'
+        '"USW00093805","2026-10-01","1.0"\n'
+        '"USW00093805","2026-10-01","2.0"\n'
+    )
+    with pytest.raises(ValueError, match="duplicate"):
+        parse_station_observations(
+            duplicated, station="USW00093805", data_types=("TMAX",)
+        )
