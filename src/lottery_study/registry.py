@@ -21,6 +21,7 @@ import pandas as pd
 
 from src.lottery_study.align import PRIOR_CALENDAR_DAY, SAME_DAY_BEFORE_DRAW
 from src.lottery_study.catalog import DatasetCandidate, dataset_catalog
+from src.lottery_study.sources import LoadedFrame, load_wired
 from src.utils.paths import resolve_repo_path
 
 _SKIP_MODULES = frozenset({"lottery", "scaling", "timeseries"})
@@ -42,6 +43,8 @@ class DatasetLoad:
     observed_at: pd.Series | None
     values: np.ndarray | None
     source: str
+    display_name: str = ""
+    consumed_paths: tuple[str, ...] = ()
 
 
 def resolve_datasets(cfg: dict[str, Any]) -> list[DatasetLoad]:
@@ -71,6 +74,8 @@ def resolve_datasets(cfg: dict[str, Any]) -> list[DatasetLoad]:
         claimed.add(candidate.dataset_id)
         if load.source and load.source != "in-memory hook":
             used_paths.add(Path(load.source).resolve())
+        for consumed in load.consumed_paths:
+            used_paths.add(Path(consumed).resolve())
     if discover:
         loads.extend(
             _discover_unlisted(claimed, used_paths, modules, fetch=fetch, cfg=cfg)
@@ -111,6 +116,13 @@ def _load_candidate(
             return _load_from_hook(candidate, hook)
         except (OSError, ValueError, KeyError) as exc:
             return _unavailable(candidate, f"hook failed: {exc}")
+
+    if candidate.loader:
+        try:
+            loaded = load_wired(candidate.dataset_id, candidate.loader, fetch=fetch)
+        except (OSError, RuntimeError, ValueError, KeyError) as exc:
+            return _unavailable(candidate, f"loader failed: {exc}")
+        return _from_wired(candidate, loaded)
 
     paths = _candidate_paths(candidate, override)
     existing = next((path for path in paths if path.is_file()), None)
@@ -211,7 +223,12 @@ def _discover_unlisted(
     data_root = resolve_repo_path(str(cfg.get("data_dir", "data")))
     if data_root.is_dir():
         for csv_path in sorted(data_root.rglob("*.csv")):
-            if csv_path.name in _SKIP_CSV_NAMES or csv_path.resolve() in used_paths:
+            if (
+                csv_path.name in _SKIP_CSV_NAMES
+                or csv_path.resolve() in used_paths
+                or "raw" in csv_path.parts
+                or "cache" in csv_path.parts
+            ):
                 continue
             dataset_id = csv_path.stem
             if dataset_id in claimed:
@@ -409,6 +426,27 @@ def _guess_availability(dataset_id: str) -> str:
     return PRIOR_CALENDAR_DAY
 
 
+def _from_wired(candidate: DatasetCandidate, loaded: LoadedFrame) -> DatasetLoad:
+    return DatasetLoad(
+        dataset_id=candidate.dataset_id,
+        group=candidate.group,
+        description=candidate.description,
+        available=loaded.available,
+        detail=loaded.detail,
+        availability=candidate.availability,
+        columns=loaded.columns,
+        observed_at=(
+            None
+            if loaded.observed_at is None
+            else loaded.observed_at.reset_index(drop=True)
+        ),
+        values=loaded.values,
+        source=loaded.source,
+        display_name=candidate.display_name,
+        consumed_paths=loaded.consumed,
+    )
+
+
 def _unavailable(candidate: DatasetCandidate, detail: str) -> DatasetLoad:
     return DatasetLoad(
         dataset_id=candidate.dataset_id,
@@ -421,4 +459,5 @@ def _unavailable(candidate: DatasetCandidate, detail: str) -> DatasetLoad:
         observed_at=None,
         values=None,
         source="",
+        display_name=candidate.display_name,
     )

@@ -137,6 +137,43 @@ def align_observations(
     return aligned, rule
 
 
+def align_columns(
+    draw_days: list[date],
+    observed_at: pd.Series,
+    values: np.ndarray,
+    *,
+    availability: str,
+    timezone: str = DRAW_TIMEZONE,
+    hour: int = DRAW_HOUR,
+    minute: int = DRAW_MINUTE,
+) -> tuple[np.ndarray, str]:
+    """Align each column on its own last finite value.
+
+    A missing cell must not hide a newer value in another column, and it must
+    not block an older finite value in its own column. One-column frames match
+    :func:`align_observations`.
+    """
+    raw = np.asarray(values, dtype=np.float64)
+    if raw.ndim == 1:
+        raw = raw.reshape(-1, 1)
+    columns: list[np.ndarray] = []
+    rule = "calendar:" + availability
+    for index in range(raw.shape[1]):
+        column, rule = align_observations(
+            draw_days,
+            observed_at,
+            raw[:, index],
+            availability=availability,
+            timezone=timezone,
+            hour=hour,
+            minute=minute,
+        )
+        columns.append(np.asarray(column, dtype=np.float64).reshape(-1))
+    if not columns:
+        return np.zeros((len(draw_days), 0), dtype=np.float64), rule
+    return np.column_stack(columns), rule
+
+
 def _day_numbers(raw: pd.Series) -> np.ndarray:
     parsed = pd.to_datetime(raw, errors="coerce")
     if getattr(parsed.dt, "tz", None) is not None:

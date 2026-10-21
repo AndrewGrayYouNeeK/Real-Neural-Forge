@@ -147,6 +147,12 @@ def test_ticket_validation_and_repair():
         "powerball_hit": True,
         "tier": "match_4_pb",
         "base_prize_usd": 50_000,
+        "within_1": 4,
+        "within_2": 5,
+        "near_miss_1": 0,
+        "near_miss_2": 1,
+        "white_sum_abs_error": 2,
+        "powerball_abs_error": 0,
     }
 
 

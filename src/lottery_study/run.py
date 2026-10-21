@@ -12,7 +12,7 @@ import pandas as pd
 
 from src.data.lottery import WHITE_BALL_COUNT, fetch_and_write, read_draw_table
 from src.evaluation.lottery import temporal_window_split
-from src.lottery_study.align import DRAW_TIMEZONE, align_observations
+from src.lottery_study.align import DRAW_TIMEZONE, align_columns
 from src.lottery_study.closecall import (
     SCALAR_TARGETS,
     ball_indicators,
@@ -183,7 +183,7 @@ def _align_loads(
     for load in loads:
         if not load.available or load.values is None or load.observed_at is None:
             continue
-        matrix, rule = align_observations(
+        matrix, rule = align_columns(
             draw_days,
             load.observed_at,
             load.values,
@@ -202,6 +202,7 @@ def _align_loads(
         aligned.append(
             {
                 "dataset_id": load.dataset_id,
+                "display_name": load.display_name,
                 "group": load.group,
                 "description": load.description,
                 "columns": tuple(load.columns[index] for index in keep),
@@ -371,18 +372,51 @@ def _score_predictors(
         fits["plain"] = _fit_variant(
             "Plain transformer", "plain", None, balls, training, cfg
         )
-        matrices = [dataset["values"] for dataset in aligned]
+        min_aligned = max(3, int(cfg.get("min_aligned", 80)))
+        first_val = int(split["first_val_target"])
+        matrices: list[np.ndarray] = []
         for dataset in aligned:
-            fits[dataset["dataset_id"]] = _fit_variant(
-                dataset["dataset_id"].replace("_", " ").title(),
-                "dataset",
+            kept = _trainable_mask(
                 dataset["values"],
+                first_val,
+                min_aligned,
+                seq_len=int(training.get("seq_len", 32)),
+            )
+            if not bool(kept.any()):
+                fits[dataset["dataset_id"]] = {
+                    "name": _predictor_name(dataset),
+                    "kind": "dataset",
+                    "error": (
+                        "no column is finite on at least "
+                        f"{min_aligned} pre-holdout draws and {min_aligned} holdout draws"
+                    ),
+                }
+                continue
+            covariates = dataset["values"][:, kept]
+            dropped = int((~kept).sum())
+            note = ""
+            if dropped:
+                note = (
+                    f"{int(kept.sum())} of {kept.size} columns cover both the "
+                    "pre-holdout sample and the holdout. The others stay in the "
+                    "association tests only."
+                )
+            matrices.append(covariates)
+            fits[dataset["dataset_id"]] = _fit_variant(
+                _predictor_name(dataset),
+                "dataset",
+                covariates,
                 balls,
                 training,
                 cfg,
+                note=note,
             )
         if len(matrices) == 1:
-            only = aligned[0]["dataset_id"]
+            only = next(
+                dataset_id
+                for dataset_id, fit in fits.items()
+                if fit.get("kind") == "dataset" and "error" not in fit
+            )
             fits["combined"] = {
                 **fits[only],
                 "name": "All datasets",
@@ -557,6 +591,29 @@ def _score_predictors(
     return scored, per_draw
 
 
+def _trainable_mask(
+    values: np.ndarray, first_val: int, min_aligned: int, *, seq_len: int
+) -> np.ndarray:
+    """Columns that cover the holdout windows and enough earlier draws.
+
+    A column that starts during the holdout stays in the association tests
+    and is left out of the network, so one short series cannot shrink the
+    shared scorecard.
+    """
+    finite = np.isfinite(values)
+    train = finite[:first_val].sum(axis=0) >= min_aligned
+    cover_from = max(0, first_val - max(seq_len, 1))
+    covers_holdout = finite[cover_from:].all(axis=0)
+    return np.asarray(train & covers_holdout, dtype=bool)
+
+
+def _predictor_name(dataset: dict[str, Any]) -> str:
+    display = str(dataset.get("display_name") or "").strip()
+    if display:
+        return display
+    return str(dataset["dataset_id"]).replace("_", " ").title()
+
+
 def _fit_variant(
     name: str,
     kind: str,
@@ -564,6 +621,7 @@ def _fit_variant(
     balls: np.ndarray,
     training: dict[str, Any],
     cfg: dict[str, Any],
+    note: str = "",
 ) -> dict[str, Any]:
     seq_len = int(training.get("seq_len", 32))
     _log(cfg, f"Training {name}")
@@ -579,7 +637,7 @@ def _fit_variant(
         "kind": kind,
         "target_index": target_index,
         "raw": raw,
-        "note": "",
+        "note": note,
     }
 
 
