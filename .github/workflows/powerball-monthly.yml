@@ -36,7 +36,8 @@ jobs:
       - name: Choose the forecast month
         run: |
           set -eu
-          month="${{ inputs.month }}"
+          # github.event.inputs is empty on the monthly schedule.
+          month="${{ github.event.inputs.month }}"
           if [ -z "$month" ]; then
             day="$(date -u +%d)"
             if [ "$day" = "01" ]; then

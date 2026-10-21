@@ -441,6 +441,8 @@ def test_monthly_workflow_uses_the_forecast_month_and_github_token_only():
     text = (ROOT / ".github/workflows/powerball-monthly.yml").read_text()
     assert 'cron: "0 16 1 * *"' in text
     assert "workflow_dispatch:" in text
+    assert "github.event.inputs.month" in text
+    assert "${{ inputs." not in text
     assert "GH_TOKEN: ${{ github.token }}" in text
     assert "secrets." not in text
     assert "contents: write" in text

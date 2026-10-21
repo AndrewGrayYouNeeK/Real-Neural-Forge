@@ -25,7 +25,7 @@ from src.serving.checkpoint import checkpoint_destination, prepare_runtime_check
 from src.storage.experiments import ExperimentStore, db_path_from_config
 from src.training.trainer import TimeSeriesTrainer
 from src.utils.config import load_config
-from src.utils.paths import REPO_ROOT
+from src.utils.paths import REPO_ROOT, resolve_repo_path
 from src.youneek import parse_moment, snapshot
 
 logger = logging.getLogger("uvicorn.error")
