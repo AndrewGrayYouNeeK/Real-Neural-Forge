@@ -1,0 +1,58 @@
+# Compare every dataset Neural Forge trains on with Powerball draws.
+# The draw cutoff is 22:59 America/New_York. A series can only contribute a
+# value that was already known at that instant.
+#
+# Plug-in contract, so later fetchers are picked up on a re-run:
+#   1. Export LOTTERY_STUDY_HOOKS from a module under src/data/, or
+#   2. Write a CSV under data/ with a date column and numeric columns.
+# Date-only rows use the availability rule on the catalog entry
+# (prior_calendar_day, or same_day_before_draw for a daily market close).
+# Clock times are compared with the draw instant directly.
+# Run: python -m src.lottery_study --config config/lottery_dataset_study.yaml
+#
+# Scheduled retraining scans every config with model and training mappings.
+# This file drives the lottery comparison, so it is disabled as a dataset
+# and is not refreshed or trained by `python -m src.retrain`.
+
+dataset:
+  id: lottery_dataset_study
+  enabled: false
+
+model:
+  name: time_series_transformer
+
+alpha: 0.05
+min_aligned: 80
+n_permutations: 499
+permutation_seed: 0
+mi_bins: 8
+chance_simulations: 2000
+chance_seed: 0
+timezone: America/New_York
+fetch_lottery_if_missing: true
+fetch_missing: true
+discover_unlisted: true
+lottery_csv: data/powerball.csv
+
+training:
+  enabled: true
+  seq_len: 32
+  val_split: 0.2
+  epochs: 20
+  patience: 5
+  batch_size: 64
+  learning_rate: 0.001
+  d_model: 64
+  nhead: 4
+  num_encoder_layers: 3
+  dim_feedforward: 256
+  dropout: 0.1
+  max_seq_len: 128
+  max_grad_norm: 1.0
+  device: cpu
+  seed: 0
+
+output:
+  json: results/lottery_dataset_study.json
+  markdown: results/lottery_dataset_study.md
+  chart: results/lottery_dataset_study.svg
