@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import time
 from typing import Any
 
 import torch
@@ -10,7 +11,17 @@ import torch.nn as nn
 from torch.utils.data import DataLoader, Dataset, Subset, TensorDataset, random_split
 
 from src.data.scaling import StandardScaler
-from src.data.timeseries import load_csv_timeseries, make_sine_dataset
+from src.data.timeseries import (
+    load_csv_timeseries,
+    make_sine_dataset,
+    resolve_val_count,
+)
+from src.evaluation.baselines import (
+    compare_to_baselines,
+    format_score_table,
+    load_baseline_series,
+    temporal_validation_target_rows,
+)
 from src.evaluation.metrics import mae, mse, rmse
 from src.models.registry import build_model
 from src.storage.experiments import ExperimentStore, db_path_from_config
@@ -40,6 +51,7 @@ class TimeSeriesTrainer:
         t_cfg = cfg["training"]
         device = self._resolve_device(t_cfg.get("device", "cpu"))
         logger.info("Using device: %s", device)
+        started = time.perf_counter()
 
         seed = t_cfg.get("seed")
         if seed is not None:
@@ -53,32 +65,25 @@ class TimeSeriesTrainer:
         criterion = nn.MSELoss()
 
         data_cfg = cfg.get("data", {})
+        seq_len = int(data_cfg.get("seq_len", 64))
         if data_cfg.get("source") == "csv" and data_cfg.get("path"):
             inputs, targets = load_csv_timeseries(
                 resolve_repo_path(data_cfg["path"]),
                 feature_columns=data_cfg.get("feature_columns", ["value"]),
                 target_column=data_cfg.get("target_column", "value"),
-                seq_len=data_cfg.get("seq_len", 64),
+                seq_len=seq_len,
             )
         else:
             inputs, targets = make_sine_dataset(
                 n_samples=data_cfg.get("n_samples", 1024),
-                seq_len=data_cfg.get("seq_len", 64),
+                seq_len=seq_len,
                 noise=data_cfg.get("noise", 0.05),
                 seed=data_cfg.get("seed"),
             )
 
         full_dataset = TensorDataset(inputs, targets)
         val_split = float(data_cfg.get("val_split", 0.0))
-        if not 0.0 <= val_split < 1.0:
-            raise ValueError(f"data.val_split must be in [0, 1), got {val_split}")
-        n_val = int(len(full_dataset) * val_split)
-        if val_split > 0 and (n_val == 0 or n_val == len(full_dataset)):
-            raise ValueError("data.val_split leaves an empty train or validation set.")
-        dataset: Dataset[tuple[torch.Tensor, ...]]
-        val_dataset: Dataset[tuple[torch.Tensor, ...]] | None
-        # CSV windows overlap and are ordered in time, so a random split leaks
-        # near-duplicate windows into validation; hold out the most recent ones.
+        n_val = resolve_val_count(len(full_dataset), val_split)
         split_mode = data_cfg.get(
             "split_mode", "temporal" if data_cfg.get("source") == "csv" else "random"
         )
@@ -86,6 +91,27 @@ class TimeSeriesTrainer:
             raise ValueError(
                 f"data.split_mode must be 'random' or 'temporal', got {split_mode!r}"
             )
+        baseline_frame = None
+        if data_cfg.get("report_baselines"):
+            if data_cfg.get("source") != "csv" or not data_cfg.get("path"):
+                raise ValueError(
+                    "data.report_baselines requires a CSV source with a path."
+                )
+            if n_val == 0 or split_mode != "temporal":
+                raise ValueError(
+                    "data.report_baselines requires a temporal validation split."
+                )
+            # Load before the loop so a missing date or target column fails
+            # before any epochs run. The same arrays are scored at the end.
+            baseline_frame = load_baseline_series(
+                resolve_repo_path(data_cfg["path"]),
+                target_column=data_cfg.get("target_column", "value"),
+                date_column=data_cfg.get("date_column") or None,
+            )
+        dataset: Dataset[tuple[torch.Tensor, ...]]
+        val_dataset: Dataset[tuple[torch.Tensor, ...]] | None
+        # CSV windows overlap and are ordered in time, so a random split leaks
+        # near-duplicate windows into validation; hold out the most recent ones.
         if n_val and split_mode == "temporal":
             n_fit = len(full_dataset) - n_val
             dataset = Subset(full_dataset, list(range(n_fit)))
@@ -182,6 +208,20 @@ class TimeSeriesTrainer:
                     logger.info(
                         "Epoch %d/%d  loss=%.6f", epoch, t_cfg["epochs"], epoch_loss
                     )
+                    if (
+                        data_cfg.get("report_baselines")
+                        and scaler is not None
+                        and val_dataset is not None
+                    ):
+                        # Target z-score RMSE converts by the training-split std.
+                        original_rmse = (select_loss**0.5) * float(
+                            scaler.y_std.reshape(-1)[0]
+                        )
+                        logger.info(
+                            "Epoch %d validation RMSE (original units): %.4f",
+                            epoch,
+                            original_rmse,
+                        )
 
                 if select_loss < best_loss:
                     epochs_without_improvement = 0
@@ -212,6 +252,15 @@ class TimeSeriesTrainer:
                         )
                         break
 
+            # The checkpoint is the best epoch. Score that model, not whatever
+            # weights the loop stopped on after the patience window.
+            best_checkpoint = checkpoint_dir / "best_model.pt"
+            if best_checkpoint.exists():
+                saved = torch.load(
+                    best_checkpoint, map_location=device, weights_only=True
+                )
+                model.load_state_dict(saved["model_state_dict"])
+
             # Report metrics on the validation set when one exists, otherwise
             # on the full training set (deterministic, unshuffled).
             preds, targets_all = evaluate(
@@ -226,6 +275,32 @@ class TimeSeriesTrainer:
             }
             for name, value in metrics.items():
                 self.store.log_metric(experiment_id, name, value)
+
+            baseline_scores: dict[str, dict[str, float]] | None = None
+            if baseline_frame is not None:
+                series_values, series_dates = baseline_frame
+                target_rows = temporal_validation_target_rows(
+                    len(series_values), seq_len, val_split
+                )
+                baseline_scores = compare_to_baselines(
+                    series_values,
+                    target_rows,
+                    preds.detach().cpu().numpy(),
+                    dates=series_dates,
+                    model_targets=targets_all.detach().cpu().numpy(),
+                )
+                logger.info(
+                    "Validation comparison (original units):\n%s",
+                    format_score_table(baseline_scores),
+                )
+                for name, scores in baseline_scores.items():
+                    if name == "model":
+                        continue
+                    for metric_name, value in scores.items():
+                        metrics[f"baseline_{name}_{metric_name}"] = value
+                        self.store.log_metric(
+                            experiment_id, f"baseline_{name}_{metric_name}", value
+                        )
 
         except Exception:
             self.store.complete_experiment(
@@ -243,11 +318,18 @@ class TimeSeriesTrainer:
             metrics=metrics,
         )
 
-        logger.info("Training complete. Best loss: %.6f", best_loss)
+        elapsed_seconds = time.perf_counter() - started
+        logger.info(
+            "Training complete. Best loss: %.6f (%.1f seconds)",
+            best_loss,
+            elapsed_seconds,
+        )
         return {
             "experiment_id": experiment_id,
             "best_loss": best_loss,
             "metrics": metrics,
             "history": history,
             "param_count": param_count,
+            "elapsed_seconds": elapsed_seconds,
+            "baselines": baseline_scores,
         }

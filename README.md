@@ -24,7 +24,10 @@ A production-ready transformer pipeline for time-series prediction, built with P
 ```
 .
 ├── config/
-│   └── config.yaml
+│   ├── config.yaml
+│   └── weather.yaml
+├── scripts/
+│   └── fetch_weather.py
 ├── frontend/
 │   ├── index.html
 │   ├── app.js
@@ -185,6 +188,48 @@ data:
 ```
 
 CSV data is standardised (per-feature z-score) by default; set `data.normalize: false` to disable it, or `true` to also scale synthetic data. The mean/std are fitted on the training split only, saved in the checkpoint, and applied automatically by `/predict`, so requests and responses stay in the CSV's original units. Final mse/rmse/mae are reported in original units; per-epoch `train_loss`/`val_loss` are in scaled units.
+
+Set `data.report_baselines: true` on a CSV run with a temporal validation split to also score two reference forecasts on the same validation days, in original units:
+
+- **Persistence** — tomorrow equals today (the previous observation).
+- **Seasonal naive** — the same calendar day one year earlier. 29 February uses 28 February when the previous year is not a leap year. This requires `data.date_column`.
+
+The logged model metrics are from the best checkpoint (lowest validation loss), which is the file written to `training.checkpoint_dir`.
+
+## Daily weather series
+
+`config/weather.yaml` trains on a real daily temperature record instead of the synthetic sine wave.
+
+**Series.** Daily maximum temperature in degrees Celsius at NOAA GHCNd station `USW00094728` (New York Central Park), 1981-01-01 through 2025-12-31. The station record for this span is continuous (16,436 days).
+
+**Source.** NOAA National Centers for Environmental Information, Daily Summaries access service: <https://www.ncei.noaa.gov/access/services/data/v1>. The underlying archive is the Global Historical Climatology Network–Daily (Menne et al., 2012, *Journal of Atmospheric and Oceanic Technology*).
+
+**Licence.** Public domain. The series is a work of the United States government (17 U.S.C. § 105), so it can be copied and redistributed. The CSV is not committed; `data/` is gitignored.
+
+Fetch it from the repository root, then train:
+
+```bash
+python -m scripts.fetch_weather
+python -m src.train --config config/weather.yaml
+```
+
+`python -m src.data.weather` is the same download. The script writes `data/weather_central_park.csv` with columns `date`, `temperature_c`, `doy_sin`, and `doy_cos`. The calendar columns are `sin` and `cos` of `2π * day_of_year / 365.25`. They depend only on the date, so they are known before that day's temperature.
+
+The weather config uses the CSV source, a temporal 20% validation holdout, z-score normalization fit on the training split only, early stopping (`patience: 5`), gradient clipping, and `training.seed: 0`. The held-out labels are the 3,281 days from 2017-01-07 through 2025-12-31. Checkpoints go to `checkpoints/weather/` (gitignored), not the API default `checkpoints/best_model.pt`. The model sees 28 days of temperature plus the calendar features and predicts the next day's maximum.
+
+### Validation results
+
+One CPU run of `config/weather.yaml` (seed 0, 67,265 parameters). Training stopped at epoch 17 because validation loss had not improved for 5 epochs. The best checkpoint is epoch 12. Wall time was 52.9 seconds.
+
+Metrics are degrees Celsius on those 3,281 validation days, scored from that checkpoint:
+
+| Method | RMSE (°C) | MAE (°C) |
+| --- | ---: | ---: |
+| Transformer | 3.7959 | 2.9376 |
+| Persistence (tomorrow = today) | 4.3009 | 3.2516 |
+| Seasonal naive (same calendar day last year) | 6.4337 | 5.0134 |
+
+The transformer RMSE and MAE are lower than both references, so the model is learning the next-day maximum rather than fitting noise. Repeating yesterday is the tighter of the two references. This table is that first run; the hyperparameters in `config/weather.yaml` were not changed afterward.
 
 ## API Reference
 
