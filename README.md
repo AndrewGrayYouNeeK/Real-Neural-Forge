@@ -1301,7 +1301,7 @@ A lower RMSE than persistence on one holdout, especially by a fraction of a perc
 Retrain with the commands above. Live rankings and the latest ECB file move, so a later run will not reproduce these digits exactly; the seed, the split, and the checkpoint selection are fixed.
 ## Domain forecasts
 
-Horse racing, AI progress, and the quantum series below use the existing `time_series_transformer`. Each run is a temporal split (the last `test_fraction` of windows or races is untouched by fitting, early stopping, and baseline coefficients; `val_fraction` is the slice immediately before that block). Inputs are standardised from the training split only. `training.seed` is 0. Checkpoints go under `checkpoints/` and are not committed. Small derived tables live in `datasets/`; metrics live in `results/`.
+Horse racing, AI progress, and the quantum series below use the existing `time_series_transformer`. Each run is a temporal split (the last `test_fraction` of windows or races is untouched by fitting, early stopping, and baseline coefficients; `val_fraction` is the slice immediately before that block). Inputs are standardised from the training split only. `training.seed` is 0. Each of these configs sets `retrain.enabled: false`, so the weekly champion job does not train them. Checkpoints go under `checkpoints/` and are not committed. Small derived tables live in `datasets/`; metrics live in `results/`.
 
 ```bash
 python -m scripts.plot_domain_forecasts

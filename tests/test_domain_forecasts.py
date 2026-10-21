@@ -236,6 +236,7 @@ class TestConfigs:
             assert cfg["training"]["seed"] == 0
             assert cfg["training"]["patience"] > 0
             assert "checkpoints/" in cfg["training"]["checkpoint_dir"]
+            assert cfg["retrain"]["enabled"] is False
 
     def test_filtered_qubit_record_is_filled_through_the_last_year(self):
         frame = pd.read_csv("datasets/quantum/qubit_record_annual.csv")

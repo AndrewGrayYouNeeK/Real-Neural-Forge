@@ -1,3 +1,8 @@
+# Research comparison. The domain trainer owns the split, so the weekly
+# champion job leaves this file alone.
+retrain:
+  enabled: false
+
 model:
   name: time_series_transformer
   input_dim: 1
