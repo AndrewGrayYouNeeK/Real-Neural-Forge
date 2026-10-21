@@ -16,6 +16,7 @@ from src.data.lottery import PowerballDraw, write_draws_csv
 from src.lottery_study.align import (
     PRIOR_CALENDAR_DAY,
     SAME_DAY_BEFORE_DRAW,
+    align_columns,
     align_observations,
     draw_cutoff,
 )
@@ -36,6 +37,7 @@ from src.lottery_study.modeling import build_windows
 from src.lottery_study.registry import resolve_datasets
 from src.lottery_study.report import conclusion_text, headline_table, render_chart
 from src.lottery_study.run import _mark_dataset_signals, run_study
+from src.lottery_study.sources import load_wired, stamp_known_dates
 from src.lottery_study.stats import (
     benjamini_hochberg,
     bonferroni_adjust,
@@ -199,6 +201,24 @@ class TestAlignment:
         assert rule.startswith("calendar:")
         assert aligned[0, 0] == 4.0
 
+    def test_one_column_does_not_hide_another(self):
+        draws = [date(2024, 1, 3)]
+        observed = pd.Series(["2024-01-01", "2024-01-02"])
+        values = np.array([[1.0, np.nan], [np.nan, 5.0]])
+        aligned, rule = align_columns(
+            draws, observed, values, availability=PRIOR_CALENDAR_DAY
+        )
+        assert rule.startswith("calendar:")
+        assert aligned.tolist() == [[1.0, 5.0]]
+
+    def test_month_and_year_are_stamped_at_period_end(self):
+        months = stamp_known_dates(pd.Series(["2024-01-01"]), period="month")
+        years = stamp_known_dates(pd.Series(["1998-01-01"]), period="year")
+        hours = stamp_known_dates(pd.Series(["2019-01-01T00:00:00Z"]), lag_hours=1)
+        assert months.tolist() == ["2024-01-31"]
+        assert years.tolist() == ["1998-12-31"]
+        assert hours.tolist() == ["2019-01-01T01:00:00Z"]
+
     def test_missing_values_are_not_treated_as_known(self):
         observed = pd.Series(["2026-07-13", "2026-07-14", "2026-07-15"])
         values = np.array([4.0, np.nan, 9.0])
@@ -308,31 +328,49 @@ class TestWindowsAndRegistry:
         assert available.count("weather") <= 1
         assert "weather_central_park" not in available
 
-    def test_module_hook_and_missing_fetcher(self, monkeypatch: pytest.MonkeyPatch):
-        module = types.ModuleType("src.data.stocks")
+    def test_module_hook_and_calendarless_qrng(self, monkeypatch: pytest.MonkeyPatch):
+        module = types.ModuleType("src.data.traffic")
         module.LOTTERY_STUDY_HOOKS = (  # type: ignore[attr-defined]
             {
-                "dataset_id": "stocks",
-                "description": "Test prices.",
-                "availability": "same_day_before_draw",
+                "dataset_id": "traffic",
+                "description": "Test counts.",
+                "availability": "prior_calendar_day",
                 "frame": pd.DataFrame(
                     {"date": ["2020-01-01", "2020-01-02"], "close": [1.0, 2.0]}
                 ),
             },
         )
-        monkeypatch.setitem(sys.modules, "src.data.stocks", module)
+        monkeypatch.setitem(sys.modules, "src.data.traffic", module)
         loads = resolve_datasets(
             {
                 "fetch_missing": False,
                 "discover_unlisted": False,
-                "only_datasets": ["stocks", "qrng"],
+                "only_datasets": ["traffic", "qrng"],
             }
         )
         by_id = {load.dataset_id: load for load in loads}
-        assert by_id["stocks"].available
-        assert by_id["stocks"].columns == ("close",)
+        assert by_id["traffic"].available
+        assert by_id["traffic"].columns == ("close",)
         assert not by_id["qrng"].available
-        assert "not on main yet" in by_id["qrng"].detail
+        assert "step" in by_id["qrng"].detail
+
+    def test_market_panel_joins_log_returns(self, tmp_path: Path):
+        features = tmp_path / "features"
+        features.mkdir()
+        for name, values in (("stock-aapl", [0.1, 0.2]), ("stock-msft", [0.3, 0.4])):
+            pd.DataFrame(
+                {
+                    "date": ["2024-01-02", "2024-01-03"],
+                    "log_return": values,
+                    "vol_10": [0.01, 0.01],
+                    "close": [1.0, 1.0],
+                }
+            ).to_csv(features / f"{name}.csv", index=False)
+        loaded = load_wired("stocks", "markets", fetch=False, features_dir=features)
+        assert loaded.available
+        assert loaded.columns == ("aapl", "msft")
+        assert loaded.values is not None
+        assert loaded.values[1, 0] == pytest.approx(0.2)
 
     def test_scorecard_hook_registers_close_calls(self):
         registered: dict[str, object] = {}
@@ -405,6 +443,25 @@ class TestReport:
         assert "Weather" in text
         assert "pre-registered" in text
 
+    def test_pooled_only_association_is_not_a_signal(self):
+        report = _fixture_report(signal=False, association_hit=True)
+        row = report["association_tests"][0]
+        row["p_bh_family"] = 0.2
+        row["n"] = 91
+        row["permutation_p"] = 0.002
+        report["predictive_tests"] = [
+            {
+                "survives_bh": True,
+                "target": "white_sum_mae_vs_chance",
+                "series_id": "Weather",
+            }
+        ]
+        text = conclusion_text(report)
+        assert "not a surviving signal" in text
+        assert "association family" in text
+        assert "pre-registered" not in text
+        assert "white_sum_mae_vs_chance" in text or "white-ball sum" in text
+
 
 def test_end_to_end_on_synthetic_draws(tmp_path: Path):
     draws_path = write_draws_csv(tmp_path / "powerball.csv", _draws(48))
@@ -431,6 +488,7 @@ def test_end_to_end_on_synthetic_draws(tmp_path: Path):
             "fetch_missing": False,
             "fetch_lottery_if_missing": False,
             "discover_unlisted": False,
+            "only_datasets": ["weather"],
             "lottery_csv": str(draws_path),
             "dataset_paths": {"weather": str(weather_path)},
             "verbose": False,
@@ -471,13 +529,11 @@ def test_end_to_end_on_synthetic_draws(tmp_path: Path):
     )
     assert weather_row["available"]
     assert weather_row["detail"].startswith("loaded")
-    stocks = next(row for row in report["datasets"] if row["dataset_id"] == "stocks")
-    assert not stocks["available"]
     combined = next(
         row for row in report["predictors"] if row["name"] == "All datasets"
     )
     assert combined["alias_of"] == "weather"
-    assert report["scorecard_module"] is None
+    assert report["scorecard_module"] == "src.evaluation.powerball_tickets"
     assert "luck" in report["conclusion"].lower()
     assert (tmp_path / "chart.svg").read_text().startswith("<svg")
     assert "Benjamini" in (tmp_path / "report.md").read_text()

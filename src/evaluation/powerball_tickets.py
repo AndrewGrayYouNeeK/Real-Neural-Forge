@@ -40,6 +40,8 @@ WHITE_COMBINATIONS = comb(WHITE_HIGH, WHITE_BALL_COUNT)
 TICKET_COMBINATIONS = WHITE_COMBINATIONS * POWERBALL_HIGH
 CHANCE_WHITE_MATCHES = (WHITE_BALL_COUNT * WHITE_BALL_COUNT) / WHITE_HIGH
 CHANCE_POWERBALL_HIT = 1.0 / POWERBALL_HIGH
+# score_ticket records near misses. The lottery study detects this flag.
+SCORES_CLOSE_CALLS = True
 
 STRATEGIES = (
     "model",
@@ -122,18 +124,39 @@ def prize_tier(white_matches: int, powerball_hit: bool) -> dict[str, Any]:
     }
 
 
+def register_close_call_metrics(_scorecard_fn: object) -> None:
+    """Close calls are already fields on ``score_ticket``. The hook acknowledges that."""
+    return None
+
+
 def score_ticket(ticket: dict[str, Any], actual: dict[str, Any]) -> dict[str, Any]:
-    """Score one logged ticket against one actual draw."""
+    """Score one logged ticket against one actual draw.
+
+    ``within_1`` and ``within_2`` count predicted white balls whose nearest
+    drawn white is at most that far away, including exact hits. ``near_miss_1``
+    and ``near_miss_2`` count distance exactly 1 and exactly 2.
+    """
     predicted = validate_ticket(ticket)
     observed = validate_ticket(actual)
     matches = len(set(predicted["whites"]) & set(observed["whites"]))
     powerball_hit = predicted["powerball"] == observed["powerball"]
     tier = prize_tier(matches, powerball_hit)
+    pred_whites = np.asarray(predicted["whites"], dtype=np.int64)
+    act_whites = np.asarray(observed["whites"], dtype=np.int64)
+    distance = np.abs(pred_whites.reshape(-1, 1) - act_whites.reshape(1, -1)).min(
+        axis=1
+    )
     return {
         "white_matches": matches,
         "powerball_hit": powerball_hit,
         "tier": tier["tier"],
         "base_prize_usd": tier["base_prize_usd"],
+        "within_1": int(np.sum(distance <= 1)),
+        "within_2": int(np.sum(distance <= 2)),
+        "near_miss_1": int(np.sum(distance == 1)),
+        "near_miss_2": int(np.sum(distance == 2)),
+        "white_sum_abs_error": int(abs(int(pred_whites.sum()) - int(act_whites.sum()))),
+        "powerball_abs_error": abs(predicted["powerball"] - observed["powerball"]),
     }
 
 
@@ -438,6 +461,12 @@ def _empty_totals() -> dict[str, Any]:
         "white_matches": 0,
         "powerball_hits": 0,
         "prize_tickets": 0,
+        "within_1": 0,
+        "within_2": 0,
+        "near_miss_1": 0,
+        "near_miss_2": 0,
+        "white_sum_abs_error": 0,
+        "powerball_abs_error": 0,
         "tiers": {},
     }
 
@@ -446,6 +475,15 @@ def _add_score(totals: dict[str, Any], score: dict[str, Any]) -> None:
     totals["scored"] += 1
     totals["white_matches"] += int(score["white_matches"])
     totals["powerball_hits"] += int(score["powerball_hit"])
+    for key in (
+        "within_1",
+        "within_2",
+        "near_miss_1",
+        "near_miss_2",
+        "white_sum_abs_error",
+        "powerball_abs_error",
+    ):
+        totals[key] += int(score[key])
     tier = str(score["tier"])
     tiers = totals["tiers"]
     tiers[tier] = int(tiers.get(tier, 0)) + 1
@@ -464,6 +502,13 @@ def _finalize(totals: dict[str, Any]) -> dict[str, Any]:
         "expected_powerball_hits": chance_powerball,
         "white_matches_minus_chance": totals["white_matches"] - chance_white,
         "powerball_hits_minus_chance": totals["powerball_hits"] - chance_powerball,
+        "mean_within_1": (totals["within_1"] / scored) if scored else None,
+        "mean_within_2": (totals["within_2"] / scored) if scored else None,
+        "mean_near_miss_1": (totals["near_miss_1"] / scored) if scored else None,
+        "mean_near_miss_2": (totals["near_miss_2"] / scored) if scored else None,
+        "mean_white_sum_abs_error": (
+            (totals["white_sum_abs_error"] / scored) if scored else None
+        ),
     }
 
 
@@ -548,7 +593,8 @@ def _summary(cumulative: dict[str, dict[str, Any]]) -> str:
             f" (chance {item['expected_white_matches']:.2f}), "
             f"Powerball hits {item['powerball_hits']}"
             f" (chance {item['expected_powerball_hits']:.2f}), "
-            f"prize tiers {item['prize_tickets']}"
+            f"prize tiers {item['prize_tickets']}, "
+            f"within ±1 {item['mean_within_1']:.2f}"
         )
 
     scored = next(iter(cumulative.values()))["scored"]

@@ -14,12 +14,13 @@ def conclusion_text(report: dict[str, Any]) -> str:
     association = report["corrections"]["association"]
     predictive = report["corrections"]["predictive"]
     combined = report["corrections"]["combined"]
-    available = [row["dataset_id"] for row in report["datasets"] if row["available"]]
-    missing = [row["dataset_id"] for row in report["datasets"] if not row["available"]]
     signals = [row for row in report["predictors"] if row.get("dataset_signal")]
+    alpha = float(association["alpha"])
     association_hits = [
         row for row in report["association_tests"] if row.get("survives_bh")
     ]
+    family_hits = [row for row in association_hits if _family_bh_pass(row, alpha)]
+    pooled_only = [row for row in association_hits if row not in family_hits]
     best = _strongest_association(report["association_tests"])
     lines = [
         (
@@ -29,38 +30,49 @@ def conclusion_text(report: dict[str, Any]) -> str:
             "have been known at that moment, and the models are scored on a "
             "later block of draws they were not fit on."
         ),
-        _data_sentence(available, missing),
+        _data_sentence(report["datasets"]),
         _luck_sentence(association, predictive, combined),
     ]
+    stale = [
+        str(row["dataset_id"])
+        for row in report["datasets"]
+        if "Later draws keep" in str(row.get("detail") or "")
+    ]
+    if stale:
+        lines.append(
+            "Horse racing stops on 2018-06-27. Draws after that keep the last "
+            "race day as the last known value. That carry-forward is stale, and "
+            "it is not a look-ahead. Annual series are the same kind of step: "
+            "only a year that has already ended can inform the draw."
+        )
     if best is None:
         lines.append(
             "There was no usable association test. With no external series "
             "aligned to the draws, there is nothing here that could be a signal."
         )
     else:
-        lines.append(
-            f"The strongest Pearson correlation was {best['pearson_r']:+.3f} "
-            f"between {best['series_id']} and {best['target']} "
-            f"(raw p {best['p']:.3g}, Benjamini–Hochberg p {best['p_bh']:.3g})."
-        )
-    if association_hits:
+        lines.append(_strongest_sentence(best))
+    if family_hits:
         names = ", ".join(
-            f"{row['series_id']} vs {row['target']}" for row in association_hits
+            f"{row['series_id']} vs {row['target']}" for row in family_hits
         )
         lines.append(
             "These association tests still sat under the Benjamini–Hochberg "
-            f"line after the full set of comparisons: {names}. "
+            f"line inside the association family: {names}. "
             "That is a statistical threshold on this one sample, not a reason "
             "to buy a ticket."
         )
     else:
         lines.append(
-            "No association survived Benjamini–Hochberg or Bonferroni. "
-            "That includes the white-ball sum, the Powerball, the odd count, "
-            "each individual ball, near-repeats (a draw sharing 3 or 4 white "
-            "balls with the draw before it), and neighbor numbers (a ball one "
-            "away from the previous draw, or a consecutive pair inside the draw)."
+            "No association survived Benjamini–Hochberg or Bonferroni inside "
+            "the association family. That includes the white-ball sum, the "
+            "Powerball, the odd count, each individual ball, near-repeats "
+            "(a draw sharing 3 or 4 white balls with the draw before it), and "
+            "neighbor numbers (a ball one away from the previous draw, or a "
+            "consecutive pair inside the draw)."
         )
+    if pooled_only:
+        lines.append(_pooled_only_sentence(pooled_only))
     lines.append(_close_call_sentence(report, signals))
     predictive_hits = [
         row for row in report.get("predictive_tests", []) if row.get("survives_bh")
@@ -73,21 +85,20 @@ def conclusion_text(report: dict[str, Any]) -> str:
     other_predictive_hits = [
         row for row in predictive_hits if row.get("target") != "white_sum_mae_vs_chance"
     ]
-    if not signals and not association_hits and not other_predictive_hits:
+    if not signals and not family_hits and not other_predictive_hits:
         if sum_hits:
             names = ", ".join(sum_hits)
             lines.append(
-                "The only rows that stay under the Benjamini–Hochberg line are "
-                f"white-ball sum errors beating a random ticket: {names}. "
-                "A forecast that sits near the average sum will do that, and the "
-                "historical mean does it with no outside data at all. It is not "
-                "evidence that a dataset predicts the draw. No association survived, "
-                "and no dataset model beat both the plain transformer and the "
-                "historical-mean ticket after the correction. Close calls — "
-                "matching 2, 3, or 4 whites, or landing within 1 or 2 of a drawn "
-                "ball — sit on the chance rates. The draws still look independent. "
-                "Re-run this study after the other fetchers merge; the registry "
-                "will pick them up without a new design."
+                "The only ticket-scoring rows that stay under the "
+                "Benjamini–Hochberg line are white-ball sum errors beating a "
+                f"random ticket: {names}. A forecast that sits near the average "
+                "sum will do that, and the historical mean does it with no "
+                "outside data at all. It is not evidence that a dataset predicts "
+                "the draw. No association survived the association-family "
+                "correction, and no dataset model beat both the plain transformer "
+                "and the historical-mean ticket. Close calls — matching 2, 3, or "
+                "4 whites, or landing within 1 or 2 of a drawn ball — sit on the "
+                "chance rates. The draws still look independent."
             )
         else:
             lines.append(
@@ -95,8 +106,7 @@ def conclusion_text(report: dict[str, Any]) -> str:
                 "into account. The draws still look like independent lottery draws. "
                 "Close calls are common for a random ticket, and landing nearer "
                 "the average white-ball sum is what any forecast that hugs the "
-                "historical average will do. Re-run this study after the other "
-                "fetchers merge; the registry will pick them up without a new design."
+                "historical average will do."
             )
     else:
         lines.append(
@@ -170,11 +180,15 @@ def association_table(report: dict[str, Any], limit: int = 15) -> str:
     ]
     rows.sort(key=lambda row: (float(row["p_bh"]), float(row["p"]), -abs(_r(row))))
     lines = [
-        "| Rank | Series | Target | Test | r | MI bits | p | BH | Bonferroni | Perm p | Survives |",
-        "| --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |",
+        (
+            "| Rank | Series | Target | Test | r | MI bits | p | "
+            "Pooled BH | Family BH | Bonferroni | Perm p | Family survives |"
+        ),
+        "| --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |",
     ]
+    alpha = float(report["corrections"]["association"]["alpha"])
     shown = rows[:limit]
-    survivors = [row for row in rows if row.get("survives_bh")]
+    survivors = [row for row in rows if _family_bh_pass(row, alpha)]
     for extra in survivors:
         if extra not in shown:
             shown.append(extra)
@@ -193,9 +207,10 @@ def association_table(report: dict[str, Any], limit: int = 15) -> str:
                     _fmt_optional(row.get("mutual_info_bits")),
                     f"{float(row['p']):.3g}",
                     f"{float(row['p_bh']):.3g}",
+                    _fmt_optional(row.get("p_bh_family")),
                     f"{float(row['p_bonferroni']):.3g}",
                     _fmt_optional(row.get("permutation_p")),
-                    "yes" if row.get("survives_bh") else "no",
+                    "yes" if _family_bh_pass(row, alpha) else "no",
                 ]
             )
             + " |"
@@ -284,11 +299,13 @@ def render_chart(report: dict[str, Any]) -> str:
     associations.sort(key=lambda row: float(row["p"]))
     associations = associations[:12]
     width = 960
-    height = 720
+    predictor_height = 48 + max(len(predictors), 1) * 18
+    association_height = 48 + max(len(associations), 1) * 18
+    height = 80 + predictor_height + association_height + 24
     parts = [
         f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" '
-        'viewBox="0 0 960 720">',
-        '<rect width="960" height="720" fill="#fbfaf6"/>',
+        f'viewBox="0 0 {width} {height}">',
+        f'<rect width="{width}" height="{height}" fill="#fbfaf6"/>',
         '<text x="32" y="36" font-family="Georgia, serif" font-size="22" fill="#1c1915">'
         "Powerball dataset study</text>",
         '<text x="32" y="58" font-family="Georgia, serif" font-size="13" fill="#5c564c">'
@@ -300,7 +317,7 @@ def render_chart(report: dict[str, Any]) -> str:
             x=32,
             y=80,
             width=900,
-            height=300,
+            height=predictor_height,
             value_of=lambda row: float(row["white_sum_mae"]),
             label_of=lambda row: str(row["name"]),
             title="Played-ticket white-sum MAE",
@@ -314,9 +331,9 @@ def render_chart(report: dict[str, Any]) -> str:
             _bar_panel(
                 associations,
                 x=32,
-                y=400,
+                y=80 + predictor_height + 12,
                 width=900,
-                height=280,
+                height=association_height,
                 value_of=lambda row: -math.log10(max(float(row["p"]), floor)),
                 label_of=lambda row: f"{row['series_id']} · {row['target']}",
                 title="-log10 Pearson p (taller is less likely under no relationship)",
@@ -370,7 +387,7 @@ def _bar_panel(
     label_width = 260
     plot_x = x + label_width
     plot_width = width - label_width - 16
-    row_height = min(28, (height - 36) / max(len(rows), 1))
+    row_height = (height - 36) / max(len(rows), 1)
     parts = [
         f'<text x="{x}" y="{y + 16}" font-family="Georgia, serif" font-size="15" '
         f'fill="#1c1915">{html.escape(title)}</text>'
@@ -400,12 +417,84 @@ def _bar_panel(
     return "\n".join(parts)
 
 
-def _data_sentence(available: list[str], missing: list[str]) -> str:
+def _data_sentence(datasets: list[dict[str, Any]]) -> str:
+    available = [str(row["dataset_id"]) for row in datasets if row["available"]]
+    missing = [_missing_label(row) for row in datasets if not row["available"]]
     have = ", ".join(available) if available else "no external dataset"
     waiting = ", ".join(missing) if missing else "nothing"
+    return f"Series actually compared: {have}. Left out of the numbers: {waiting}."
+
+
+def _missing_label(row: dict[str, Any]) -> str:
+    dataset_id = str(row["dataset_id"])
+    detail = str(row.get("detail") or "")
+    if "FRED" in detail:
+        return f"{dataset_id} (FRED download was not a data table)"
+    if "calendar" in detail or "step" in detail:
+        return f"{dataset_id} (no calendar)"
+    if "not on main" in detail:
+        return f"{dataset_id} (no fetcher yet)"
+    return dataset_id
+
+
+def _family_bh_pass(row: dict[str, Any], alpha: float) -> bool:
+    """Association survival uses the family correction when it was stored."""
+    family_p = row.get("p_bh_family")
+    if not isinstance(family_p, int | float):
+        return bool(row.get("survives_bh"))
+    permutation_p = row.get("permutation_p")
+    confirmed = permutation_p is None or (
+        isinstance(permutation_p, int | float) and float(permutation_p) <= alpha
+    )
+    return float(family_p) <= alpha and confirmed
+
+
+def _strongest_sentence(best: dict[str, Any]) -> str:
+    n = best.get("n")
+    n_text = f" on {int(n)} aligned draws" if isinstance(n, int | float) else ""
+    sentence = (
+        f"The strongest Pearson correlation was {best['pearson_r']:+.3f} "
+        f"between {best['series_id']} and {best['target']}{n_text} "
+        f"(raw p {best['p']:.3g}, pooled Benjamini–Hochberg p {best['p_bh']:.3g})."
+    )
+    family_p = best.get("p_bh_family")
+    if isinstance(family_p, int | float):
+        sentence += (
+            " Inside the association family the Benjamini–Hochberg p is "
+            f"{float(family_p):.3g}."
+        )
+    return sentence
+
+
+def _pooled_only_sentence(rows: list[dict[str, Any]]) -> str:
+    described = []
+    for row in rows:
+        n = row.get("n")
+        n_text = f", n={int(n)}" if isinstance(n, int | float) else ""
+        family_p = row.get("p_bh_family")
+        family_text = (
+            f", family BH p {float(family_p):.3g}"
+            if isinstance(family_p, int | float)
+            else ""
+        )
+        coefficient = row.get("pearson_r")
+        r_text = (
+            f", r={float(coefficient):+.3f}"
+            if isinstance(coefficient, int | float)
+            else ""
+        )
+        described.append(
+            f"{row['series_id']} vs {row['target']}{r_text}{n_text}{family_text}"
+        )
+    names = "; ".join(described)
     return (
-        f"Series actually compared: {have}. "
-        f"Still waiting on a fetcher, so not in the numbers: {waiting}."
+        "Pooling association tests with the ticket-scoring tests lets "
+        f"{len(rows)} association rows cross the pooled Benjamini–Hochberg "
+        f"line: {names}. The ticket-scoring rejects are mostly white-ball sum "
+        "errors beating a random ticket, and those tiny p-values loosen the "
+        "pooled threshold. The same association rows stay above the "
+        "association-family Benjamini–Hochberg line and above Bonferroni. "
+        "They are not a surviving signal."
     )
 
 

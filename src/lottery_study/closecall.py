@@ -7,9 +7,9 @@ a predicted white ball is within ±d of the draw when its nearest drawn white
 is at most d away. Exact matches are included in the "within" counts and
 reported separately as near-misses (distance exactly 1 or exactly 2).
 
-The monthly scorecard module is not part of this package. When one of the
-modules listed in ``SCORECARD_MODULES`` appears and exposes a registration
-function, :func:`attach_close_call_scoring` registers these metrics with it.
+The monthly scorecard lives in ``src.evaluation.powerball_tickets`` and scores
+the same within-±1, within-±2, and near-miss counts on each logged ticket.
+:func:`attach_close_call_scoring` records that module when it is importable.
 """
 
 from __future__ import annotations
@@ -41,6 +41,7 @@ SCALAR_TARGETS: tuple[str, ...] = (
 )
 
 SCORECARD_MODULES: tuple[str, ...] = (
+    "src.evaluation.powerball_tickets",
     "src.evaluation.monthly_scorecard",
     "src.evaluation.scorecard",
     "src.reporting.monthly_scorecard",
