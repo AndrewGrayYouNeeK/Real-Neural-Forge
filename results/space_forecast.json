@@ -1,0 +1,868 @@
+{
+  "seed": 0,
+  "device": "cpu",
+  "trained_on": "2026-10-21",
+  "total_train_seconds": 251.1,
+  "horizon": "one step ahead (the next day, month, or year)",
+  "storm_rule": "A storm day is a day whose maximum 3-hour Kp is >= 5.0. Kp 5- equals 4.7 and is quiet under this rule.",
+  "series": [
+    {
+      "id": "dst",
+      "config": "config/space/dst.yaml",
+      "units": "nT",
+      "title": "Daily mean Dst",
+      "rows": 23300,
+      "val_rows": 4654,
+      "val_start": "2014-01-19",
+      "val_end": "2026-10-16",
+      "epochs_ran": 8,
+      "best_epoch": 3,
+      "train_seconds": 35.0,
+      "param_count": 67137,
+      "model": {
+        "mse": 154.478515625,
+        "rmse": 12.428938865661621,
+        "mae": 7.478503227233887,
+        "pearson_r": 0.6524441985819278
+      },
+      "trainer_baselines": {
+        "model": {
+          "mse": 154.478515625,
+          "rmse": 12.428938865661621,
+          "mae": 7.478503227233887
+        },
+        "persistence": {
+          "mse": 201.18199157714844,
+          "rmse": 14.183863639831543,
+          "mae": 8.417490005493164
+        },
+        "seasonal_naive": {
+          "mse": 508.56146240234375,
+          "rmse": 22.551307678222656,
+          "mae": 15.618607521057129
+        }
+      },
+      "lags": {
+        "lag_27": {
+          "mse": 420.4312438964844,
+          "rmse": 20.504419326782227,
+          "mae": 12.688654899597168,
+          "pearson_r": 0.21762284853197736
+        },
+        "lag_4018": {
+          "mse": 531.8380126953125,
+          "rmse": 23.061613082885742,
+          "mae": 16.04082489013672,
+          "pearson_r": 0.015954154619165335
+        }
+      },
+      "drift": null,
+      "storms": null
+    },
+    {
+      "id": "exoplanets",
+      "config": "config/space/exoplanets.yaml",
+      "units": "count",
+      "title": "Exoplanet discoveries per year",
+      "rows": 34,
+      "val_rows": 5,
+      "val_start": "2021-01-01",
+      "val_end": "2025-01-01",
+      "epochs_ran": 23,
+      "best_epoch": 13,
+      "train_seconds": 0.2,
+      "param_count": 2273,
+      "model": {
+        "mse": 11942.7666015625,
+        "rmse": 109.28296661376953,
+        "mae": 76.27742767333984,
+        "pearson_r": 0.8551414435878194
+      },
+      "trainer_baselines": {
+        "model": {
+          "mse": 11942.7666015625,
+          "rmse": 109.28296661376953,
+          "mae": 76.27742767333984
+        },
+        "persistence": {
+          "mse": 30762.0,
+          "rmse": 175.3909912109375,
+          "mae": 129.60000610351562
+        }
+      },
+      "lags": {},
+      "drift": {
+        "mse": 30790.884765625,
+        "rmse": 175.4733123779297,
+        "mae": 134.57142639160156,
+        "pearson_r": -0.14697190939855587
+      },
+      "storms": null
+    },
+    {
+      "id": "f107",
+      "config": "config/space/f107.yaml",
+      "units": "sfu",
+      "title": "Daily F10.7 solar radio flux",
+      "rows": 25222,
+      "val_rows": 5039,
+      "val_start": "2013-01-03",
+      "val_end": "2026-10-20",
+      "epochs_ran": 9,
+      "best_epoch": 4,
+      "train_seconds": 40.3,
+      "param_count": 67137,
+      "model": {
+        "mse": 76.4380111694336,
+        "rmse": 8.742883682250977,
+        "mae": 4.4375104904174805,
+        "pearson_r": 0.9795663322360163
+      },
+      "trainer_baselines": {
+        "model": {
+          "mse": 76.4380111694336,
+          "rmse": 8.742883682250977,
+          "mae": 4.4375104904174805
+        },
+        "persistence": {
+          "mse": 99.24713897705078,
+          "rmse": 9.962285995483398,
+          "mae": 4.531018257141113
+        },
+        "seasonal_naive": {
+          "mse": 1451.0772705078125,
+          "rmse": 38.09300994873047,
+          "mae": 26.2381649017334
+        }
+      },
+      "lags": {
+        "lag_27": {
+          "mse": 527.8789672851562,
+          "rmse": 22.975616455078125,
+          "mae": 14.801944732666016,
+          "pearson_r": 0.8596767214100581
+        },
+        "lag_4018": {
+          "mse": 1814.9949951171875,
+          "rmse": 42.60275650024414,
+          "mae": 25.535402297973633,
+          "pearson_r": 0.5000780433294746
+        }
+      },
+      "drift": null,
+      "storms": null
+    },
+    {
+      "id": "flares_c",
+      "config": "config/space/flares_c.yaml",
+      "units": "count",
+      "title": "C-class flares per month",
+      "rows": 501,
+      "val_rows": 95,
+      "val_start": "2009-07-01",
+      "val_end": "2017-05-01",
+      "epochs_ran": 20,
+      "best_epoch": 14,
+      "train_seconds": 2.1,
+      "param_count": 67137,
+      "model": {
+        "mse": 1838.4451904296875,
+        "rmse": 42.87709426879883,
+        "mae": 31.99081039428711,
+        "pearson_r": 0.7531559595481776
+      },
+      "trainer_baselines": {
+        "model": {
+          "mse": 1838.4451904296875,
+          "rmse": 42.87709426879883,
+          "mae": 31.99081039428711
+        },
+        "persistence": {
+          "mse": 2489.652587890625,
+          "rmse": 49.896419525146484,
+          "mae": 37.25263214111328
+        },
+        "seasonal_naive": {
+          "mse": 5677.916015625,
+          "rmse": 75.35194396972656,
+          "mae": 57.81052780151367
+        }
+      },
+      "lags": {
+        "lag_132": {
+          "mse": 9592.9052734375,
+          "rmse": 97.94337463378906,
+          "mae": 79.87368774414062,
+          "pearson_r": 0.23278547984754663
+        }
+      },
+      "drift": null,
+      "storms": null
+    },
+    {
+      "id": "flares_m",
+      "config": "config/space/flares_m.yaml",
+      "units": "count",
+      "title": "M-class flares per month",
+      "rows": 501,
+      "val_rows": 95,
+      "val_start": "2009-07-01",
+      "val_end": "2017-05-01",
+      "epochs_ran": 11,
+      "best_epoch": 5,
+      "train_seconds": 1.2,
+      "param_count": 67137,
+      "model": {
+        "mse": 82.98747253417969,
+        "rmse": 9.109745979309082,
+        "mae": 5.829232692718506,
+        "pearson_r": 0.3890452081919318
+      },
+      "trainer_baselines": {
+        "model": {
+          "mse": 82.98747253417969,
+          "rmse": 9.109745979309082,
+          "mae": 5.829232692718506
+        },
+        "persistence": {
+          "mse": 118.31578826904297,
+          "rmse": 10.87730598449707,
+          "mae": 6.989473819732666
+        },
+        "seasonal_naive": {
+          "mse": 161.4842071533203,
+          "rmse": 12.707643508911133,
+          "mae": 8.010526657104492
+        }
+      },
+      "lags": {
+        "lag_132": {
+          "mse": 290.2842102050781,
+          "rmse": 17.037729263305664,
+          "mae": 11.884210586547852,
+          "pearson_r": 0.06841458226908954
+        }
+      },
+      "drift": null,
+      "storms": null
+    },
+    {
+      "id": "flares_x",
+      "config": "config/space/flares_x.yaml",
+      "units": "count",
+      "title": "X-class flares per month",
+      "rows": 501,
+      "val_rows": 95,
+      "val_start": "2009-07-01",
+      "val_end": "2017-05-01",
+      "epochs_ran": 11,
+      "best_epoch": 5,
+      "train_seconds": 1.1,
+      "param_count": 67137,
+      "model": {
+        "mse": 1.187650203704834,
+        "rmse": 1.0897936820983887,
+        "mae": 0.7530580759048462,
+        "pearson_r": 0.22517747308747385
+      },
+      "trainer_baselines": {
+        "model": {
+          "mse": 1.187650203704834,
+          "rmse": 1.0897936820983887,
+          "mae": 0.7530580759048462
+        },
+        "persistence": {
+          "mse": 2.1052632331848145,
+          "rmse": 1.4509525299072266,
+          "mae": 0.6947368383407593
+        },
+        "seasonal_naive": {
+          "mse": 2.1263158321380615,
+          "rmse": 1.4581892490386963,
+          "mae": 0.7789473533630371
+        }
+      },
+      "lags": {
+        "lag_132": {
+          "mse": 4.705263137817383,
+          "rmse": 2.169161796569824,
+          "mae": 1.2315789461135864,
+          "pearson_r": 0.12071193665848276
+        }
+      },
+      "drift": null,
+      "storms": null
+    },
+    {
+      "id": "kp",
+      "config": "config/space/kp.yaml",
+      "units": "Kp",
+      "title": "Daily maximum Kp",
+      "rows": 25222,
+      "val_rows": 5039,
+      "val_start": "2013-01-03",
+      "val_end": "2026-10-20",
+      "epochs_ran": 10,
+      "best_epoch": 5,
+      "train_seconds": 44.3,
+      "param_count": 67137,
+      "model": {
+        "mse": 1.2764735221862793,
+        "rmse": 1.1298112869262695,
+        "mae": 0.8609151244163513,
+        "pearson_r": 0.5496222987767775
+      },
+      "trainer_baselines": {
+        "model": {
+          "mse": 1.2764735221862793,
+          "rmse": 1.1298112869262695,
+          "mae": 0.8609151244163513
+        },
+        "persistence": {
+          "mse": 1.7949354648590088,
+          "rmse": 1.339751958847046,
+          "mae": 0.9938875436782837
+        },
+        "seasonal_naive": {
+          "mse": 3.387749433517456,
+          "rmse": 1.8405840396881104,
+          "mae": 1.4490771293640137
+        }
+      },
+      "lags": {
+        "lag_27": {
+          "mse": 2.6048643589019775,
+          "rmse": 1.6139591932296753,
+          "mae": 1.2221274375915527,
+          "pearson_r": 0.2851963154224538
+        },
+        "lag_4018": {
+          "mse": 3.8040759563446045,
+          "rmse": 1.9504040479660034,
+          "mae": 1.5278033018112183,
+          "pearson_r": 0.0349434354800508
+        }
+      },
+      "drift": null,
+      "storms": {
+        "model": {
+          "threshold": 5.0,
+          "n": 5039.0,
+          "storm_days": 432.0,
+          "storm_rate": 0.08573129589204208,
+          "alarms": 61.0,
+          "tp": 36.0,
+          "fp": 25.0,
+          "fn": 396.0,
+          "tn": 4582.0,
+          "precision": 0.5901639344262295,
+          "recall": 0.08333333333333333,
+          "f1": 0.1460446247464503
+        },
+        "persistence": {
+          "threshold": 5.0,
+          "n": 5039.0,
+          "storm_days": 432.0,
+          "storm_rate": 0.08573129589204208,
+          "alarms": 432.0,
+          "tp": 150.0,
+          "fp": 282.0,
+          "fn": 282.0,
+          "tn": 4325.0,
+          "precision": 0.3472222222222222,
+          "recall": 0.3472222222222222,
+          "f1": 0.3472222222222222
+        },
+        "lag_27": {
+          "threshold": 5.0,
+          "n": 5039.0,
+          "storm_days": 432.0,
+          "storm_rate": 0.08573129589204208,
+          "alarms": 429.0,
+          "tp": 88.0,
+          "fp": 341.0,
+          "fn": 344.0,
+          "tn": 4266.0,
+          "precision": 0.20512820512820512,
+          "recall": 0.2037037037037037,
+          "f1": 0.20441347270615562
+        },
+        "lag_4018": {
+          "threshold": 5.0,
+          "n": 5039.0,
+          "storm_days": 432.0,
+          "storm_rate": 0.08573129589204208,
+          "alarms": 479.0,
+          "tp": 41.0,
+          "fp": 438.0,
+          "fn": 391.0,
+          "tn": 4169.0,
+          "precision": 0.08559498956158663,
+          "recall": 0.09490740740740741,
+          "f1": 0.09001097694840833
+        }
+      }
+    },
+    {
+      "id": "kp_omni_window",
+      "config": "config/space/kp_omni_window.yaml",
+      "units": "Kp",
+      "title": "Daily maximum Kp on the OMNI window",
+      "rows": 11663,
+      "val_rows": 2327,
+      "val_start": "2020-05-30",
+      "val_end": "2026-10-12",
+      "epochs_ran": 10,
+      "best_epoch": 5,
+      "train_seconds": 21.2,
+      "param_count": 67137,
+      "model": {
+        "mse": 1.3919432163238525,
+        "rmse": 1.1798064708709717,
+        "mae": 0.886038064956665,
+        "pearson_r": 0.5326292757030665
+      },
+      "trainer_baselines": {
+        "model": {
+          "mse": 1.3919432163238525,
+          "rmse": 1.1798064708709717,
+          "mae": 0.886038064956665
+        },
+        "persistence": {
+          "mse": 1.9563343524932861,
+          "rmse": 1.3986902236938477,
+          "mae": 1.0339062213897705
+        },
+        "seasonal_naive": {
+          "mse": 3.3382599353790283,
+          "rmse": 1.8270906209945679,
+          "mae": 1.4285775423049927
+        }
+      },
+      "lags": {
+        "lag_27": {
+          "mse": 2.8476364612579346,
+          "rmse": 1.687494158744812,
+          "mae": 1.2741297483444214,
+          "pearson_r": 0.2591145201351993
+        },
+        "lag_4018": {
+          "mse": 3.6268889904022217,
+          "rmse": 1.9044393301010132,
+          "mae": 1.48427152633667,
+          "pearson_r": 0.08374168597328237
+        }
+      },
+      "drift": null,
+      "storms": {
+        "model": {
+          "threshold": 5.0,
+          "n": 2327.0,
+          "storm_days": 236.0,
+          "storm_rate": 0.101418134937688,
+          "alarms": 11.0,
+          "tp": 6.0,
+          "fp": 5.0,
+          "fn": 230.0,
+          "tn": 2086.0,
+          "precision": 0.5454545454545454,
+          "recall": 0.025423728813559324,
+          "f1": 0.048582995951417005
+        },
+        "persistence": {
+          "threshold": 5.0,
+          "n": 2327.0,
+          "storm_days": 236.0,
+          "storm_rate": 0.101418134937688,
+          "alarms": 236.0,
+          "tp": 85.0,
+          "fp": 151.0,
+          "fn": 151.0,
+          "tn": 1940.0,
+          "precision": 0.3601694915254237,
+          "recall": 0.3601694915254237,
+          "f1": 0.3601694915254237
+        },
+        "lag_27": {
+          "threshold": 5.0,
+          "n": 2327.0,
+          "storm_days": 236.0,
+          "storm_rate": 0.101418134937688,
+          "alarms": 233.0,
+          "tp": 48.0,
+          "fp": 185.0,
+          "fn": 188.0,
+          "tn": 1906.0,
+          "precision": 0.20600858369098712,
+          "recall": 0.2033898305084746,
+          "f1": 0.2046908315565032
+        },
+        "lag_4018": {
+          "threshold": 5.0,
+          "n": 2327.0,
+          "storm_days": 236.0,
+          "storm_rate": 0.101418134937688,
+          "alarms": 155.0,
+          "tp": 19.0,
+          "fp": 136.0,
+          "fn": 217.0,
+          "tn": 1955.0,
+          "precision": 0.12258064516129032,
+          "recall": 0.08050847457627118,
+          "f1": 0.09718670076726343
+        }
+      }
+    },
+    {
+      "id": "kp_solar_wind",
+      "config": "config/space/kp_solar_wind.yaml",
+      "units": "Kp",
+      "title": "Daily maximum Kp with solar-wind features",
+      "rows": 11663,
+      "val_rows": 2327,
+      "val_start": "2020-05-30",
+      "val_end": "2026-10-12",
+      "epochs_ran": 6,
+      "best_epoch": 1,
+      "train_seconds": 12.4,
+      "param_count": 67265,
+      "model": {
+        "mse": 1.3336085081100464,
+        "rmse": 1.1548197269439697,
+        "mae": 0.8753390908241272,
+        "pearson_r": 0.554036361224408
+      },
+      "trainer_baselines": {
+        "model": {
+          "mse": 1.3336085081100464,
+          "rmse": 1.1548197269439697,
+          "mae": 0.8753390908241272
+        },
+        "persistence": {
+          "mse": 1.9563343524932861,
+          "rmse": 1.3986902236938477,
+          "mae": 1.0339062213897705
+        },
+        "seasonal_naive": {
+          "mse": 3.3382599353790283,
+          "rmse": 1.8270906209945679,
+          "mae": 1.4285775423049927
+        }
+      },
+      "lags": {
+        "lag_27": {
+          "mse": 2.8476364612579346,
+          "rmse": 1.687494158744812,
+          "mae": 1.2741297483444214,
+          "pearson_r": 0.2591145201351993
+        },
+        "lag_4018": {
+          "mse": 3.6268889904022217,
+          "rmse": 1.9044393301010132,
+          "mae": 1.48427152633667,
+          "pearson_r": 0.08374168597328237
+        }
+      },
+      "drift": null,
+      "storms": {
+        "model": {
+          "threshold": 5.0,
+          "n": 2327.0,
+          "storm_days": 236.0,
+          "storm_rate": 0.101418134937688,
+          "alarms": 40.0,
+          "tp": 26.0,
+          "fp": 14.0,
+          "fn": 210.0,
+          "tn": 2077.0,
+          "precision": 0.65,
+          "recall": 0.11016949152542373,
+          "f1": 0.18840579710144925
+        },
+        "persistence": {
+          "threshold": 5.0,
+          "n": 2327.0,
+          "storm_days": 236.0,
+          "storm_rate": 0.101418134937688,
+          "alarms": 236.0,
+          "tp": 85.0,
+          "fp": 151.0,
+          "fn": 151.0,
+          "tn": 1940.0,
+          "precision": 0.3601694915254237,
+          "recall": 0.3601694915254237,
+          "f1": 0.3601694915254237
+        },
+        "lag_27": {
+          "threshold": 5.0,
+          "n": 2327.0,
+          "storm_days": 236.0,
+          "storm_rate": 0.101418134937688,
+          "alarms": 233.0,
+          "tp": 48.0,
+          "fp": 185.0,
+          "fn": 188.0,
+          "tn": 1906.0,
+          "precision": 0.20600858369098712,
+          "recall": 0.2033898305084746,
+          "f1": 0.2046908315565032
+        },
+        "lag_4018": {
+          "threshold": 5.0,
+          "n": 2327.0,
+          "storm_days": 236.0,
+          "storm_rate": 0.101418134937688,
+          "alarms": 155.0,
+          "tp": 19.0,
+          "fp": 136.0,
+          "fn": 217.0,
+          "tn": 1955.0,
+          "precision": 0.12258064516129032,
+          "recall": 0.08050847457627118,
+          "f1": 0.09718670076726343
+        }
+      }
+    },
+    {
+      "id": "launches",
+      "config": "config/space/launches.yaml",
+      "units": "count",
+      "title": "Orbital launch attempts per month",
+      "rows": 828,
+      "val_rows": 160,
+      "val_start": "2013-06-01",
+      "val_end": "2026-09-01",
+      "epochs_ran": 10,
+      "best_epoch": 4,
+      "train_seconds": 1.7,
+      "param_count": 67137,
+      "model": {
+        "mse": 44.264522552490234,
+        "rmse": 6.653158664703369,
+        "mae": 4.819230079650879,
+        "pearson_r": 0.8319985649628935
+      },
+      "trainer_baselines": {
+        "model": {
+          "mse": 44.264522552490234,
+          "rmse": 6.653158664703369,
+          "mae": 4.819230079650879
+        },
+        "persistence": {
+          "mse": 26.46875,
+          "rmse": 5.144778728485107,
+          "mae": 4.018750190734863
+        },
+        "seasonal_naive": {
+          "mse": 19.75,
+          "rmse": 4.44409704208374,
+          "mae": 3.5
+        }
+      },
+      "lags": {},
+      "drift": {
+        "mse": 26.46683692932129,
+        "rmse": 5.144592761993408,
+        "mae": 4.018843650817871,
+        "pearson_r": 0.7840802321140696
+      },
+      "storms": null
+    },
+    {
+      "id": "neo_approaches",
+      "config": "config/space/neo_approaches.yaml",
+      "units": "count",
+      "title": "NEO close approaches per month",
+      "rows": 1521,
+      "val_rows": 299,
+      "val_start": "2001-11-01",
+      "val_end": "2026-09-01",
+      "epochs_ran": 9,
+      "best_epoch": 3,
+      "train_seconds": 2.9,
+      "param_count": 67137,
+      "model": {
+        "mse": 5614.25048828125,
+        "rmse": 74.92829895019531,
+        "mae": 51.27499771118164,
+        "pearson_r": 0.3351911930321563
+      },
+      "trainer_baselines": {
+        "model": {
+          "mse": 5614.25048828125,
+          "rmse": 74.92829895019531,
+          "mae": 51.27499771118164
+        },
+        "persistence": {
+          "mse": 788.387939453125,
+          "rmse": 28.0782470703125,
+          "mae": 18.521739959716797
+        },
+        "seasonal_naive": {
+          "mse": 413.5718994140625,
+          "rmse": 20.336467742919922,
+          "mae": 13.745819091796875
+        }
+      },
+      "lags": {},
+      "drift": {
+        "mse": 788.3780517578125,
+        "rmse": 28.07807159423828,
+        "mae": 18.521949768066406,
+        "pearson_r": 0.8728692670169366
+      },
+      "storms": null
+    },
+    {
+      "id": "neo_discoveries",
+      "config": "config/space/neo_discoveries.yaml",
+      "units": "count",
+      "title": "NEO first-observation counts per month",
+      "rows": 1596,
+      "val_rows": 314,
+      "val_start": "2000-08-01",
+      "val_end": "2026-09-01",
+      "epochs_ran": 15,
+      "best_epoch": 9,
+      "train_seconds": 4.9,
+      "param_count": 67137,
+      "model": {
+        "mse": 20786.7890625,
+        "rmse": 144.17623901367188,
+        "mae": 110.25696563720703,
+        "pearson_r": -0.3727434364540972
+      },
+      "trainer_baselines": {
+        "model": {
+          "mse": 20786.7890625,
+          "rmse": 144.17623901367188,
+          "mae": 110.25696563720703
+        },
+        "persistence": {
+          "mse": 3367.308837890625,
+          "rmse": 58.02851867675781,
+          "mae": 39.00955581665039
+        },
+        "seasonal_naive": {
+          "mse": 2124.40771484375,
+          "rmse": 46.0912971496582,
+          "mae": 33.286624908447266
+        }
+      },
+      "lags": {},
+      "drift": {
+        "mse": 3367.289794921875,
+        "rmse": 58.02835464477539,
+        "mae": 39.00981521606445,
+        "pearson_r": 0.804794965710389
+      },
+      "storms": null
+    },
+    {
+      "id": "solar_wind_density",
+      "config": "config/space/solar_wind_density.yaml",
+      "units": "n/cm^3",
+      "title": "Daily solar-wind density",
+      "rows": 11663,
+      "val_rows": 2327,
+      "val_start": "2020-05-30",
+      "val_end": "2026-10-12",
+      "epochs_ran": 20,
+      "best_epoch": 16,
+      "train_seconds": 41.2,
+      "param_count": 67137,
+      "model": {
+        "mse": 11.218843460083008,
+        "rmse": 3.349454164505005,
+        "mae": 2.354586124420166,
+        "pearson_r": 0.5417965916731861
+      },
+      "trainer_baselines": {
+        "model": {
+          "mse": 11.218843460083008,
+          "rmse": 3.349454164505005,
+          "mae": 2.354586124420166
+        },
+        "persistence": {
+          "mse": 18.145465850830078,
+          "rmse": 4.259749412536621,
+          "mae": 2.8199830055236816
+        },
+        "seasonal_naive": {
+          "mse": 31.00072479248047,
+          "rmse": 5.567829608917236,
+          "mae": 4.023033618927002
+        }
+      },
+      "lags": {
+        "lag_27": {
+          "mse": 22.86956024169922,
+          "rmse": 4.782212734222412,
+          "mae": 3.344606876373291,
+          "pearson_r": 0.2728205880760752
+        },
+        "lag_4018": {
+          "mse": 29.42266082763672,
+          "rmse": 5.4242658615112305,
+          "mae": 3.9493982791900635,
+          "pearson_r": -0.02163333890475655
+        }
+      },
+      "drift": null,
+      "storms": null
+    },
+    {
+      "id": "solar_wind_speed",
+      "config": "config/space/solar_wind_speed.yaml",
+      "units": "km/s",
+      "title": "Daily solar-wind speed",
+      "rows": 11663,
+      "val_rows": 2327,
+      "val_start": "2020-05-30",
+      "val_end": "2026-10-12",
+      "epochs_ran": 20,
+      "best_epoch": 15,
+      "train_seconds": 42.6,
+      "param_count": 67137,
+      "model": {
+        "mse": 2891.39013671875,
+        "rmse": 53.77164840698242,
+        "mae": 38.70875930786133,
+        "pearson_r": 0.8164850873256226
+      },
+      "trainer_baselines": {
+        "model": {
+          "mse": 2891.39013671875,
+          "rmse": 53.77164840698242,
+          "mae": 38.70875930786133
+        },
+        "persistence": {
+          "mse": 3944.7626953125,
+          "rmse": 62.80734634399414,
+          "mae": 45.856895446777344
+        },
+        "seasonal_naive": {
+          "mse": 15326.091796875,
+          "rmse": 123.79859161376953,
+          "mae": 95.75891876220703
+        }
+      },
+      "lags": {
+        "lag_27": {
+          "mse": 9917.669921875,
+          "rmse": 99.5875015258789,
+          "mae": 73.85818481445312,
+          "pearson_r": 0.428472294642074
+        },
+        "lag_4018": {
+          "mse": 16056.400390625,
+          "rmse": 126.71385192871094,
+          "mae": 96.85797119140625,
+          "pearson_r": 0.021162808400836213
+        }
+      },
+      "drift": null,
+      "storms": null
+    }
+  ]
+}

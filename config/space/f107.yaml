@@ -1,0 +1,58 @@
+model:
+  name: time_series_transformer
+  input_dim: 1
+  output_dim: 1
+  d_model: 64
+  nhead: 4
+  num_encoder_layers: 2
+  dim_feedforward: 128
+  dropout: 0.1
+  max_seq_len: 512
+
+data:
+  source: csv
+  path: data/space/f107_daily.csv
+  date_column: date
+  feature_columns: [f107]
+  target_column: f107
+  seq_len: 27
+  val_split: 0.2
+  split_mode: temporal
+  split_seed: 0
+  normalize: true
+  report_baselines: true
+  seed: 0
+
+training:
+  experiment_name: space_f107
+  batch_size: 64
+  learning_rate: 0.001
+  epochs: 20
+  patience: 5
+  max_grad_norm: 1.0
+  device: cpu
+  checkpoint_dir: checkpoints/space/f107
+  log_interval: 5
+  seed: 0
+
+inference:
+  device: cpu
+  checkpoint_path: checkpoints/space/f107/best_model.pt
+
+api:
+  training_enabled: true
+
+storage:
+  db_path: data/space/experiments.db
+
+space:
+  id: f107
+  title: Daily F10.7 solar radio flux
+  units: sfu
+  lags: [27, 4018]
+  storm_threshold: null
+  drift: false
+  chart: true
+
+retrain:
+  enabled: false
