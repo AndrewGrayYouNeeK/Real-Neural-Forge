@@ -360,9 +360,11 @@ def overdue_ticket(history: list[HistoryDraw]) -> dict[str, Any]:
         return total - 1 - last_index
 
     whites = sorted(
-        range(WHITE_LOW, WHITE_HIGH + 1),
-        key=lambda number: (-gap(last_white[number]), number),
-    )[:WHITE_BALL_COUNT]
+        sorted(
+            range(WHITE_LOW, WHITE_HIGH + 1),
+            key=lambda number: (-gap(last_white[number]), number),
+        )[:WHITE_BALL_COUNT]
+    )
     powerball = sorted(
         range(POWERBALL_LOW, POWERBALL_HIGH + 1),
         key=lambda number: (-gap(last_powerball[number]), number),

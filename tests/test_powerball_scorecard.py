@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import zlib
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 
 import numpy as np
@@ -178,6 +178,35 @@ def test_pattern_tickets_are_deterministic_and_the_random_seed_is_public():
         "powerball": 26,
     }
     assert overdue_ticket(history) == {"whites": [7, 8, 9, 10, 11], "powerball": 2}
+    # Gaps differ, so the five most overdue whites are not chosen in numeric order.
+    early = [
+        (10, 20, 30, 40, 69),
+        (1, 11, 21, 31, 41),
+        (2, 12, 22, 32, 42),
+        (3, 13, 23, 33, 43),
+        (4, 14, 24, 34, 44),
+    ]
+    stale = [
+        HistoryDraw(date(2020, 1, 1 + index), whites, 1)
+        for index, whites in enumerate(early)
+    ]
+    refresh = [
+        number for draw in early for number in draw if number not in {1, 2, 3, 4, 69}
+    ]
+    seen_early = {ball for draw in early for ball in draw}
+    later = refresh + [number for number in range(1, 70) if number not in seen_early]
+    for offset in range(0, len(later), 5):
+        chunk = later[offset : offset + 5]
+        while len(chunk) < 5:
+            chunk.append(later[0])
+        stale.append(
+            HistoryDraw(
+                date(2020, 1, 1) + timedelta(days=len(stale)),
+                (chunk[0], chunk[1], chunk[2], chunk[3], chunk[4]),
+                2,
+            )
+        )
+    assert overdue_ticket(stale)["whites"] == [1, 2, 3, 4, 69]
     first = pattern_tickets(history, date(2026, 11, 2), "2026-11")
     second = pattern_tickets(history, date(2026, 11, 2), "2026-11")
     assert first == second
