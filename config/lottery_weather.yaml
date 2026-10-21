@@ -1,0 +1,31 @@
+# Weather-augmented Powerball ticket model.
+# Inputs are the previous draw's numbers plus Tallahassee airport
+# (USW00093805) max temp, min temp, and precipitation on those past draw
+# dates. Central Park TMAX is added only when every training draw aligns.
+# The target draw's own weather is not an input.
+
+model:
+  name: time_series_transformer
+  input_dim: 9
+  output_dim: 6
+  d_model: 32
+  nhead: 4
+  num_encoder_layers: 2
+  dim_feedforward: 64
+  dropout: 0.1
+  max_seq_len: 64
+
+data:
+  seq_len: 16
+  val_split: 0.2
+  ticket_val_split: 0.1
+  weather_station: USW00093805
+  weather_columns: ["tmax_c", "tmin_c", "prcp_mm"]
+
+training:
+  epochs: 12
+  patience: 4
+  batch_size: 64
+  learning_rate: 0.001
+  seed: 0
+  device: cpu

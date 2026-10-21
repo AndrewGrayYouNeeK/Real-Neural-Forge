@@ -1,0 +1,28 @@
+# Monthly Powerball ticket model. Numbers only: five sorted white balls and
+# the Powerball. Weather is a separate config. Checkpoints are not kept.
+# The monthly workflow trains this from draws on or before the day before
+# the forecast month and logs the one-step ticket.
+
+model:
+  name: time_series_transformer
+  input_dim: 6
+  output_dim: 6
+  d_model: 32
+  nhead: 4
+  num_encoder_layers: 2
+  dim_feedforward: 64
+  dropout: 0.1
+  max_seq_len: 64
+
+data:
+  seq_len: 16
+  val_split: 0.2
+  ticket_val_split: 0.1
+
+training:
+  epochs: 12
+  patience: 4
+  batch_size: 64
+  learning_rate: 0.001
+  seed: 0
+  device: cpu

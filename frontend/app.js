@@ -890,9 +890,52 @@ function renderAdhoc(result) {
   host.replaceChildren();
 }
 
+function scorecardCell(text) {
+  const cell = document.createElement("td");
+  cell.textContent = text;
+  return cell;
+}
+
+function formatChance(value) {
+  const number = asNumber(value);
+  return number == null ? "—" : number.toFixed(2);
+}
+
+async function refreshScorecard() {
+  const summary = document.getElementById("powerball-summary");
+  const body = document.getElementById("powerball-body");
+  try {
+    const card = await fetchJson("/powerball/scorecard");
+    summary.textContent = card.summary || "No Powerball scorecard has been published.";
+    body.replaceChildren();
+    if (!card.available) return;
+    const cumulative = card.cumulative || {};
+    for (const name of Object.keys(cumulative)) {
+      const item = cumulative[name] || {};
+      const row = document.createElement("tr");
+      for (const value of [
+        name,
+        String(item.scored ?? 0),
+        String(item.white_matches ?? 0),
+        formatChance(item.expected_white_matches),
+        String(item.powerball_hits ?? 0),
+        formatChance(item.expected_powerball_hits),
+        String(item.prize_tickets ?? 0),
+      ]) {
+        row.append(scorecardCell(value));
+      }
+      body.append(row);
+    }
+  } catch {
+    summary.textContent = "Powerball scorecard is unavailable.";
+    body.replaceChildren();
+  }
+}
+
 document.getElementById("refresh-btn").addEventListener("click", () => {
   holdTrainingMessage = false;
   clearNotice();
+  refreshScorecard();
   Promise.all([refreshStatus(), refreshSeries()]).catch(reportError);
 });
 
@@ -976,6 +1019,7 @@ document.getElementById("train-btn").addEventListener("click", async () => {
   }
 });
 
+refreshScorecard();
 Promise.all([refreshStatus(), refreshSeries()]).catch((error) => {
   reportError(error);
   const grid = document.getElementById("status-grid");
