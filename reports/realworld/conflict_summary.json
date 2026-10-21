@@ -1,0 +1,470 @@
+{
+  "disclaimer": "Observed-only means drop right-censored spells and are biased short. The Kaplan-Meier median and the Weibull mean keep those spells in the risk set. This is an aggregate historical description, not a prediction of when or where a specific war will start.",
+  "sources": {
+    "ged_version": "26.1",
+    "acd_version": "26.1",
+    "acd_observation_end": "2025-12-31",
+    "acd_rows": 2816,
+    "conflicts": 303,
+    "episodes": 628,
+    "onsets_before_1946_excluded": 7,
+    "termination_version": "4-2024",
+    "termination_observation_end": "2024-12-31",
+    "termination_corresponds_to_acd": "25.1",
+    "dyad_observation_end": "2024-12-31",
+    "licence": "CC BY 4.0"
+  },
+  "onset_gaps": {
+    "summary": {
+      "n": 295,
+      "mean": 97.49152542372882,
+      "median": 56.0,
+      "std": 125.60270655492926,
+      "min": 0.0,
+      "max": 978.0,
+      "cv": 1.2883448690439545,
+      "cv_squared": 1.6598325015918842
+    },
+    "n_zero_day": 10,
+    "lag1_correlation": 0.07095755610018563,
+    "exponential": {
+      "n": 285.0,
+      "rate_per_day": 0.009909596662030598,
+      "mean": 100.91228070175438,
+      "cv_squared": 1.569740729873213,
+      "ks": 0.08621473657814527,
+      "p_value": 0.004987531172069825,
+      "n_boot": 400.0
+    },
+    "weibull": {
+      "ok": true,
+      "shape": 0.804720532606563,
+      "scale_days": 86.36688378885874,
+      "mean_days": 97.4454560443605,
+      "median_days": 54.77044052851068,
+      "nll": 1633.0755794782633,
+      "exponential_nll": 1646.0820914224844,
+      "lr_stat": 26.01302388844215,
+      "lr_p_value": 3.391219058447925e-07,
+      "floor_days": 0.5
+    },
+    "ols_trend": {
+      "n": 295.0,
+      "slope_per_year": 0.7879825045479227,
+      "slope_per_decade": 7.879825045479228,
+      "intercept": -1463.752902036308,
+      "t": 2.454382018842785,
+      "permutation_p": 0.011494252873563218
+    },
+    "mann_kendall": {
+      "n": 295.0,
+      "s": 2415.0,
+      "z": 1.425838734270594,
+      "p_value": 0.15391489727616256
+    },
+    "decades": [
+      {
+        "decade": 1940.0,
+        "n": 30.0,
+        "mean": 45.7,
+        "median": 30.5
+      },
+      {
+        "decade": 1950.0,
+        "n": 29.0,
+        "mean": 124.58620689655173,
+        "median": 73.0
+      },
+      {
+        "decade": 1960.0,
+        "n": 47.0,
+        "mean": 74.70212765957447,
+        "median": 70.0
+      },
+      {
+        "decade": 1970.0,
+        "n": 39.0,
+        "mean": 98.17948717948718,
+        "median": 62.0
+      },
+      {
+        "decade": 1980.0,
+        "n": 34.0,
+        "mean": 107.1470588235294,
+        "median": 63.5
+      },
+      {
+        "decade": 1990.0,
+        "n": 47.0,
+        "mean": 75.36170212765957,
+        "median": 35.0
+      },
+      {
+        "decade": 2000.0,
+        "n": 17.0,
+        "mean": 214.76470588235293,
+        "median": 165.0
+      },
+      {
+        "decade": 2010.0,
+        "n": 45.0,
+        "mean": 79.68888888888888,
+        "median": 37.0
+      },
+      {
+        "decade": 2020.0,
+        "n": 7.0,
+        "mean": 287.7142857142857,
+        "median": 232.0
+      }
+    ],
+    "by_region": {
+      "1, 2": {
+        "n_gaps": 2,
+        "summary": {
+          "n": 2,
+          "mean": 4140.5,
+          "median": 4140.5,
+          "std": 3253.398300239305,
+          "min": 1840.0,
+          "max": 6441.0,
+          "cv": 0.7857501027024043,
+          "cv_squared": 0.6174032238968389
+        },
+        "lag1": null
+      },
+      "1, 2, 3, 5": {
+        "n_gaps": 0,
+        "summary": {
+          "n": 0
+        },
+        "lag1": null
+      },
+      "1, 2, 5": {
+        "n_gaps": 0,
+        "summary": {
+          "n": 0
+        },
+        "lag1": null
+      },
+      "1, 3": {
+        "n_gaps": 3,
+        "summary": {
+          "n": 3,
+          "mean": 4095.6666666666665,
+          "median": 3952.0,
+          "std": 1569.439496550706,
+          "min": 2603.0,
+          "max": 5732.0,
+          "cv": 0.3831951240866052,
+          "cv_squared": 0.14683850312374877
+        },
+        "lag1": -1.0
+      },
+      "1, 3, 5": {
+        "n_gaps": 0,
+        "summary": {
+          "n": 0
+        },
+        "lag1": null
+      },
+      "1, 4": {
+        "n_gaps": 0,
+        "summary": {
+          "n": 0
+        },
+        "lag1": null
+      },
+      "1, 5": {
+        "n_gaps": 0,
+        "summary": {
+          "n": 0
+        },
+        "lag1": null
+      },
+      "Africa": {
+        "n_gaps": 107,
+        "summary": {
+          "n": 107,
+          "mean": 260.6261682242991,
+          "median": 165.0,
+          "std": 337.378895766709,
+          "min": 0.0,
+          "max": 2034.0,
+          "cv": 1.2944935578239989,
+          "cv_squared": 1.6757135712478348
+        },
+        "lag1": -0.04140397168928507
+      },
+      "Americas": {
+        "n_gaps": 25,
+        "summary": {
+          "n": 25,
+          "mean": 805.76,
+          "median": 535.0,
+          "std": 758.1801281138055,
+          "min": 74.0,
+          "max": 3224.0,
+          "cv": 0.9409503178537102,
+          "cv_squared": 0.8853875006689983
+        },
+        "lag1": -0.09726755202225033
+      },
+      "Asia": {
+        "n_gaps": 78,
+        "summary": {
+          "n": 78,
+          "mean": 338.70512820512823,
+          "median": 142.0,
+          "std": 421.54148503999414,
+          "min": 0.0,
+          "max": 1837.0,
+          "cv": 1.2445677668768516,
+          "cv_squared": 1.5489489263488332
+        },
+        "lag1": 0.1787247553794709
+      },
+      "Europe": {
+        "n_gaps": 34,
+        "summary": {
+          "n": 34,
+          "mean": 740.9411764705883,
+          "median": 102.5,
+          "std": 1431.4690259284387,
+          "min": 1.0,
+          "max": 7068.0,
+          "cv": 1.931960419242891,
+          "cv_squared": 3.732471061521167
+        },
+        "lag1": 0.06745384052768007
+      },
+      "Middle East": {
+        "n_gaps": 35,
+        "summary": {
+          "n": 35,
+          "mean": 819.9714285714285,
+          "median": 456.0,
+          "std": 1046.9589431164093,
+          "min": 0.0,
+          "max": 3998.0,
+          "cv": 1.2768236875526786,
+          "cv_squared": 1.6302787290956202
+        },
+        "lag1": 0.08617542581950245
+      }
+    },
+    "forecast_baselines": {
+      "n_val": 57,
+      "seq_len": 8,
+      "seasonal_period": 4,
+      "holdout_starts": "2007-10-07",
+      "baselines": {
+        "mean": {
+          "n": 57.0,
+          "mae": 109.02697921273773,
+          "rmse": 183.7558275361302,
+          "mse": 33766.204153488026
+        },
+        "persistence": {
+          "n": 57.0,
+          "mae": 141.57894736842104,
+          "rmse": 239.7683092180098,
+          "mse": 57488.84210526316
+        },
+        "seasonal_naive": {
+          "n": 57.0,
+          "mae": 127.19298245614036,
+          "rmse": 219.03039923598206,
+          "mse": 47974.31578947369
+        },
+        "poisson_trend": {
+          "n": 57.0,
+          "mae": 125.59427354743973,
+          "rmse": 180.3160255307804,
+          "mse": 32513.869063217047
+        }
+      },
+      "poisson_model": {
+        "log_mean_at_mean_year": 1.3517580317730737,
+        "slope_log_mean_per_year": -0.009459574284319372,
+        "year_mean": 1976.0,
+        "n_years": 61.0
+      },
+      "constant_rate_note": "Under squared error a constant-rate exponential forecast is the training mean, so it is the mean baseline rather than a fourth number."
+    }
+  },
+  "peace_spells_conflict": {
+    "n": 563,
+    "n_observed": 325,
+    "n_censored": 238,
+    "observed_only": {
+      "n": 325,
+      "mean": 2711.5723076923077,
+      "median": 1213.0,
+      "std": 3375.9396147686207,
+      "min": 427.0,
+      "max": 19236.0,
+      "cv": 1.2450118350860888,
+      "cv_squared": 1.5500544695044305
+    },
+    "kaplan_meier_median_days": 4916.0,
+    "kaplan_meier_survival_at_end": 0.357166041725103,
+    "weibull": {
+      "ok": true,
+      "shape": 0.6015225339245952,
+      "scale_days": 13807.660873874389,
+      "mean_days": 20706.35139618757,
+      "median_days": 7507.592648506685,
+      "nll": 3310.976585943581,
+      "exponential_nll": 3388.0666738906484,
+      "lr_stat": 154.18017589413466,
+      "lr_p_value": 2.115209879112115e-35,
+      "floor_days": 0.5
+    },
+    "note": "Observed-only means drop right-censored spells and are biased short. The Kaplan-Meier median and the Weibull mean keep those spells in the risk set. This is an aggregate historical description, not a prediction of when or where a specific war will start."
+  },
+  "peace_spells_country": {
+    "n": 417,
+    "n_observed": 331,
+    "n_censored": 86,
+    "observed_only": {
+      "n": 331,
+      "mean": 2475.6163141993957,
+      "median": 1257.0,
+      "std": 2939.210464110915,
+      "min": 1.0,
+      "max": 18089.0,
+      "cv": 1.187264135905262,
+      "cv_squared": 1.4095961284068685
+    },
+    "kaplan_meier_median_days": 1867.0,
+    "kaplan_meier_survival_at_end": 0.15320652037234003,
+    "weibull": {
+      "ok": true,
+      "shape": 0.6466829679119274,
+      "scale_days": 4956.137673054876,
+      "mean_days": 6810.229230417424,
+      "median_days": 2811.9226648894887,
+      "nll": 3130.081063171295,
+      "exponential_nll": 3191.709463982468,
+      "lr_stat": 123.25680162234585,
+      "lr_p_value": 1.225195749010684e-28,
+      "floor_days": 0.5
+    },
+    "note": "Observed-only means drop right-censored spells and are biased short. The Kaplan-Meier median and the Weibull mean keep those spells in the risk set. This is an aggregate historical description, not a prediction of when or where a specific war will start."
+  },
+  "peace_spells_termination_conflict": {
+    "n": 505,
+    "n_observed": 277,
+    "n_censored": 228,
+    "observed_only": {
+      "n": 277,
+      "mean": 2736.938628158845,
+      "median": 1257.0,
+      "std": 3373.2778644172904,
+      "min": 409.0,
+      "max": 19236.0,
+      "cv": 1.2325003672758694,
+      "cv_squared": 1.519057155335153
+    },
+    "kaplan_meier_median_days": 6127.0,
+    "kaplan_meier_survival_at_end": 0.384567723955046,
+    "weibull": {
+      "ok": true,
+      "shape": 0.5959871093264286,
+      "scale_days": 15722.464538118775,
+      "mean_days": 23864.75838291791,
+      "median_days": 8500.480457321873,
+      "nll": 2843.83760441097,
+      "exponential_nll": 2911.224388869191,
+      "lr_stat": 134.77356891644195,
+      "lr_p_value": 3.700533564752397e-31,
+      "floor_days": 0.5
+    },
+    "note": "Observed-only means drop right-censored spells and are biased short. The Kaplan-Meier median and the Weibull mean keep those spells in the risk set. This is an aggregate historical description, not a prediction of when or where a specific war will start."
+  },
+  "peace_spells_termination_dyad": {
+    "n": 914,
+    "n_observed": 299,
+    "n_censored": 615,
+    "observed_only": {
+      "n": 299,
+      "mean": 1703.551839464883,
+      "median": 1010.0,
+      "std": 2204.1820592128956,
+      "min": 396.0,
+      "max": 19236.0,
+      "cv": 1.2938743677476054,
+      "cv_squared": 1.6741108795142658
+    },
+    "kaplan_meier_median_days": null,
+    "kaplan_meier_survival_at_end": 0.6444775905503153,
+    "weibull": {
+      "ok": true,
+      "shape": 0.49017386091668913,
+      "scale_days": 63781.65268685632,
+      "mean_days": 132412.91968171435,
+      "median_days": 30197.08287265614,
+      "nll": 3210.303440179362,
+      "exponential_nll": 3342.0008911950836,
+      "lr_stat": 263.39490203144305,
+      "lr_p_value": 3.122674037691885e-59,
+      "floor_days": 0.5
+    },
+    "note": "Observed-only means drop right-censored spells and are biased short. The Kaplan-Meier median and the Weibull mean keep those spells in the risk set. This is an aggregate historical description, not a prediction of when or where a specific war will start."
+  },
+  "termination_outcomes_conflict": {
+    "actor ceases to exist": 20,
+    "ceasefire agreement": 67,
+    "low activity": 209,
+    "peace agreement": 60,
+    "victory for side A (government)": 106,
+    "victory for side B (non-state)": 43
+  },
+  "termination_outcomes_dyad": {
+    "actor ceases to exist": 88,
+    "ceasefire agreement": 101,
+    "low activity": 395,
+    "peace agreement": 109,
+    "victory for side A (government)": 149,
+    "victory for side B (non-state)": 73
+  },
+  "durations": {
+    "n": 628,
+    "n_observed": 563,
+    "n_censored": 65,
+    "observed_only": {
+      "n": 563,
+      "mean": 1125.708703374778,
+      "median": 305.0,
+      "std": 2153.2224201043728,
+      "min": 0.0,
+      "max": 17075.0,
+      "cv": 1.9127705183847268,
+      "cv_squared": 3.6586910560017762
+    },
+    "kaplan_meier_median_days": 385.0,
+    "kaplan_meier_survival_at_end": 0.009142893675052336,
+    "weibull": {
+      "ok": true,
+      "shape": 0.42129275570363034,
+      "scale_days": 776.7136271059192,
+      "mean_days": 2251.454409642731,
+      "median_days": 325.4144739553476,
+      "nll": 4212.164688510876,
+      "exponential_nll": 4681.204085883807,
+      "lr_stat": 938.078794745863,
+      "lr_p_value": 5.177696543088153e-206,
+      "floor_days": 0.5
+    },
+    "note": "Observed-only means drop right-censored spells and are biased short. The Kaplan-Meier median and the Weibull mean keep those spells in the risk set. This is an aggregate historical description, not a prediction of when or where a specific war will start."
+  },
+  "duration_trend_observed": {
+    "n": 563.0,
+    "slope_per_year": -18.465394456348882,
+    "slope_per_decade": -184.65394456348884,
+    "intercept": 37822.21997379599,
+    "t": -4.4995775673081155,
+    "permutation_p": 0.0004997501249375312
+  }
+}

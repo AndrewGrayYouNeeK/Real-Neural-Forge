@@ -794,3 +794,108 @@ Persistence is the better storm detector. The transformer raises 61 alarms and c
 | Persistence |  | 1.0339 | 1.3987 | 236 | 85 | 0.3602 | 0.3602 | 0.3602 |
 
 Adding speed and density lowers MAE by 0.011 Kp and raises storm-day recall from 6/236 to 26/236. Both models beat persistence on MAE and RMSE. Persistence still catches more storm days (85 hits, F1 0.36 against 0.19). The wind features help a little on this split. They do not turn the regression model into a reliable storm alarm. The Kp-only model trained on the longer 1957–2026 record (the first storm table) is a different window, so its MAE of 0.8609 is not the comparison to use here.
+
+## Real-world series
+
+Separate from the synthetic sine demo, `config/realworld/` trains the same one-step transformer on public series and on one synthetic website example. Each config uses a temporal holdout (the last 20% of windows), a fixed seed, z-score normalization fit on the training windows only, and early stopping on validation loss. Scores below are in the original units of the CSV. The checkpoint is the one with the best validation loss, and that loss is computed on the same holdout, so the model errors are slightly optimistic relative to the baselines, which are not tuned.
+
+Downloaded files go to `data/realworld/` (gitignored, including the EIA bulk cache). Checkpoints go to `checkpoints/realworld/` (also gitignored). The small results files are `reports/realworld/forecast_results.json` and `reports/realworld/conflict_summary.json`.
+
+```bash
+python -m scripts.realworld.fetch_all
+python -m scripts.realworld.analyze_conflict
+python -m scripts.realworld.train_eval
+```
+
+`fetch_all` stops at the first failed download. The website step always refreshes the committed synthetic example; a Cloudflare download runs only when `CLOUDFLARE_API_TOKEN` is set together with `CLOUDFLARE_ACCOUNT_ID` (optional `CLOUDFLARE_SITE_TAG`) or `CLOUDFLARE_ZONE_ID`, and that live file is not what the default config trains on.
+
+One CPU run of `train_eval` on this machine took **383 seconds (6.4 minutes)**. Electricity accounts for 239 of those seconds.
+
+The weekly champion job includes Berlin ozone, Berlin PM2.5, and the daily M4.5+ earthquake counts. On the holdout below, each of those has a lower MAE than persistence, the seasonal naive, and the mean, and each fetch fits the job's 10-minute dataset cap. A checkpoint from that job is promoted only when the fresh run still beats those three baselines. The other configs set `retrain.enabled: false`. Pollen, CPI inflation, gasoline, unemployment, Arsenal goal difference, and monthly conflict events lose to at least one baseline. US48 demand beats the baselines, and the EIA bulk extract does not fit the time cap. Sunspots beat the baselines, and the series is CC BY-NC, so it stays out of the public champion release. Monthly fatalities and onset gaps are aggregate conflict series and are not published as an operational forecast. The website file is synthetic.
+
+### Sources and licences
+
+| Series | What is trained | Source and licence |
+| --- | --- | --- |
+| US48 hourly demand | Last 17,520 hours (2024-10-21 09:00Z through 2026-10-21 08:00Z) of EIA-930 series `EBA.US48-ALL.D.H`, megawatthours. The full bulk extract (68,409 hours from 2019-01-01) is written beside it and is not the training file. | Keyless `EBA.zip` from the U.S. Energy Information Administration. U.S. government work, public domain. |
+| Berlin daily PM2.5, ozone, pollen | Daily means, 2022-01-01 through 2026-10-20 (1,754 days; pollen on 1,678 days). Pollen is the sum of alder, birch, grass, mugwort, olive, and ragweed. | Open-Meteo Air Quality API, CC BY 4.0, with CAMS / Copernicus attribution. Berlin is used because that pollen product covers Europe. |
+| Earthquakes | Global daily count of magnitude 4.5+ events, 1990-01-01 through 2026-10-20 (13,442 days, 231,094 events). | USGS FDSN event service. Public domain. A relative energy column is stored and is not the training target. |
+| Sunspots | Monthly mean total sunspot number, version 2.0, 1749-01 through 2026-09 (3,333 months). | WDC-SILSO, Royal Observatory of Belgium. **CC BY-NC 4.0** (attribution, non-commercial). |
+| Unemployment | U.S. unemployment rate, monthly, 1948-01 through 2026-09. | FRED `UNRATE` (BLS), public domain, via keyless fredgraph CSV. |
+| CPI inflation | Year-over-year percent change of CPI-U, all items, not seasonally adjusted (`CPIAUCNS`), 1914-01 through 2026-09. | FRED / BLS, public domain. |
+| Gasoline | Weekly U.S. regular gasoline, all formulations, dollars per gallon (`GASREGW`), 1990-08-20 through 2026-10-19. | EIA via FRED, public domain. |
+| Arsenal | Match goal difference (goals for minus goals against), Premier League, 1,269 matches from 1993-08-14 through 2026-10-18. The 1992–93 file was missing at the source. | Historical CSV from [football-data.co.uk](https://www.football-data.co.uk/). The site offers the files as a free download and does not attach an SPDX licence. Scores only; odds are unused. |
+| Website visits | Synthetic daily counts, 2023-01-01 through 2025-12-31, committed at `examples/realworld/website_visits.csv`. | Generated in this repository. It is not a real site. |
+| Conflict events and fatalities | Global monthly UCDP Georeferenced Event Dataset totals, 1989-01 through 2025-12 (444 months), all violence types. | UCDP GED 26.1, CC BY 4.0. Cite Sundberg and Melander, *Journal of Peace Research* (2013). |
+| Days between new conflict onsets | Built from the UCDP/PRIO Armed Conflict Dataset. See the next section. | UCDP/PRIO ACD 26.1, CC BY 4.0. Cite Gleditsch, Wallensteen, Eriksson, Sollenberg, and Strand, *Journal of Peace Research* 39(5) (2002). |
+
+### Holdout error
+
+MAE and RMSE are on the temporal holdout. Seasonal naive uses the period in the config (168 hours for demand, 365 days for air quality and earthquakes, 132 months for sunspots, 52 weeks for gasoline, 38 matches for Arsenal, 12 months for unemployment, CPI, and the monthly conflict counts, 7 days for the website example, 4 gaps for onset spacing). Air-quality models see 90 days of context, which is shorter than that 365-day seasonal baseline.
+
+| Series | Holdout | Model MAE (RMSE) | Persistence | Seasonal naive | Mean | Train |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Berlin ozone, µg/m³ | 332 | 7.34 (9.46) | 8.18 (10.39) | 13.06 (16.93) | 16.22 (19.94) | 11 s |
+| Berlin PM2.5, µg/m³ | 332 | 2.50 (3.44) | 2.69 (3.71) | 4.29 (6.25) | 4.46 (5.73) | 8 s |
+| Berlin pollen, grains/m³ | 317 | 16.10 (34.50) | **12.70 (37.83)** | 17.22 (45.58) | 27.95 (57.66) | 13 s |
+| M4.5+ earthquakes, events/day | 2,676 | **5.84 (12.62)** | 7.55 (14.86) | 9.91 (20.60) | 6.80 (15.17) | 53 s |
+| US48 demand, MWh | 3,470 | **4,695 (6,201)** | 16,964 (19,483) | 27,713 (36,096) | 90,716 (115,851) | 239 s |
+| CPI inflation, percent | 265 | 0.353 (0.492) | **0.337 (0.470)** | 1.649 (2.241) | 1.606 (2.023) | 1 s |
+| Regular gasoline, USD/gallon | 366 | 0.101 (0.153) | **0.049 (0.074)** | 0.560 (0.718) | 1.186 (1.342) | 5 s |
+| Unemployment, percent | 184 | 0.220 (0.826) | **0.209 (0.825)** | 1.095 (1.985) | 1.665 (1.974) | 1 s |
+| Arsenal goal difference, goals | 251 | 1.399 (1.846) | 1.924 (2.505) | 1.924 (2.478) | **1.413 (1.848)** | 1 s |
+| Sunspots, monthly number | 640 | **16.70 (22.47)** | 18.04 (25.20) | 38.97 (53.61) | 58.13 (69.39) | 42 s |
+| Conflict events, events/month | 84 | 216.9 (291.2) | **206.7 (275.2)** | 376.1 (484.1) | 1,026 (1,178) | 1 s |
+| Conflict fatalities, deaths/month | 84 | **8,323 (22,751)** | 11,903 (32,240) | 11,833 (31,061) | 8,991 (23,620) | 1 s |
+| Days between new onsets | 57 | **99.6 (170.2)** | 141.6 (239.8) | 127.2 (219.0) | 109.0 (183.8) | 1 s |
+| Example website visits, visits/day | 213 | **33.3 (42.8)** | 147.8 (228.9) | 40.1 (49.9) | 182.3 (196.8) | 4 s |
+
+Bold marks the lowest MAE in that row. The model beats the best of persistence, seasonal naive, and the training mean on ozone, PM2.5, earthquakes, electricity, sunspots, fatalities, onset gaps, and the synthetic visits. It loses on pollen, CPI, gasoline, unemployment, Arsenal (a tie with the mean, skill about 0.01), and monthly event counts.
+
+A few of those outcomes are the series, not a tuning accident. Hourly demand has lag-1 correlation 0.98, and the previous hour is a much harder baseline than the same hour last week; on this two-year slice the model still cuts that error by about 72%. Gasoline (lag-1 0.999), unemployment (0.97), and CPI inflation (0.99) are smoother still, and yesterday's value wins. Arsenal goal difference has lag-1 correlation 0.014: the match margin sits on top of the historical average, and a 38-match seasonal naive (one modern league season; earlier seasons had 42) does not help. Monthly conflict fatalities have lag-1 correlation 0.02, so the historical mean is the serious baseline and the model's edge over it is about 7% of MAE. Monthly event counts are persistent (lag-1 0.96), and last month's count wins. The website file is synthetic, with a built-in weekly cycle; the model beats a 7-day seasonal naive there by about 17% of MAE.
+
+The same onset-gap holdout (57 gaps, first target dated 2007-10-07) was also scored with an exponential trend in the gap length and a Poisson model of annual onset counts. Both were fit only on years before that holdout. A constant-rate exponential forecast is the training mean, so it is not a separate row. The time-varying exponential has MAE 120.4 days (RMSE 180.1). The Poisson trend, whose log mean declines by about 0.0095 per year over the 61 training years, has MAE 125.6 (RMSE 180.3). The transformer MAE of 99.6 days beats the mean (109.0) and both of those count models. The RMSE is still about 170 days, so the gain is a modest shift in a noisy series. Treat the whole conflict block as an aggregate description of the published record.
+
+### Time between wars
+
+This section describes intervals in the UCDP tables. It is an aggregate historical summary of those tables. It does not say when or where a particular war will start.
+
+Definitions, using the dates UCDP published (most ACD start dates are day-precision; coarser precision codes are left as published):
+
+- A new onset is the first `start_date` of each `conflict_id` on or after 1946-01-01. The gap is the number of days until the next such onset. Seven conflicts that start before 1946 are outside this clock. Same-day onsets produce a gap of 0 (there are 10).
+- A conflict peace spell is the number of days from an episode's `ep_end_date` to the next episode's `start_date2` in the same `conflict_id`. If violence has not resumed by 2025-12-31, the spell is right-censored on that date. Overlapping episodes are not peace, and a non-positive gap is dropped.
+- A country peace spell merges active intervals for each Gleditsch–Ward code in `gwno_loc`. A conflict that lists several countries contributes to each code.
+- An episode duration runs from `start_date2` to `ep_end_date`. Episodes still open at the end of 2025 are censored. A same-day episode has duration 0.
+
+The UCDP Conflict Termination dataset v4-2024 (codebook dated 24 June 2025; file version id 4.2024002) is a separate check. It follows ACD 25.1 and its years run through 2024, so its spells are not pooled with ACD 26.1. Cite Kreutz, *Journal of Peace Research* 47(2) (2010), for that dataset. Outcome codes follow the codebook: 1 peace agreement, 2 ceasefire, 3 victory for side A (government), 4 victory for side B (non-state), 5 low activity, 6 actor ceases to exist.
+
+`python -m scripts.realworld.analyze_conflict` writes `data/realworld/ucdp_onset_gaps.csv`, `reports/realworld/conflict_summary.json`, and the charts under the run's artifact directory (histogram of gaps against an exponential density, gaps over time, Kaplan–Meier curves, episode durations, mean gap by decade, and holdout MAE).
+
+**Onset gaps.** 295 gaps from 1946. Mean 97.5 days, median 56, standard deviation 126, minimum 0, maximum 978. The coefficient of variation squared is 1.66. Lag-1 correlation is 0.07, so a long gap does not reliably follow a long gap. On the 285 strictly positive gaps, a pure exponential (mean 101 days) is a poor description: Kolmogorov–Smirnov distance 0.086, bootstrap p = 0.005. A Weibull fit has shape 0.80 (mean 97 days, median 55). The likelihood-ratio test against an exponential rejects shape 1 (p ≈ 3×10⁻⁷). Shape below 1 is a decreasing hazard: short gaps are more common than an exponential with the same mean, and a long tail remains. That is overdispersion with weak serial correlation, which is a different pattern from a clustered run of long waits.
+
+An ordinary least-squares slope is +0.79 days per year (+7.9 days per decade), permutation p = 0.011. The Mann–Kendall test on the same series is weaker (z = 1.43, p = 0.15). Decade means move around rather than climbing in a straight line: 1940s 46 days (n = 30), 1950s 125 (29), 1960s 75 (47), 1970s 98 (39), 1980s 107 (34), 1990s 75 (47), 2000s 215 (17), 2010s 80 (45), 2020s 288 (n = 7, and that decade is incomplete). The linear slope and the rank test do not tell the same story, and the 2000s and 2020s cells are small.
+
+Regional gaps use episodes whose ACD region field is a single code. A few onsets carry more than one region code; those are omitted here.
+
+| Region | Gaps | Mean days | Median | cv² |
+| --- | ---: | ---: | ---: | ---: |
+| Africa | 107 | 261 | 165 | 1.68 |
+| Asia | 78 | 339 | 142 | 1.55 |
+| Europe | 34 | 741 | 103 | 3.73 |
+| Middle East | 35 | 820 | 456 | 1.63 |
+| Americas | 25 | 806 | 535 | 0.89 |
+
+Europe's mean is a long-tail mean: the median is 103 days and cv² is 3.73.
+
+**Peace spells.** Means computed only on spells where violence resumed are biased short, because the censored spells (violence had not resumed by the censor date) are dropped. The Kaplan–Meier median keeps those spells in the risk set. The Weibull mean also uses the censored spells, and with shape below 1 it is a heavy-tail mean, not a typical length. The Kaplan–Meier median is the better single summary of a typical spell.
+
+| Spell | n | Observed | Censored | KM median | Still ongoing at the end | Weibull shape | Weibull median |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Conflict / incompatibility (ACD 26.1) | 563 | 325 | 238 | 4,916 days | 0.36 | 0.60 | 7,508 days |
+| Country (merged `gwno_loc`) | 417 | 331 | 86 | 1,867 days | 0.15 | 0.65 | 2,812 days |
+| Termination, conflict (ACD 25.1 window) | 505 | 277 | 228 | 6,127 days | 0.38 | 0.60 | 8,500 days |
+| Termination, dyad | 914 | 299 | 615 | not reached | 0.64 | 0.49 | 30,200 days |
+
+About 36% of conflict-level spells are still open at the end of 2025, so many incompatibilities in this table do not resume inside the observation window. The country-level median is shorter (about 5.1 years) because a country can enter a new conflict that is a different `conflict_id`. The dyad curve never crosses one half (survival at the end of 2024 is 0.64), so a median time until the same dyad resumes is not identified. Conflict-level termination outcomes, as a robustness check on the older file: low activity 209, government victory 106, ceasefire 67, peace agreement 60, non-state victory 43, actor ceases to exist 20. Dyad outcomes: low activity 395, government victory 149, peace agreement 109, ceasefire 101, actor ceases to exist 88, non-state victory 73. Low activity is the modal code in both files.
+
+**Episode durations.** 628 episodes, 563 ended, 65 still open at the end of 2025. Kaplan–Meier median 385 days. Episodes that have ended: mean 1,126 days, median 305, minimum 0, maximum 17,075, cv² 3.66. Weibull shape 0.42 (median 325 days, mean 2,251 days); an exponential is rejected. Among episodes that have already ended, duration declines by about 18.5 days per year (about 185 days per decade), permutation p = 0.0005. That slope ignores episodes that are still open.

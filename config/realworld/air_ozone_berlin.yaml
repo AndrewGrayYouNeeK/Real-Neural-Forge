@@ -1,0 +1,53 @@
+# Included in the weekly job: holdout MAE beat persistence, seasonal naive, and the mean, and the Open-Meteo fetch fits the dataset cap. Promotion still requires the fresh run to beat those baselines.
+retrain:
+  enabled: true
+  metric: mae
+  baselines:
+    - persistence
+    - mean
+    - seasonal
+
+model:
+  name: time_series_transformer
+  input_dim: 1
+  output_dim: 1
+  d_model: 32
+  nhead: 4
+  num_encoder_layers: 2
+  dim_feedforward: 64
+  dropout: 0.1
+  max_seq_len: 512
+data:
+  source: csv
+  path: data/realworld/air_ozone_berlin.csv
+  feature_columns:
+  - value
+  target_column: value
+  seq_len: 90
+  val_split: 0.2
+  split_mode: temporal
+  normalize: true
+  seed: 0
+  seasonal_period: 365
+  season_length: 365
+  fetch: python -m scripts.realworld.fetch_air_quality
+  fetch_timeout_seconds: 300
+training:
+  experiment_name: air_ozone_berlin
+  batch_size: 32
+  learning_rate: 0.001
+  epochs: 20
+  patience: 5
+  max_grad_norm: 1.0
+  device: cpu
+  seed: 0
+  checkpoint_dir: checkpoints/realworld/air_ozone_berlin
+  log_interval: 5
+storage:
+  db_path: data/realworld/experiments.db
+realworld:
+  id: air_ozone_berlin
+  title: Berlin daily ozone
+  units: "\xB5g/m\xB3"
+  licence: CC BY 4.0 (Open-Meteo; CAMS/Copernicus attribution)
+  source: https://air-quality-api.open-meteo.com/v1/air-quality

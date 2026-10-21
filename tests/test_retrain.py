@@ -392,8 +392,26 @@ class TestRun:
         code = main(["--all", "--dry-run", "--config-dir", "config"])
         document = json.loads(capsys.readouterr().out)
         assert code == 0
-        assert document["datasets"][0]["id"] == "default"
-        assert document["datasets"][0]["fetch"] is None
+        by_id = {item["id"]: item for item in document["datasets"]}
+        assert by_id["default"]["fetch"] is None
+        for dataset_id in ("air_ozone_berlin", "air_pm25_berlin", "earthquakes_m45"):
+            assert by_id[dataset_id]["fetch"]["argv"][-1].startswith(
+                "scripts.realworld.fetch_"
+            )
+        for dataset_id in (
+            "air_pollen_berlin",
+            "electricity_us48",
+            "fred_cpi_inflation",
+            "fred_gas",
+            "fred_unemployment",
+            "sports_arsenal",
+            "sunspots_silso",
+            "ucdp_monthly_events",
+            "ucdp_monthly_fatalities",
+            "ucdp_onset_gaps",
+            "website_visits",
+        ):
+            assert dataset_id not in by_id
 
     def test_child_argv_stays_in_process(self, tmp_path: Path):
         spec = DatasetSpec("series", tmp_path / "config.yaml", tmp_path, None)

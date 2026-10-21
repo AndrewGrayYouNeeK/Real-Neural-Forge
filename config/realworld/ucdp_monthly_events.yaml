@@ -1,0 +1,45 @@
+# Left out of weekly retraining: holdout MAE lost to persistence.
+retrain:
+  enabled: false
+
+model:
+  name: time_series_transformer
+  input_dim: 1
+  output_dim: 1
+  d_model: 32
+  nhead: 4
+  num_encoder_layers: 2
+  dim_feedforward: 64
+  dropout: 0.1
+  max_seq_len: 512
+data:
+  source: csv
+  path: data/realworld/ucdp_monthly_events.csv
+  feature_columns:
+  - value
+  target_column: value
+  seq_len: 24
+  val_split: 0.2
+  split_mode: temporal
+  normalize: true
+  seed: 0
+  seasonal_period: 12
+training:
+  experiment_name: ucdp_monthly_events
+  batch_size: 16
+  learning_rate: 0.001
+  epochs: 25
+  patience: 6
+  max_grad_norm: 1.0
+  device: cpu
+  seed: 0
+  checkpoint_dir: checkpoints/realworld/ucdp_monthly_events
+  log_interval: 5
+storage:
+  db_path: data/realworld/experiments.db
+realworld:
+  id: ucdp_monthly_events
+  title: Global monthly conflict events
+  units: events/month
+  licence: CC BY 4.0 (UCDP GED 26.1)
+  source: https://ucdp.uu.se/downloads/ged/ged261-csv.zip

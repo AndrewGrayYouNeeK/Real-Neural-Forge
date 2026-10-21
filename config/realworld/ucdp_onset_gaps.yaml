@@ -1,0 +1,46 @@
+# Left out of weekly retraining: an aggregate conflict series is not published as an operational forecast.
+retrain:
+  enabled: false
+
+model:
+  name: time_series_transformer
+  input_dim: 1
+  output_dim: 1
+  d_model: 16
+  nhead: 4
+  num_encoder_layers: 2
+  dim_feedforward: 32
+  dropout: 0.0
+  max_seq_len: 64
+data:
+  source: csv
+  path: data/realworld/ucdp_onset_gaps.csv
+  feature_columns:
+  - value
+  target_column: value
+  seq_len: 8
+  val_split: 0.2
+  split_mode: temporal
+  normalize: true
+  seed: 0
+  seasonal_period: 4
+training:
+  experiment_name: ucdp_onset_gaps
+  batch_size: 16
+  learning_rate: 0.001
+  epochs: 40
+  patience: 8
+  max_grad_norm: 1.0
+  device: cpu
+  seed: 0
+  checkpoint_dir: checkpoints/realworld/ucdp_onset_gaps
+  log_interval: 5
+storage:
+  db_path: data/realworld/experiments.db
+realworld:
+  id: ucdp_onset_gaps
+  title: Days between new armed-conflict onsets
+  units: days
+  licence: CC BY 4.0 (UCDP/PRIO Armed Conflict Dataset 26.1)
+  source: https://ucdp.uu.se/downloads/ucdpprio/ucdp-prio-acd-261-csv.zip
+  extra_baselines: onset_gaps
