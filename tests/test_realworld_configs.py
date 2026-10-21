@@ -45,6 +45,7 @@ def test_every_realworld_config_is_temporal_normalized_and_seeded():
         assert int(training["patience"]) > 0
         assert float(training["max_grad_norm"]) > 0
         assert training["device"] == "cpu"
+        assert cfg["retrain"]["enabled"] is False
         assert model["name"] == "time_series_transformer"
         assert meta["id"]
         assert meta["title"]

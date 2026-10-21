@@ -809,7 +809,7 @@ python -m scripts.realworld.train_eval
 
 `fetch_all` stops at the first failed download. The website step always refreshes the committed synthetic example; a Cloudflare download runs only when `CLOUDFLARE_API_TOKEN` is set together with `CLOUDFLARE_ACCOUNT_ID` (optional `CLOUDFLARE_SITE_TAG`) or `CLOUDFLARE_ZONE_ID`, and that live file is not what the default config trains on.
 
-One CPU run of `train_eval` on this machine took **383 seconds (6.4 minutes)**. Electricity accounts for 239 of those seconds.
+One CPU run of `train_eval` on this machine took **383 seconds (6.4 minutes)**. Electricity accounts for 239 of those seconds. Each config sets `retrain.enabled: false`, so the weekly champion job leaves these series alone. The downloads are local, and the electricity bulk file is large.
 
 ### Sources and licences
 
