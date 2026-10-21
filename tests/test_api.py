@@ -7,6 +7,7 @@ from unittest.mock import patch
 import pytest
 import torch
 import yaml
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 import src.api as api_module
@@ -609,6 +610,155 @@ class TestTrainProtection:
         assert "disabled" in resp.json()["detail"].lower()
         run.assert_not_called()
         assert _state["training"]["status"] == "idle"
+
+
+class TestForecastDashboard:
+    def test_series_recent_matches_predict(self, client):
+        load_model("config/config.yaml")
+        first = client.get("/series/recent", params={"points": 16})
+        second = client.get("/series/recent", params={"points": 16})
+        assert first.status_code == 200
+        payload = first.json()
+        assert payload["source"] == "synthetic"
+        assert len(payload["history"]) == 16
+        assert payload["forecast"][0]["p10"] is None
+        assert payload["forecast"][0]["p90"] is None
+        assert "persistence" in payload["metrics"]["baselines"]
+        assert "mean" in payload["metrics"]["baselines"]
+        assert "checkpoint_loaded" in payload
+        assert first.json()["history"] == second.json()["history"]
+        predicted = client.post(
+            "/predict", json={"sequence": payload["predict_window"]}
+        )
+        assert predicted.status_code == 200
+        assert predicted.json()["prediction"][0] == pytest.approx(
+            payload["forecast"][0]["value"], abs=1e-5
+        )
+
+    def test_series_rejects_bad_points(self, client):
+        assert client.get("/series/recent", params={"points": 7}).status_code == 422
+        assert client.get("/series/recent", params={"points": 401}).status_code == 422
+
+    def test_series_requires_model(self):
+        test_app = FastAPI()
+        test_app.get("/series/recent")(api_module.series_recent)
+        saved = dict(_state)
+        saved_store = api_module._store
+        _state.clear()
+        try:
+            with TestClient(test_app) as local:
+                response = local.get("/series/recent")
+                assert response.status_code == 503
+        finally:
+            _state.clear()
+            _state.update(saved)
+            api_module._store = saved_store
+
+    def test_csv_series_and_stored_predictions(self, client, tmp_path):
+        csv_path = tmp_path / "series.csv"
+        csv_path.write_text(
+            "timestamp,value\n"
+            + "".join(f"2024-01-{day:02d},{day}\n" for day in range(1, 13)),
+            encoding="utf-8",
+        )
+        cfg = yaml.safe_load((REPO_ROOT / "config" / "config.yaml").read_text())
+        cfg["model"].update(
+            {
+                "d_model": 8,
+                "nhead": 2,
+                "num_encoder_layers": 1,
+                "dim_feedforward": 16,
+                "max_seq_len": 32,
+            }
+        )
+        cfg["data"] = {
+            "source": "csv",
+            "path": str(csv_path),
+            "feature_columns": ["value"],
+            "target_column": "value",
+            "seq_len": 4,
+        }
+        cfg["inference"]["checkpoint_path"] = str(tmp_path / "missing.pt")
+        cfg["storage"]["db_path"] = str(tmp_path / "exp.db")
+        config_path = tmp_path / "config.yaml"
+        _write_cfg(config_path, cfg)
+        try:
+            load_model(config_path)
+            recent = client.get("/series/recent", params={"points": 8})
+            assert recent.status_code == 200
+            body = recent.json()
+            assert body["source"] == "csv"
+            assert body["history"][0]["time"].startswith("2024-01-")
+            assert body["checkpoint_loaded"] is False
+
+            store = api_module._store
+            assert store is not None
+            experiment_id = store.create_experiment(
+                name="<script>alert(1)</script>",
+                config={"model": {}},
+                model_name="transformer",
+            )
+            store.complete_experiment(
+                experiment_id,
+                status="completed",
+                metrics={
+                    "mae": 0.2,
+                    "validation_predictions": {
+                        "actual": [1.0, 2.0],
+                        "predicted": [1.2, 1.8],
+                        "p10": [0.4, 1.0],
+                        "p90": [1.6, 2.4],
+                    },
+                },
+            )
+            found = client.get(f"/experiments/{experiment_id}/predictions")
+            assert found.status_code == 200
+            assert found.json()["source"] == "stored"
+            assert found.json()["points"][0]["p90"] == 1.6
+            assert client.get("/experiments/999999/predictions").status_code == 404
+        finally:
+            load_model("config/config.yaml")
+
+    def test_missing_dataset_is_422(self, client, tmp_path):
+        cfg = yaml.safe_load((REPO_ROOT / "config" / "config.yaml").read_text())
+        cfg["data"] = {
+            "source": "csv",
+            "path": str(tmp_path / "absent.csv"),
+            "feature_columns": ["value"],
+            "target_column": "value",
+            "seq_len": 4,
+        }
+        cfg["inference"]["checkpoint_path"] = str(tmp_path / "missing.pt")
+        cfg["storage"]["db_path"] = str(tmp_path / "exp.db")
+        config_path = tmp_path / "config.yaml"
+        _write_cfg(config_path, cfg)
+        try:
+            load_model(config_path)
+            response = client.get("/series/recent")
+        finally:
+            load_model("config/config.yaml")
+        assert response.status_code == 422
+        assert "absent.csv" in response.json()["detail"]
+
+    def test_dashboard_markup_and_escaping(self, client):
+        page = client.get("/")
+        assert page.status_code == 200
+        html = page.text
+        assert 'id="forecast-chart"' in html
+        assert "/assets/chart.js" in html
+        assert 'id="api-token"' in html
+        for path in ("/assets/app.js", "/assets/chart.js"):
+            script = client.get(path)
+            assert script.status_code == 200
+            source = script.text
+            assert ".innerHTML" not in source
+            assert "insertAdjacentHTML" not in source
+            assert "document.write" not in source
+            assert "textContent" in source
+        app_js = client.get("/assets/app.js").text
+        assert "neuralForgeApiToken" in app_js
+        assert "Authorization" in app_js
+        assert "Bearer " in app_js
 
 
 class TestAppVersion:
