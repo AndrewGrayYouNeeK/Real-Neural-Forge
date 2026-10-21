@@ -16,6 +16,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from src import __version__
+from src.dashboard_data import recent_series, validation_predictions
 from src.inference.predictor import Predictor
 from src.models.registry import ModelRegistry, build_model
 from src.storage.experiments import ExperimentStore, db_path_from_config
@@ -270,6 +271,43 @@ def _require_store() -> ExperimentStore:
 @app.get("/experiments", tags=["experiments"])
 def list_experiments(limit: int = Query(20, ge=1, le=500)) -> dict[str, Any]:
     return {"experiments": _require_store().list_experiments(limit=limit)}
+
+
+@app.get("/series/recent", tags=["dashboard"])
+def series_recent(points: int = Query(96, ge=8, le=400)) -> dict[str, Any]:
+    """Recent history for the loaded config, with a one-step backtest and forecast."""
+    predictor: Predictor | None = _state.get("predictor")
+    cfg = _state.get("config")
+    if predictor is None or not isinstance(cfg, dict):
+        raise HTTPException(status_code=503, detail="Model not loaded.")
+    try:
+        payload = recent_series(cfg, predictor, points=points)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except OSError as exc:
+        raise HTTPException(
+            status_code=422, detail="Could not read the configured dataset."
+        ) from exc
+    if not _state.get("checkpoint_loaded"):
+        extra = "The loaded model has no checkpoint, so this forecast is untrained."
+        note = payload.get("note")
+        payload["note"] = f"{note} {extra}".strip() if isinstance(note, str) else extra
+    payload["checkpoint_loaded"] = bool(_state.get("checkpoint_loaded"))
+    return payload
+
+
+@app.get("/experiments/{experiment_id}/predictions", tags=["experiments"])
+def experiment_predictions(
+    experiment_id: int,
+    limit: int = Query(200, ge=1, le=2000),
+) -> dict[str, Any]:
+    """Stored validation predictions, or a replay from the run's checkpoint."""
+    payload = validation_predictions(_require_store(), experiment_id, limit=limit)
+    if payload is None:
+        raise HTTPException(status_code=404, detail="Experiment not found.")
+    return payload
 
 
 @app.get("/experiments/{experiment_id}", tags=["experiments"])

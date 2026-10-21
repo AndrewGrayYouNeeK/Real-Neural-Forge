@@ -3,76 +3,152 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Neural Forge</title>
+    <title>Neural Forge — Forecast</title>
+    <meta
+      name="description"
+      content="Forecast dashboard for the Neural Forge time-series model."
+    />
     <link rel="stylesheet" href="/assets/styles.css" />
   </head>
   <body>
-    <div class="grid-bg"></div>
-    <main class="shell">
-      <header class="hero">
-        <p class="eyebrow">// native ml platform</p>
-        <h1>Neural Forge</h1>
-        <p class="subtitle">
-          Transformer pipeline for time-series prediction. No Base44. No vendor lock-in.
-        </p>
+    <a class="skip-link" href="#forecast">Skip to forecast</a>
+    <div class="grid-bg" aria-hidden="true"></div>
+    <div class="shell">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">Neural Forge</p>
+          <h1>Forecast</h1>
+          <p class="subtitle">
+            Recent history, the next forecast, and how that compares with baselines.
+          </p>
+        </div>
+        <div class="topbar-actions">
+          <p id="status-line" class="status-line"></p>
+          <button id="refresh-btn" class="btn secondary" type="button">Refresh</button>
+        </div>
       </header>
 
-      <section class="panel">
-        <div class="panel-header">
-          <h2>System Status</h2>
-          <button id="refresh-btn" class="btn secondary">Refresh</button>
-        </div>
-        <div id="status-grid" class="status-grid"></div>
-      </section>
+      <p id="notice" class="notice" role="alert"></p>
+      <noscript>
+        <p class="notice">The forecast dashboard needs JavaScript to load charts.</p>
+      </noscript>
 
-      <section class="panel">
-        <div class="panel-header">
-          <h2>YouNeeK Time</h2>
-        </div>
-        <p class="hint">
-          100 units / 100 minutes / 100 seconds. Noon is 50:00:00. App Store 10/10/10
-          text is wrong.
-        </p>
-        <div id="youneek-grid" class="status-grid"></div>
-        <pre id="youneek-output" class="output"></pre>
-      </section>
+      <main>
+        <section class="panel" aria-labelledby="overview-heading">
+          <h2 id="overview-heading" class="visually-hidden">System status</h2>
+          <div id="status-grid" class="status-grid"></div>
+        </section>
 
-      <section class="panel two-col">
-        <div>
+        <section id="forecast" class="panel" tabindex="-1" aria-labelledby="forecast-heading">
           <div class="panel-header">
-            <h2>Run Prediction</h2>
+            <div>
+              <h2 id="forecast-heading">Forecast</h2>
+              <p id="forecast-kicker" class="hint"></p>
+            </div>
           </div>
-          <label for="sequence-input">Sequence JSON</label>
-          <textarea id="sequence-input" rows="8">[[0.1], [0.2], [0.3], [0.4], [0.5]]</textarea>
-          <button id="predict-btn" class="btn primary">Predict</button>
-          <pre id="prediction-output" class="output"></pre>
-        </div>
+          <p id="forecast-summary" class="summary" aria-live="polite"></p>
+          <div id="forecast-chart" class="chart-host"></div>
+          <p id="forecast-note" class="hint"></p>
+        </section>
 
-        <div>
+        <section class="split">
+          <section class="panel" aria-labelledby="accuracy-heading">
+            <h2 id="accuracy-heading">Accuracy vs baselines</h2>
+            <p id="accuracy-caption" class="hint"></p>
+            <div id="accuracy-grid" class="status-grid"></div>
+            <div id="accuracy-chart" class="chart-host chart-host-short"></div>
+          </section>
+
+          <section class="panel" aria-labelledby="backtest-heading">
+            <h2 id="backtest-heading">Predictions vs actuals</h2>
+            <p id="backtest-caption" class="hint">
+              One-step predictions on the recent window, plotted against what happened.
+            </p>
+            <div id="backtest-chart" class="chart-host"></div>
+          </section>
+        </section>
+
+        <section class="panel" aria-labelledby="experiments-heading">
           <div class="panel-header">
-            <h2>Training</h2>
+            <div>
+              <h2 id="experiments-heading">Experiments</h2>
+              <p id="experiments-caption" class="hint">
+                Select a run to compare metrics and open its validation predictions.
+              </p>
+            </div>
           </div>
-          <p class="hint">Kick off a background training run using the current config.</p>
-          <label for="api-token">API token (optional)</label>
-          <input
-            id="api-token"
-            type="password"
-            autocomplete="off"
-            placeholder="Only required when the server sets a token"
-          />
-          <p class="hint">Saved in this browser and sent with training requests.</p>
-          <button id="train-btn" class="btn primary">Start Training</button>
-          <pre id="training-output" class="output"></pre>
-        </div>
-      </section>
+          <div id="experiments-chart" class="chart-host chart-host-short"></div>
+          <div class="table-wrap">
+            <table>
+              <caption class="visually-hidden">Training runs and metrics</caption>
+              <thead id="experiments-head"></thead>
+              <tbody id="experiments-body"></tbody>
+            </table>
+          </div>
 
-      <section class="panel">
-        <div class="panel-header">
-          <h2>Recent Experiments</h2>
-        </div>
-        <div id="experiments-list" class="experiments-list"></div>
-      </section>
-    </main>
+          <div id="experiment-detail">
+            <h3 id="experiment-detail-heading">Run detail</h3>
+            <div class="split">
+              <div>
+                <h4>Loss history</h4>
+                <div id="loss-chart" class="chart-host chart-host-short"></div>
+              </div>
+              <div>
+                <h4>Validation predictions</h4>
+                <p id="validation-note" class="hint"></p>
+                <div id="validation-chart" class="chart-host"></div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel split">
+          <div>
+            <div class="panel-header">
+              <h2>Ad-hoc prediction</h2>
+            </div>
+            <label for="sequence-input">Sequence JSON</label>
+            <textarea id="sequence-input" rows="8">[[0.1], [0.2], [0.3], [0.4], [0.5]]</textarea>
+            <button id="predict-btn" class="btn primary" type="button">Predict</button>
+            <div id="adhoc-chart" class="chart-host chart-host-short"></div>
+            <pre id="prediction-output" class="output"></pre>
+          </div>
+
+          <div>
+            <div class="panel-header">
+              <h2>Training</h2>
+            </div>
+            <p class="hint">Kick off a background training run using the current config.</p>
+            <label for="api-token">API token (optional)</label>
+            <input
+              id="api-token"
+              type="password"
+              autocomplete="off"
+              aria-describedby="token-hint"
+              placeholder="Only required when the server sets a token"
+            />
+            <p id="token-hint" class="hint">
+              Saved in this browser and sent with training requests.
+            </p>
+            <button id="train-btn" class="btn primary" type="button">Start Training</button>
+            <pre id="training-output" class="output"></pre>
+          </div>
+        </section>
+
+        <section class="panel">
+          <details>
+            <summary>YouNeeK Time</summary>
+            <p class="hint">
+              100 units / 100 minutes / 100 seconds. Noon is 50:00:00. App Store 10/10/10
+              text is wrong.
+            </p>
+            <div id="youneek-grid" class="status-grid"></div>
+            <pre id="youneek-output" class="output"></pre>
+          </details>
+        </section>
+      </main>
+    </div>
+    <script src="/assets/chart.js"></script>
     <script src="/assets/app.js"></script>
   </body>
 </html>
