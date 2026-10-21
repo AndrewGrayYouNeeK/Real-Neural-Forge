@@ -243,8 +243,14 @@ function rowsFromComparison(payload) {
 }
 
 function baselineLabel(name) {
-  const known = { persistence: "Persistence", mean: "Mean", model: "Model" };
-  return Object.prototype.hasOwnProperty.call(known, name) ? known[name] : String(name);
+  const known = {
+    persistence: "Persistence",
+    mean: "Mean",
+    model: "Model",
+    seasonal_naive: "Seasonal naive",
+  };
+  if (Object.prototype.hasOwnProperty.call(known, name)) return known[name];
+  return String(name).replaceAll("_", " ");
 }
 
 function rowsFromExperiment(experiment) {
@@ -266,7 +272,27 @@ function rowsFromExperiment(experiment) {
     });
   }
   if (rows.length > 1) return rows;
-  return [];
+  return rowsFromFlatBaselines(metrics, experiment.model_name);
+}
+
+function rowsFromFlatBaselines(metrics, modelName) {
+  const rows = [];
+  const modelMae = asNumber(metrics.mae);
+  if (modelMae != null) {
+    rows.push({ name: modelName ? String(modelName) : "Model", value: modelMae });
+  }
+  Object.keys(metrics)
+    .filter((key) => /^baseline_.+_mae$/.test(key))
+    .sort()
+    .forEach((key) => {
+      const value = asNumber(metrics[key]);
+      if (value == null) return;
+      rows.push({
+        name: baselineLabel(key.slice("baseline_".length, -"_mae".length)),
+        value,
+      });
+    });
+  return rows.length > 1 ? rows : [];
 }
 
 function seriesRows(metrics) {
@@ -503,13 +529,14 @@ function metricColumns(experiments) {
     });
   });
   const preferred = ["mae", "rmse", "mse"];
-  const ordered = [
-    ...preferred.filter((key) => keys.has(key)),
-    ...[...keys]
-      .filter((key) => !preferred.includes(key))
-      .sort((a, b) => a.localeCompare(b)),
-  ];
-  return ordered.slice(0, 6);
+  const baselineMae = [...keys].filter((key) => /^baseline_.+_mae$/.test(key)).sort();
+  const rest = [...keys]
+    .filter((key) => !preferred.includes(key) && !baselineMae.includes(key))
+    .sort((a, b) => a.localeCompare(b));
+  const ordered = ["mae", ...baselineMae, "rmse", "mse", ...rest].filter(
+    (key, index, all) => keys.has(key) && all.indexOf(key) === index
+  );
+  return ordered.slice(0, 8);
 }
 
 function renderExperiments() {

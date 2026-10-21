@@ -16,7 +16,11 @@ import numpy as np
 import pandas as pd
 import torch
 
-from src.data.timeseries import load_csv_timeseries, make_sine_dataset
+from src.data.timeseries import (
+    load_csv_timeseries,
+    make_sine_dataset,
+    resolve_val_count,
+)
 from src.evaluation.metrics import mae, mse, rmse
 from src.inference.predictor import Predictor
 from src.models.registry import build_model
@@ -165,7 +169,7 @@ def _read_table(
     target_column = _target_column(data_cfg)
     header = pd.read_csv(path, nrows=0)
     columns = [str(column) for column in header.columns]
-    configured_time = data_cfg.get("time_column")
+    configured_time = data_cfg.get("time_column") or data_cfg.get("date_column")
     time_column: str | None
     if isinstance(configured_time, str) and configured_time.strip():
         if configured_time not in columns:
@@ -182,6 +186,21 @@ def _read_table(
             ),
             None,
         )
+        if time_column is None:
+            time_column = next(
+                (
+                    column
+                    for column in columns
+                    if column not in feature_columns
+                    and column != target_column
+                    and (
+                        column.endswith("_date")
+                        or column.endswith("_time")
+                        or column.endswith("_timestamp")
+                    )
+                ),
+                None,
+            )
 
     missing = [
         column for column in [*feature_columns, target_column] if column not in columns
@@ -284,11 +303,7 @@ def _evaluation_indices(n: int, data_cfg: dict[str, Any]) -> tuple[list[int], st
         val_split = float(data_cfg.get("val_split", 0.0))
     except (TypeError, ValueError) as exc:
         raise ValueError("data.val_split must be a number.") from exc
-    if not 0.0 <= val_split < 1.0:
-        raise ValueError(f"data.val_split must be in [0, 1), got {val_split}")
-    n_val = int(n * val_split)
-    if val_split > 0 and (n_val == 0 or n_val == n):
-        raise ValueError("data.val_split leaves an empty train or validation set.")
+    n_val = resolve_val_count(n, val_split)
     if n_val == 0:
         return list(range(n)), "training"
 

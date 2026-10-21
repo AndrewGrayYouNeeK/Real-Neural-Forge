@@ -287,7 +287,7 @@ Lists recent training runs stored in the native SQLite experiment database.
 
 Read-only recent history for the **loaded** config, plus a one-step backtest of the loaded model.
 
-`points` (default 96, 8–400) is how many of the latest target values to return. Synthetic data is one seeded series from `data.seed` (a fixed display seed when that is unset), not the full training set. A config with `data.path` is read as a table — `source: csv`, or another source name such as a weather or price file — using `feature_columns`, `target_column`, and `time_column` when set. A timestamp-like column (`timestamp`, `time`, `date`, `datetime`) is used when `time_column` is omitted.
+`points` (default 96, 8–400) is how many of the latest target values to return. Synthetic data is one seeded series from `data.seed` (a fixed display seed when that is unset), not the full training set. A config with `data.path` is read as a table — `source: csv`, or another source name such as a weather or price file — using `feature_columns`, `target_column`, and `time_column` or `date_column` when set. A timestamp-like column (`timestamp`, `time`, `date`, `datetime`, or a name ending in `_date`) is used when neither is set.
 
 The payload includes `history` (actuals and one-step `predicted` values), `forecast` (the next value; `p10` / `p50` / `p90` are null until a model provides them), `predict_window` (the feature window to POST to `/predict`), and `metrics` for the model against persistence and mean baselines on that window. `checkpoint_loaded` mirrors `/model/info`. A missing dataset file or a feature width that does not match the model returns `422`.
 
@@ -297,7 +297,7 @@ Read-only validation predictions for one run. `limit` (default 200, 1–2000) ke
 
 When the run's `metrics` already contain `validation_predictions`, `predictions`, or parallel `actual` / `predicted` arrays (optionally with `p10`, `p50`, `p90`), those points are returned with `"source": "stored"`. A `comparison` or `model_comparison` object on the metrics is passed through. Otherwise the endpoint replays the saved config on the checkpoint file and returns `"source": "replay"`. The split matches training: temporal for `source: csv`, random otherwise, unless `split_mode` is set. If nothing is stored and the checkpoint cannot be replayed, the response is still `200` with `"available": false` and an empty `points` list. An unknown id is `404`.
 
-The dashboard charts this payload, and it also plots multi-step forecasts, p10–p90 intervals, and model-comparison results when `/predict`, `/model/info`, or a forecast/comparison route includes them. Those fields are optional; the page still renders the one-step forecast and experiment metrics without them.
+The dashboard charts this payload, and it also plots multi-step forecasts, p10–p90 intervals, and model-comparison results when `/predict`, `/model/info`, or a forecast/comparison route includes them. Metric keys shaped like `baseline_persistence_mae` (written when `data.report_baselines` is set) are charted against the run's own MAE. Those fields are optional; the page still renders the one-step forecast and experiment metrics without them.
 
 ### YouNeeK Time
 

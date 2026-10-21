@@ -84,6 +84,51 @@ class TestRecentSeries:
         assert nan_row["actual"] is None
         assert nan_row["predicted"] is None
 
+    def test_draw_date_and_configured_date_column(self, tmp_path):
+        draws = tmp_path / "powerball.csv"
+        draws.write_text(
+            "draw_date,powerball\n"
+            "2024-01-01,4\n"
+            "2024-01-03,8\n"
+            "2024-01-06,12\n"
+            "2024-01-08,16\n"
+            "2024-01-10,20\n",
+            encoding="utf-8",
+        )
+        cfg = {
+            "model": {"input_dim": 1, "output_dim": 1},
+            "data": {
+                "source": "csv",
+                "path": str(draws),
+                "feature_columns": ["powerball"],
+                "target_column": "powerball",
+                "seq_len": 2,
+            },
+        }
+        payload = recent_series(cfg, PersistencePredictor(), points=5)
+        assert payload["history"][0]["time"] == "2024-01-01"
+
+        observed = tmp_path / "temps.csv"
+        observed.write_text(
+            "observed_on,temperature_c\n"
+            "2024-06-01,21\n"
+            "2024-06-02,22\n"
+            "2024-06-03,19\n"
+            "2024-06-04,24\n",
+            encoding="utf-8",
+        )
+        cfg["data"] = {
+            "source": "csv",
+            "path": str(observed),
+            "feature_columns": ["temperature_c"],
+            "target_column": "temperature_c",
+            "date_column": "observed_on",
+            "seq_len": 2,
+        }
+        payload = recent_series(cfg, PersistencePredictor(), points=4)
+        assert payload["target"] == "temperature_c"
+        assert payload["history"][-1]["time"] == "2024-06-04"
+
     def test_missing_file_raises(self, tmp_path):
         cfg = {
             "model": {"input_dim": 1, "output_dim": 1},

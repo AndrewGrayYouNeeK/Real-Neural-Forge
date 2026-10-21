@@ -21,7 +21,7 @@ are written to `checkpoints/`.
 
 ### Lint / type-check / test / run
 Standard commands are documented in `README.md`; run them via the venv:
-- Tests: `.venv/bin/pytest` (151 tests, all passing).
+- Tests: `.venv/bin/pytest` (201 tests, all passing).
 - Lint: `.venv/bin/ruff check src/ tests/ workers_ci/`.
 - Type check: `.venv/bin/mypy src/ workers_ci/ --ignore-missing-imports`.
 - Train (creates `checkpoints/best_model.pt`, ~1 min on CPU): `.venv/bin/python -m src.train --config config/config.yaml`.
