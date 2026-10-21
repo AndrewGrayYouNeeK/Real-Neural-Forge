@@ -1,0 +1,11 @@
+{
+  "source": "https://www.nmdb.eu/nest/draw_graph.php",
+  "station": "OULU",
+  "data_type": "corr_for_efficiency",
+  "resolution": "daily averages reduced to monthly means",
+  "licence": "Free for non-commercial research, education, and public services. Acknowledge NMDB and the Oulu PIs. Oulu readme: https://cosmicrays.oulu.fi/readme.html",
+  "acknowledgement": "We acknowledge the NMDB database (www.nmdb.eu), founded under the European Union's FP7 programme (contract no. 213007), and the PIs of the neutron monitor at Oulu (Sodankyla Geophysical Observatory of the University of Oulu).",
+  "n_months": 751,
+  "date_start": "1964-04-01",
+  "date_end": "2026-10-01"
+}

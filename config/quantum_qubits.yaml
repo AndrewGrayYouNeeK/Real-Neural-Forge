@@ -1,0 +1,37 @@
+model:
+  name: time_series_transformer
+  input_dim: 1
+  output_dim: 1
+  d_model: 16
+  nhead: 4
+  num_encoder_layers: 2
+  dim_feedforward: 32
+  dropout: 0.05
+  max_seq_len: 32
+
+data:
+  path: datasets/quantum/qubit_record_annual.csv
+  date_column: date
+  feature_columns: ["log10_qubits"]
+  seq_len: 4
+  test_fraction: 0.2
+  val_fraction: 0.15
+  split_mode: temporal
+  normalize: true
+  transform: none
+  already_log10: true
+  seed: 0
+
+training:
+  experiment_name: quantum_qubits
+  batch_size: 8
+  learning_rate: 0.001
+  epochs: 80
+  patience: 15
+  max_grad_norm: 1.0
+  device: cpu
+  checkpoint_dir: checkpoints/quantum_qubits
+  seed: 0
+
+output:
+  results: results/quantum_qubits.json

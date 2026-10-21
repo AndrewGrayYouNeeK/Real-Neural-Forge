@@ -1,0 +1,10 @@
+{
+  "source": "https://huggingface.co/datasets/ProCreations/quantum-randomness/resolve/main/quantum_random_1000_final.csv",
+  "licence": "MIT",
+  "attribution": "ProCreations, 'quantum-randomness' (1,000 slices attributed to the ANU QRNG), MIT licence, https://huggingface.co/datasets/ProCreations/quantum-randomness",
+  "n_slices": 1024,
+  "n_symbols": 6144,
+  "alphabet_size": 64,
+  "anu_api": "not used; the keyless endpoint did not respond and now requires a key",
+  "framing": "Slices are concatenated in file order. Timestamps in the source are microseconds apart inside a single dump, not a calendar series."
+}

@@ -1,1 +1,1 @@
-"""Command-line helpers. Run modules from the repository root."""
+"""Command-line helpers. Run as ``python -m scripts.<name>`` from the repository root."""

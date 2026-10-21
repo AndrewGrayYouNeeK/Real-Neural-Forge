@@ -1,0 +1,14 @@
+{
+  "source": "https://export.arxiv.org/api/query",
+  "query": "cat:{category} AND submittedDate:[YYYYMM010000 TO last-day 2359]",
+  "categories": [
+    "cs.AI",
+    "cs.LG",
+    "cs.CL",
+    "quant-ph"
+  ],
+  "start": "2012-01",
+  "end": "2026-09",
+  "delay_seconds": 3.0,
+  "licence": "Monthly totals derived from the public arXiv API. Paper texts are not stored. arXiv asks for at least three seconds between requests."
+}

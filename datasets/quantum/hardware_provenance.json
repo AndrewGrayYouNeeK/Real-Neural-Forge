@@ -1,0 +1,8 @@
+{
+  "qubit_source": "https://raw.githubusercontent.com/francois-marie/awesome-quantum-computing-experiments/main/data/qubit_count.csv",
+  "error_source": "https://raw.githubusercontent.com/francois-marie/awesome-quantum-computing-experiments/main/data/entangled_state_error_exp.csv",
+  "licence": "MIT",
+  "attribution": "Fran\u00e7ois-Marie Le R\u00e9gent and contributors, 'Awesome Quantum Computing Experiments', MIT licence, https://github.com/francois-marie/awesome-quantum-computing-experiments",
+  "quantum_volume": "Not present in this dataset. The fidelity series is the running minimum of the entangled-state / two-qubit error column.",
+  "unrearranged_note": "Some 2024-2026 neutral-atom rows are notes as 'Not rearranged'. record_qubits includes them. The excluding column drops those rows before the cumulative maximum."
+}
