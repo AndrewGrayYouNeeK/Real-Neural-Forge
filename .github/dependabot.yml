@@ -8,9 +8,8 @@ updates:
     directory: /
     schedule:
       interval: weekly
-    # Resolve on the oldest CI interpreter so lock updates stay installable
-    # on Python 3.10 through 3.13.
-    python-version: "3.10"
+    # Dependabot rejects a python-version key in this file. It reads
+    # `.python-version` (3.10) so lock updates stay installable on 3.10–3.13.
     groups:
       python-dependencies:
         patterns:

@@ -26,3 +26,9 @@ starlette>=0.46.0,<1.8
 networkx>=2.5.1,<3.5
 websockets>=12,<17
 filelock>=3.12,<4.1.1
+
+# Editable build hook. Workers Builds installs the lock before Wrangler, and
+# this entry writes wrangler.jsonc when WRANGLER_CI_OVERRIDE_NAME is set.
+# It must stay editable so the hook runs against this checkout. A normal
+# install, including Docker, does not set that variable and writes nothing.
+-e ./workers_ci

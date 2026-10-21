@@ -52,7 +52,9 @@ A production-ready transformer pipeline for time-series prediction, built with P
 ├── requirements.in
 ├── requirements.txt
 ├── requirements-dev.in
-└── requirements-dev.txt
+├── requirements-dev.txt
+├── workers_ci/
+└── vercel.json
 ```
 
 ## Quick Start
@@ -256,16 +258,13 @@ GitHub is the home for this project:
 | CI (test, lint, typecheck, Docker build) | [GitHub Actions CI](https://github.com/AndrewGrayYouNeeK/Real-Neural-Forge/actions/workflows/ci.yml) |
 | Published image | `ghcr.io/andrewgrayyouneek/real-neural-forge` |
 | Run the published image | `docker compose -f docker-compose.ghcr.yml up` |
+| Cloudflare Workers | `real-neural-forge` and `youneek-xyz` |
 
-Tagged releases (`vX.Y.Z`) publish matching image tags after CI passes on that tag. Run the container on any host with Docker; no Vercel project is required.
+Tagged releases (`vX.Y.Z`) publish matching image tags after CI passes on that tag. Run the container on any host with Docker.
 
-`vercel.json` remains only to disable leftover Vercel GitHub auto-deployments. If Vercel **or Cloudflare Workers** status checks still appear on pull requests, disconnect those apps:
+Cloudflare Workers builds this repository for `real-neural-forge` and `youneek-xyz`. Each build sets `WRANGLER_CI_OVERRIDE_NAME`. Installing the locked dependencies runs the editable `workers_ci` hook, which writes `wrangler.jsonc` for that Worker and points assets at `frontend/`. Installs that do not set the variable, including the Docker image build, leave the tree unchanged.
 
-1. Open GitHub → **Settings** → **Integrations** → **Applications**
-2. For **Vercel**, click **Configure**, then remove **Real-Neural-Forge** from the repository list
-3. For **Cloudflare Workers**, click **Configure**, then remove **Real-Neural-Forge** (this repo is a FastAPI/Docker app, not a Worker)
-4. In the [Vercel dashboard](https://vercel.com/dashboard), delete any linked `real-neural-forge` projects
-5. On the GitHub repo, clear **About → Website** if it still points at `*.vercel.app`
+`vercel.json` stays so a leftover Vercel GitHub app cannot auto-deploy this repository. The running app is the container image above.
 
 ## Development
 
@@ -281,13 +280,13 @@ pytest --cov=src  # with coverage
 ### Code Quality
 
 ```bash
-ruff check src/ tests/
-ruff format --check src/ tests/
-mypy src/ --ignore-missing-imports
+ruff check src/ tests/ workers_ci/
+ruff format --check src/ tests/ workers_ci/
+mypy src/ workers_ci/ --ignore-missing-imports
 ```
 
 ### CI/CD
 
 - **CI** (`.github/workflows/ci.yml`) runs tests, linting, formatting, type checks, coverage, and a Docker image smoke test on Python 3.10–3.13 for every pull request and for pushes to `main` and `develop`.
 - **Publish** (`.github/workflows/publish.yml`) pushes `:latest` to GitHub Container Registry only after that CI workflow succeeds for a push to `main`. Version tags (`vX.Y.Z`) and manual runs publish after the same CI workflow completes successfully inside the publish run.
-- **Dependabot** (`.github/dependabot.yml`) opens weekly grouped PRs for GitHub Actions and the pip locks. Pip updates are resolved on Python 3.10 so they stay installable on the whole CI matrix.
+- **Dependabot** (`.github/dependabot.yml`) opens weekly grouped PRs for GitHub Actions and the pip locks. Pip updates resolve with the Python in `.python-version` (3.10) so they stay installable on the whole CI matrix.

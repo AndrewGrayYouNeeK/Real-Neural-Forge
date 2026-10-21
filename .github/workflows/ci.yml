@@ -33,15 +33,15 @@ jobs:
 
     - name: Lint with ruff
       run: |
-        ruff check src/ tests/
+        ruff check src/ tests/ workers_ci/
 
     - name: Check formatting with ruff
       run: |
-        ruff format --check src/ tests/
+        ruff format --check src/ tests/ workers_ci/
 
     - name: Type check with mypy
       run: |
-        mypy src/ --ignore-missing-imports --python-version 3.12
+        mypy src/ workers_ci/ --ignore-missing-imports --python-version 3.12
 
     - name: Run tests with coverage
       run: |

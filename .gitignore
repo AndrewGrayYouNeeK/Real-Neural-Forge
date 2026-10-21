@@ -21,3 +21,5 @@ htmlcov/
 .coverage
 coverage.json
 coverage.xml
+.wrangler/
+.dev.vars*

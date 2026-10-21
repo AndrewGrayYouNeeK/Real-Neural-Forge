@@ -6,6 +6,8 @@
 #
 --extra-index-url https://download.pytorch.org/whl/cpu
 
+-e ./workers_ci
+    # via -r requirements.in
 annotated-doc==0.0.5
     # via fastapi
 annotated-types==0.8.0

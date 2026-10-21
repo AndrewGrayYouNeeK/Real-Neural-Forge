@@ -22,14 +22,19 @@ WORKDIR /app
 # GPU image: docker build --build-arg TORCH_INDEX_URL=https://download.pytorch.org/whl/cu130 .
 ARG TORCH_INDEX_URL=https://download.pytorch.org/whl/cpu
 
+# workers_ci is an editable lockfile entry, so the directory has to be in the
+# image before pip runs. The hook writes wrangler.jsonc only when
+# WRANGLER_CI_OVERRIDE_NAME is set; a normal image build leaves the tree unchanged.
 COPY requirements.txt .
+COPY workers_ci ./workers_ci
 RUN torch_req="$(awk '/^torch([^A-Za-z0-9_]|$)/ { print; exit }' requirements.txt)" \
     && test -n "${torch_req}" \
     && awk '!/^torch([^A-Za-z0-9_]|$)/' requirements.txt > /tmp/requirements-notorch.txt \
     && pip install --no-cache-dir --index-url "${TORCH_INDEX_URL}" "${torch_req}" \
     && pip install --no-cache-dir -r /tmp/requirements-notorch.txt \
     && rm /tmp/requirements-notorch.txt \
-    && python -c "import os, torch; idx=os.environ['TORCH_INDEX_URL'].rstrip('/'); cuda=torch.version.cuda; print(torch.__version__, cuda); raise SystemExit(1 if idx.endswith('/cpu') and cuda else 0)"
+    && python -c "import os, torch; idx=os.environ['TORCH_INDEX_URL'].rstrip('/'); cuda=torch.version.cuda; print(torch.__version__, cuda); raise SystemExit(1 if idx.endswith('/cpu') and cuda else 0)" \
+    && test ! -e /app/wrangler.jsonc
 
 COPY --chown=forge:forge . .
 

@@ -21,16 +21,19 @@ are written to `checkpoints/`.
 
 ### Lint / type-check / test / run
 Standard commands are documented in `README.md`; run them via the venv:
-- Tests: `.venv/bin/pytest` (103 tests, all passing).
-- Lint: `.venv/bin/ruff check src/ tests/`.
-- Type check: `.venv/bin/mypy src/ --ignore-missing-imports`.
+- Tests: `.venv/bin/pytest` (135 tests, all passing).
+- Lint: `.venv/bin/ruff check src/ tests/ workers_ci/`.
+- Type check: `.venv/bin/mypy src/ workers_ci/ --ignore-missing-imports`.
 - Train (creates `checkpoints/best_model.pt`, ~1 min on CPU): `.venv/bin/python -m src.train --config config/config.yaml`.
 - Run dev server: `.venv/bin/uvicorn src.api:app --reload --host 0.0.0.0 --port 8000`.
 
 ### Non-obvious caveats
 - Runtime and dev dependencies are locked in `requirements.txt` and `requirements-dev.txt`
   (generated from `requirements.in` / `requirements-dev.in`). The lock is the newest set that
-  still installs on Python 3.10–3.13, and it pins the CPU torch wheel. CI runs mypy with
+  still installs on Python 3.10–3.13, and it pins the CPU torch wheel. The lock
+  also editable-installs `workers_ci` (`-e ./workers_ci`). That hook writes
+  `wrangler.jsonc` only when `WRANGLER_CI_OVERRIDE_NAME` is set; Docker and other
+  normal installs leave the tree unchanged. CI runs mypy with
   `--python-version 3.12`.
 - The API loads a model on startup: if `checkpoints/best_model.pt` is missing it serves an
   **untrained** model (predictions are effectively random) and `/model/info` reports

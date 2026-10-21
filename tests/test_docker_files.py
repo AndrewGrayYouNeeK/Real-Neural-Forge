@@ -21,7 +21,7 @@ def test_dockerignore_excludes_local_artifacts():
     # A bare "data" pattern would also drop the src/data package.
     assert "data" not in entries
     # Things the image needs at runtime must not be excluded.
-    for needed in ("src", "config", "frontend", "requirements.txt"):
+    for needed in ("src", "config", "frontend", "requirements.txt", "workers_ci"):
         assert needed not in entries
 
 
@@ -29,6 +29,18 @@ def test_dockerfile_healthcheck_hits_health_endpoint():
     dockerfile = (ROOT / "Dockerfile").read_text()
     assert "HEALTHCHECK" in dockerfile
     assert "http://127.0.0.1:8000/health" in dockerfile
+
+
+def test_dockerfile_installs_workers_hook_without_writing_config():
+    dockerfile = (ROOT / "Dockerfile").read_text()
+    copy_at = dockerfile.index("COPY workers_ci ./workers_ci")
+    install_at = dockerfile.index(
+        "pip install --no-cache-dir -r /tmp/requirements-notorch.txt"
+    )
+    assert copy_at < install_at
+    assert "test ! -e /app/wrangler.jsonc" in dockerfile
+    assert "-e ./workers_ci" in (ROOT / "requirements.in").read_text()
+    assert "-e ./workers_ci" in (ROOT / "requirements.txt").read_text()
 
 
 def test_dockerfile_uses_cpu_torch_without_build_tools():

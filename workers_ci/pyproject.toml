@@ -1,0 +1,14 @@
+[build-system]
+requires = ["setuptools"]
+build-backend = "ci_backend"
+backend-path = ["."]
+
+[project]
+name = "neural-forge-workers-ci"
+version = "0.0.0"
+description = "Writes wrangler.jsonc when Workers Builds installs this repository."
+
+# This directory is a build hook, not an importable package.
+[tool.setuptools]
+packages = []
+py-modules = []
