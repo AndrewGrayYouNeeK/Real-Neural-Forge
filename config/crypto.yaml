@@ -1,0 +1,42 @@
+# Highest market-cap coins with at least two years of daily candles.
+# Same training protocol as config/stocks.yaml. One model per coin.
+# dataset.enabled keeps the catalog out of scheduled champion retraining.
+dataset:
+  enabled: false
+retrain:
+  enabled: false
+group: crypto
+description: Daily crypto log returns versus USDT or USD.
+
+model:
+  name: time_series_transformer
+  input_dim: 2
+  output_dim: 1
+  d_model: 16
+  nhead: 2
+  num_encoder_layers: 1
+  dim_feedforward: 32
+  dropout: 0.1
+  max_seq_len: 64
+
+data:
+  source: csv
+  path: data/markets/features/_not_a_series.csv
+  feature_columns: [log_return, vol_10]
+  target_column: log_return
+  seq_len: 16
+  val_split: 0.2
+  split_mode: temporal
+  normalize: true
+
+training:
+  experiment_name: market-crypto
+  batch_size: 256
+  learning_rate: 0.001
+  epochs: 8
+  patience: 3
+  max_grad_norm: 1.0
+  device: cpu
+  checkpoint_dir: checkpoints/markets
+  log_interval: 100
+  seed: 0
