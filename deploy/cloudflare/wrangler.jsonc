@@ -1,0 +1,38 @@
+{
+  // Separate Worker from the dashboard Workers `real-neural-forge` and
+  // `youneek-xyz`. Keep this file in deploy/cloudflare/. A wrangler config at
+  // the repository root would change those Workers Builds.
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "real-neural-forge-api",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-10-21",
+  "observability": {
+    "enabled": true
+  },
+  "containers": [
+    {
+      "class_name": "NeuralForgeContainer",
+      "image": "registry.cloudflare.com/REPLACE_ACCOUNT_ID/real-neural-forge:latest",
+      "instance_type": "standard-1",
+      "max_instances": 1
+    }
+  ],
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "NEURAL_FORGE",
+        "class_name": "NeuralForgeContainer"
+      }
+    ]
+  },
+  "exports": {
+    "NeuralForgeContainer": {
+      "type": "durable-object",
+      "storage": "sqlite"
+    }
+  },
+  "vars": {
+    "NEURAL_FORGE_CONFIG": "config/config.yaml",
+    "NEURAL_FORGE_CHECKPOINT_URL": "https://github.com/AndrewGrayYouNeeK/Real-Neural-Forge/releases/download/champions/champion-default.pt"
+  }
+}

@@ -8,14 +8,10 @@ from typing import Any
 
 import torch
 import torch.nn as nn
-from torch.utils.data import DataLoader, Dataset, Subset, TensorDataset, random_split
+from torch.utils.data import DataLoader, Dataset, Subset, TensorDataset
 
+from src.data.prepare import load_series, resolve_split_mode, split_indices
 from src.data.scaling import StandardScaler
-from src.data.timeseries import (
-    load_csv_timeseries,
-    make_sine_dataset,
-    resolve_val_count,
-)
 from src.evaluation.baselines import (
     compare_to_baselines,
     format_score_table,
@@ -26,7 +22,7 @@ from src.evaluation.metrics import mae, mse, rmse
 from src.models.registry import build_model
 from src.storage.experiments import ExperimentStore, db_path_from_config
 from src.utils.checkpoint import save_checkpoint
-from src.utils.config import load_config
+from src.utils.config import load_config, merge_config
 from src.utils.paths import resolve_repo_path
 
 logger = logging.getLogger(__name__)
@@ -35,9 +31,16 @@ logger = logging.getLogger(__name__)
 class TimeSeriesTrainer:
     """End-to-end trainer for the time-series transformer."""
 
-    def __init__(self, config_path: str = "config/config.yaml") -> None:
+    def __init__(
+        self,
+        config_path: str = "config/config.yaml",
+        *,
+        overrides: dict[str, Any] | None = None,
+    ) -> None:
         self.config_path = config_path
         self.cfg = load_config(config_path)
+        if overrides:
+            self.cfg = merge_config(self.cfg, overrides)
         self.store = ExperimentStore(db_path_from_config(self.cfg))
 
     def _resolve_device(self, device_str: str) -> torch.device:
@@ -46,7 +49,7 @@ class TimeSeriesTrainer:
             device_str = "cpu"
         return torch.device(device_str)
 
-    def train(self) -> dict[str, Any]:
+    def train(self, *, checkpoint_name: str = "best_model.pt") -> dict[str, Any]:
         cfg = self.cfg
         t_cfg = cfg["training"]
         device = self._resolve_device(t_cfg.get("device", "cpu"))
@@ -66,43 +69,31 @@ class TimeSeriesTrainer:
 
         data_cfg = cfg.get("data", {})
         seq_len = int(data_cfg.get("seq_len", 64))
-        if data_cfg.get("source") == "csv" and data_cfg.get("path"):
-            inputs, targets = load_csv_timeseries(
-                resolve_repo_path(data_cfg["path"]),
-                feature_columns=data_cfg.get("feature_columns", ["value"]),
-                target_column=data_cfg.get("target_column", "value"),
-                seq_len=seq_len,
-            )
-        else:
-            inputs, targets = make_sine_dataset(
-                n_samples=data_cfg.get("n_samples", 1024),
-                seq_len=seq_len,
-                noise=data_cfg.get("noise", 0.05),
-                seed=data_cfg.get("seed"),
-            )
+        inputs, targets = load_series(cfg)
 
         full_dataset = TensorDataset(inputs, targets)
+        # CSV windows overlap and are ordered in time, so a random split leaks
+        # near-duplicate windows into validation; hold out the most recent ones.
+        split_mode = resolve_split_mode(data_cfg)
         val_split = float(data_cfg.get("val_split", 0.0))
-        n_val = resolve_val_count(len(full_dataset), val_split)
-        split_mode = data_cfg.get(
-            "split_mode", "temporal" if data_cfg.get("source") == "csv" else "random"
+        train_idx, val_idx = split_indices(
+            len(full_dataset),
+            val_split,
+            split_mode,
+            int(data_cfg.get("split_seed", 0)),
         )
-        if split_mode not in ("random", "temporal"):
-            raise ValueError(
-                f"data.split_mode must be 'random' or 'temporal', got {split_mode!r}"
-            )
+        # Load before any checkpoint is written so a missing date or target
+        # column fails before epochs run. The same arrays are scored at the end.
         baseline_frame = None
         if data_cfg.get("report_baselines"):
             if data_cfg.get("source") != "csv" or not data_cfg.get("path"):
                 raise ValueError(
                     "data.report_baselines requires a CSV source with a path."
                 )
-            if n_val == 0 or split_mode != "temporal":
+            if not val_idx or split_mode != "temporal":
                 raise ValueError(
                     "data.report_baselines requires a temporal validation split."
                 )
-            # Load before the loop so a missing date or target column fails
-            # before any epochs run. The same arrays are scored at the end.
             baseline_frame = load_baseline_series(
                 resolve_repo_path(data_cfg["path"]),
                 target_column=data_cfg.get("target_column", "value"),
@@ -110,28 +101,17 @@ class TimeSeriesTrainer:
             )
         dataset: Dataset[tuple[torch.Tensor, ...]]
         val_dataset: Dataset[tuple[torch.Tensor, ...]] | None
-        # CSV windows overlap and are ordered in time, so a random split leaks
-        # near-duplicate windows into validation; hold out the most recent ones.
-        if n_val and split_mode == "temporal":
-            n_fit = len(full_dataset) - n_val
-            dataset = Subset(full_dataset, list(range(n_fit)))
-            val_dataset = Subset(full_dataset, list(range(n_fit, len(full_dataset))))
-        elif n_val:
-            generator = torch.Generator().manual_seed(
-                int(data_cfg.get("split_seed", 0))
-            )
-            dataset, val_dataset = random_split(
-                full_dataset, [len(full_dataset) - n_val, n_val], generator=generator
-            )
+        if val_idx:
+            dataset = Subset(full_dataset, train_idx)
+            val_dataset = Subset(full_dataset, val_idx)
         else:
             dataset, val_dataset = full_dataset, None
-        n_train = len(full_dataset) - n_val
+        n_train = len(train_idx)
 
         # Standardise features/targets (default on for CSV data). Statistics come
         # from the training split only so validation data never leaks into them.
         scaler: StandardScaler | None = None
         if data_cfg.get("normalize", data_cfg.get("source") == "csv"):
-            train_idx = list(getattr(dataset, "indices", range(len(full_dataset))))
             scaler = StandardScaler.fit(inputs[train_idx], targets[train_idx])
             full_dataset.tensors = (
                 scaler.transform_inputs(inputs),
@@ -226,7 +206,7 @@ class TimeSeriesTrainer:
                 if select_loss < best_loss:
                     epochs_without_improvement = 0
                     best_loss = select_loss
-                    checkpoint_path = checkpoint_dir / "best_model.pt"
+                    checkpoint_path = checkpoint_dir / checkpoint_name
                     save_checkpoint(
                         model,
                         optimizer,
@@ -254,7 +234,7 @@ class TimeSeriesTrainer:
 
             # The checkpoint is the best epoch. Score that model, not whatever
             # weights the loop stopped on after the patience window.
-            best_checkpoint = checkpoint_dir / "best_model.pt"
+            best_checkpoint = checkpoint_dir / checkpoint_name
             if best_checkpoint.exists():
                 saved = torch.load(
                     best_checkpoint, map_location=device, weights_only=True
@@ -314,7 +294,7 @@ class TimeSeriesTrainer:
             experiment_id,
             status="completed",
             best_loss=best_loss,
-            checkpoint_path=str(checkpoint_dir / "best_model.pt"),
+            checkpoint_path=str(checkpoint_dir / checkpoint_name),
             metrics=metrics,
         )
 

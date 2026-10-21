@@ -1,0 +1,19 @@
+# Render blueprint alternative. Applying it creates a paid web service.
+# Standard is the smallest current plan with enough RAM for the CPU PyTorch image.
+services:
+  - type: web
+    name: real-neural-forge
+    runtime: image
+    plan: standard
+    healthCheckPath: /health
+    image:
+      url: ghcr.io/andrewgrayyouneek/real-neural-forge:latest
+    envVars:
+      - key: NEURAL_FORGE_CONFIG
+        value: config/config.yaml
+      - key: NEURAL_FORGE_CHECKPOINT_URL
+        value: https://github.com/AndrewGrayYouNeeK/Real-Neural-Forge/releases/download/champions/champion-default.pt
+      - key: NEURAL_FORGE_API_TOKEN
+        sync: false
+      - key: NEURAL_FORGE_CHECKPOINT_TOKEN
+        sync: false

@@ -19,15 +19,17 @@ from src import __version__
 from src.dashboard_data import recent_series, validation_predictions
 from src.inference.predictor import Predictor
 from src.models.registry import ModelRegistry, build_model
+from src.serving.checkpoint import checkpoint_destination, prepare_runtime_checkpoint
 from src.storage.experiments import ExperimentStore, db_path_from_config
 from src.training.trainer import TimeSeriesTrainer
 from src.utils.config import load_config
-from src.utils.paths import REPO_ROOT, resolve_repo_path
+from src.utils.paths import REPO_ROOT
 from src.youneek import parse_moment, snapshot
 
 logger = logging.getLogger("uvicorn.error")
 
 API_TOKEN_ENV = "NEURAL_FORGE_API_TOKEN"
+CONFIG_ENV = "NEURAL_FORGE_CONFIG"
 
 _state: dict[str, Any] = {}
 _store: ExperimentStore | None = None
@@ -37,11 +39,7 @@ _CONFIG_SUFFIXES = {".yaml", ".yml"}
 
 
 def _checkpoint_file(cfg: dict[str, Any]) -> Path:
-    inference = cfg.get("inference")
-    raw = inference.get("checkpoint_path") if isinstance(inference, dict) else None
-    if not isinstance(raw, str) or not raw.strip():
-        raw = "checkpoints/best_model.pt"
-    return resolve_repo_path(raw)
+    return checkpoint_destination(cfg)
 
 
 def _sequence_limit(model: Any, cfg: dict[str, Any]) -> int:
@@ -58,7 +56,7 @@ def _sequence_limit(model: Any, cfg: dict[str, Any]) -> int:
 def load_model(config_path: str | Path = "config/config.yaml") -> None:
     """Load (or lazily initialise) the model into the global state dict."""
     global _store
-    cfg = load_config(config_path)
+    cfg = prepare_runtime_checkpoint(load_config(config_path))
     i_cfg = cfg["inference"]
 
     device_str = i_cfg.get("device", "cpu")
@@ -98,7 +96,7 @@ def load_model(config_path: str | Path = "config/config.yaml") -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):  # noqa: ARG001
-    load_model()
+    load_model(os.environ.get(CONFIG_ENV, "config/config.yaml"))
     yield
     _state.clear()
 

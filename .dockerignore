@@ -27,3 +27,7 @@ checkpoints
 dist
 build
 .eggs
+champions
+forecasts
+release-assets
+deploy/cloudflare/node_modules

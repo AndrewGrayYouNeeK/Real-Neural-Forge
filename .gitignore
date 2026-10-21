@@ -23,3 +23,7 @@ coverage.json
 coverage.xml
 .wrangler/
 .dev.vars*
+champions/
+forecasts/
+release-assets/
+deploy/cloudflare/node_modules/
