@@ -946,3 +946,356 @@ Europe's mean is a long-tail mean: the median is 103 days and cv² is 3.73.
 About 36% of conflict-level spells are still open at the end of 2025, so many incompatibilities in this table do not resume inside the observation window. The country-level median is shorter (about 5.1 years) because a country can enter a new conflict that is a different `conflict_id`. The dyad curve never crosses one half (survival at the end of 2024 is 0.64), so a median time until the same dyad resumes is not identified. Conflict-level termination outcomes, as a robustness check on the older file: low activity 209, government victory 106, ceasefire 67, peace agreement 60, non-state victory 43, actor ceases to exist 20. Dyad outcomes: low activity 395, government victory 149, peace agreement 109, ceasefire 101, actor ceases to exist 88, non-state victory 73. Low activity is the modal code in both files.
 
 **Episode durations.** 628 episodes, 563 ended, 65 still open at the end of 2025. Kaplan–Meier median 385 days. Episodes that have ended: mean 1,126 days, median 305, minimum 0, maximum 17,075, cv² 3.66. Weibull shape 0.42 (median 325 days, mean 2,251 days); an exponential is rejected. Among episodes that have already ended, duration declines by about 18.5 days per year (about 185 days per decade), permutation p = 0.0005. That slope ignores episodes that are still open.
+
+## Market forecasts (stocks, currencies, crypto, commodities)
+
+Not financial advice. This is an educational evaluation of a small transformer against naive baselines on past prices. It is not a forecast you should trade on, and it is not a claim about future returns.
+
+The model predicts the next **log return**, not the price level. Features are that return and a 10-observation rolling standard deviation. Returns use consecutive published observations only (business days for ECB rates and equity sessions, exchange sessions for futures, calendar days for crypto) and only when both prices are positive. Inputs and the target are z-scored with statistics fit on the training windows. The holdout is the most recent 20% of windows (`split_mode: temporal`). Early stopping keeps the best validation checkpoint (`patience: 3`, at most `8` epochs, seed `0`). The network is a small transformer (`d_model=16`, `1` encoder layer, sequence length `16`).
+
+Two baselines are scored in those same return units:
+
+- **Persistence (random walk).** Predict a return of zero. On the price, that is "tomorrow's price equals today's price."
+- **Historical mean.** Predict the training-window average return, held constant.
+
+Directional accuracy is the fraction of holdout observations with a nonzero return whose sign the model matches. A coin flip is 50%. The fraction of up moves in the holdout is the hit rate of always predicting an increase, so a print near that rate is not skill. RMSE below is the root mean squared **log return** on the holdout. A ratio above 1 means the model was worse than that baseline.
+
+### Sources and terms
+
+Prices are not committed. `scripts/fetch_markets.py` downloads them into `data/markets/` (gitignored by `/data/`). Checkpoints written by training are gitignored as well.
+
+- **ECB euro foreign-exchange reference rates**, file `eurofxref-hist.zip`. The file quotes foreign currency units per 1 euro. This project converts each rate to units of that currency per 1 USD using the ECB dollar rate, and stores the euro as EUR per 1 USD. Reuse is allowed with attribution to the European Central Bank. The file is newest-first; the loader sorts it into time order before the split.
+- **Frankfurter** (`api.frankfurter.app`) mirrors those ECB rates. The fetch records a same-day cross-check of the USD crosses. It is not a second training source.
+- **FRED** `fredgraph.csv` (no API key) is the preferred source for the S&P 500 (`SP500`), WTI (`DCOILWTICO`), Brent (`DCOILBRENTEU`), Henry Hub natural gas (`DHHNGSP`), and the H.10 New Taiwan dollar rate (`DEXTWUS`), which the ECB file does not carry. S&P 500 values are S&P Dow Jones Indices data via FRED. H.10 rates are Board of Governors data. Oil and gas are EIA data via FRED. If those downloads time out, the script says so and uses the Yahoo fallback below where one exists. IMF monthly aluminum (`PALUMUSDM`) is not used: a daily aluminum futures history is available.
+- **Stooq** daily CSVs were requested first for equities. The host returned an HTML browser check rather than a file, so equities were not taken from Stooq.
+- **Yahoo Finance chart** (no API key) supplies AAPL, MSFT, and NVDA, plus commodity futures (gold `GC=F`, silver `SI=F`, copper `HG=F`, aluminum `ALI=F`, platinum `PL=F`, palladium `PA=F`, and the oil and gas contracts when FRED is unavailable) and the S&P 500 (`^GSPC`) when FRED is unavailable. Adjusted close is used when the payload includes it. Front-month futures include roll gaps. Yahoo's terms apply. The series are not redistributed in this repository.
+- **CoinGecko** `coins/markets` (no API key) supplies the market-cap order. If it is unavailable, CoinPaprika tickers are the fallback. Prices are not taken from either ranking source.
+- **Binance** public spot klines from `data-api.binance.vision` (no API key), daily, quote asset USDT. `api.binance.com` returned HTTP 451 from this environment, so it is not used. A `1000…USDT` contract is accepted when that is the listed market; its log return matches the token while the scale factor is constant. **Coinbase** exchange candles are the fallback for a ranked coin with no Binance USDT market.
+- Stablecoins are skipped. Wrapped and staked duplicates (WBTC, stETH, and the same pattern) are skipped when that still leaves 50 coins with at least two years of daily candles.
+
+Run notes from the fetch that produced these tables:
+
+- FRED graph CSV responded.
+- Stooq returned an HTML browser check rather than a CSV, so AAPL, MSFT, and NVDA come from Yahoo Finance.
+- Frankfurter USD rates on 2026-10-20 differed from the ECB cross by at most 0.0047% across 29 currencies.
+- ECB file 1999-01-04 to 2026-10-20: 41 currencies converted to per-USD, 41 long enough to train.
+- CoinGecko market-cap ranking: 250 tickers on page 1.
+- Binance lists 516 trading USDT symbols.
+- Crypto sample: 50 coins trained (cap 50); 53 higher-ranked or ineligible names skipped.
+
+### Fetch and train
+
+From the repository root, with the project virtualenv:
+
+```bash
+python scripts/fetch_markets.py
+python scripts/train_markets.py
+```
+
+Training reads `config/stocks.yaml`, `config/fx.yaml`, `config/crypto.yaml`, and `config/commodities.yaml`. Those files hold the shared model, the temporal split, the seed, and early stopping. The trainer writes one ordinary CSV config per series under `data/markets/runs/` and evaluates the best checkpoint, not the weights from the final epoch. One currency or one coin is one model. Total CPU training time for this run was 61 seconds.
+
+### Results
+
+Holdout metrics are log returns. Persistence RMSE is the RMSE of predicting zero. Mean RMSE predicts the training-set mean return. Directional accuracy is compared with 50% in the text under each table.
+
+| Group | Series | Beat persistence | Beat mean return | Median RMSE / persistence | Median RMSE / mean | Median directional accuracy |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Stocks and the S&P 500 | 4 | 2/4 | 2/4 | 0.999 | 1.000 | 52.3% |
+| Currencies (per 1 USD) | 41 | 19/41 | 20/41 | 1.000 | 1.000 | 51.0% |
+| Cryptocurrencies | 50 | 12/50 | 18/50 | 1.002 | 1.001 | 50.8% |
+| Commodities | 9 | 5/9 | 5/9 | 1.000 | 1.000 | 50.8% |
+
+The largest improvement on persistence is Turkish lira (RMSE 0.972 times the zero forecast, directional accuracy 76.8%). The training-set mean sign hits 77.0% of that same holdout, and the model RMSE is 0.995 times the historical-mean forecast. A gap that shrinks once the average drift is the baseline is the drift itself. The same reading applies when directional accuracy sits next to the fraction of up days.
+
+#### Stocks and the S&P 500
+
+Equity and index results use the same return baseline. A single recent holdout is not evidence of a tradable edge. 2 of 4 series had a lower RMSE than persistence, but the median ratio was 0.999 and median directional accuracy was 52.3%. The sign of the training-set mean return matched the holdout more often (median 54.1%) than the model did.
+
+| Series | Source | Coverage | Holdout | N | Model RMSE | Persistence RMSE | Mean RMSE | Dir. acc. |
+| --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: |
+| Apple | Yahoo AAPL | 2010-01-04 → 2026-10-21 | 2023-06-16 → 2026-10-21 | 840 | 0.01644 | 0.01643 | 0.01642 | 52.3% |
+| Microsoft | Yahoo MSFT | 2010-01-04 → 2026-10-21 | 2023-06-16 → 2026-10-21 | 840 | 0.01616 | 0.01615 | 0.01615 | 53.6% |
+| NVIDIA | Yahoo NVDA | 2010-01-04 → 2026-10-21 | 2023-06-16 → 2026-10-21 | 840 | 0.02881 | 0.02888 | 0.02882 | 50.9% |
+| S&P 500 | FRED SP500 | 2016-10-21 → 2026-10-20 | 2024-10-25 → 2026-10-20 | 497 | 0.01010 | 0.01013 | 0.01012 | 52.3% |
+
+#### Currencies (per 1 USD)
+
+FX reference rates are close to a random walk. The typical series did not beat a no-change forecast (median RMSE 1.000 times persistence, 19 of 41 series lower). Median directional accuracy was 51.0%.
+
+| Series | Source | Coverage | Holdout | N | Model RMSE | Persistence RMSE | Mean RMSE | Dir. acc. |
+| --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: |
+| Australian dollar | ECB eurofxref-hist | 1999-01-04 → 2026-10-20 | 2021-04-12 → 2026-10-20 | 1418 | 0.00652 | 0.00654 | 0.00654 | 51.6% |
+| Bulgarian lev | ECB eurofxref-hist | 2000-07-19 → 2025-12-31 | 2020-12-09 → 2025-12-31 | 1297 | 0.00477 | 0.00477 | 0.00477 | 50.4% |
+| Brazilian real | ECB eurofxref-hist | 2008-01-02 → 2026-10-20 | 2023-01-20 → 2026-10-20 | 957 | 0.00741 | 0.00742 | 0.00742 | 51.1% |
+| Canadian dollar | ECB eurofxref-hist | 1999-01-04 → 2026-10-20 | 2021-04-12 → 2026-10-20 | 1418 | 0.00398 | 0.00400 | 0.00400 | 51.3% |
+| Swiss franc | ECB eurofxref-hist | 1999-01-04 → 2026-10-20 | 2021-04-12 → 2026-10-20 | 1418 | 0.00497 | 0.00496 | 0.00496 | 46.4% |
+| Chinese yuan | ECB eurofxref-hist | 2005-04-01 → 2026-10-20 | 2022-07-06 → 2026-10-20 | 1098 | 0.00258 | 0.00258 | 0.00258 | 51.8% |
+| Cypriot pound | ECB eurofxref-hist | 1999-01-04 → 2007-12-31 | 2006-03-20 → 2007-12-31 | 455 | 0.00442 | 0.00442 | 0.00442 | 55.2% |
+| Czech koruna | ECB eurofxref-hist | 1999-01-04 → 2026-10-20 | 2021-04-12 → 2026-10-20 | 1418 | 0.00581 | 0.00580 | 0.00580 | 51.3% |
+| Danish krone | ECB eurofxref-hist | 1999-01-04 → 2026-10-20 | 2021-04-12 → 2026-10-20 | 1418 | 0.00467 | 0.00467 | 0.00467 | 50.2% |
+| Estonian kroon | ECB eurofxref-hist | 1999-01-04 → 2010-12-31 | 2008-08-19 → 2010-12-31 | 609 | 0.00850 | 0.00851 | 0.00851 | 52.1% |
+| Euro | ECB eurofxref-hist | 1999-01-04 → 2026-10-20 | 2021-04-12 → 2026-10-20 | 1418 | 0.00468 | 0.00467 | 0.00467 | 51.0% |
+| British pound | ECB eurofxref-hist | 1999-01-04 → 2026-10-20 | 2021-04-12 → 2026-10-20 | 1418 | 0.00519 | 0.00518 | 0.00518 | 49.8% |
+| Hong Kong dollar | ECB eurofxref-hist | 1999-01-04 → 2026-10-20 | 2021-04-12 → 2026-10-20 | 1418 | 0.00050 | 0.00050 | 0.00050 | 47.1% |
+| Croatian kuna | ECB eurofxref-hist | 2005-04-01 → 2022-12-30 | 2019-06-27 → 2022-12-30 | 904 | 0.00483 | 0.00482 | 0.00482 | 49.1% |
+| Hungarian forint | ECB eurofxref-hist | 1999-01-04 → 2026-10-20 | 2021-04-12 → 2026-10-20 | 1418 | 0.00831 | 0.00831 | 0.00831 | 49.8% |
+| Indonesian rupiah | ECB eurofxref-hist | 2005-04-01 → 2026-10-20 | 2022-07-06 → 2026-10-20 | 1098 | 0.00389 | 0.00391 | 0.00391 | 56.4% |
+| Israeli shekel | ECB eurofxref-hist | 2011-01-03 → 2026-10-20 | 2023-08-29 → 2026-10-20 | 803 | 0.00616 | 0.00615 | 0.00615 | 49.9% |
+| Indian rupee | ECB eurofxref-hist | 2009-01-02 → 2026-10-20 | 2023-04-03 → 2026-10-20 | 906 | 0.00237 | 0.00238 | 0.00237 | 54.1% |
+| Icelandic krona | ECB eurofxref-hist | 1999-01-04 → 2026-10-20 | 2023-01-31 → 2026-10-20 | 950 | 0.00493 | 0.00492 | 0.00493 | 50.2% |
+| Japanese yen | ECB eurofxref-hist | 1999-01-04 → 2026-10-20 | 2021-04-12 → 2026-10-20 | 1418 | 0.00630 | 0.00631 | 0.00631 | 56.4% |
+| South Korean won | ECB eurofxref-hist | 1999-01-04 → 2026-10-20 | 2021-04-12 → 2026-10-20 | 1418 | 0.00584 | 0.00584 | 0.00584 | 51.3% |
+| Lithuanian litas | ECB eurofxref-hist | 1999-01-04 → 2014-12-31 | 2011-10-25 → 2014-12-31 | 814 | 0.00488 | 0.00488 | 0.00488 | 49.3% |
+| Latvian lats | ECB eurofxref-hist | 1999-01-04 → 2013-12-31 | 2011-01-10 → 2013-12-31 | 763 | 0.00575 | 0.00576 | 0.00576 | 53.1% |
+| Maltese lira | ECB eurofxref-hist | 1999-01-04 → 2007-12-31 | 2006-03-20 → 2007-12-31 | 455 | 0.00439 | 0.00440 | 0.00440 | 56.5% |
+| Mexican peso | ECB eurofxref-hist | 2008-01-02 → 2026-10-20 | 2023-01-20 → 2026-10-20 | 957 | 0.00707 | 0.00706 | 0.00707 | 48.7% |
+| Malaysian ringgit | ECB eurofxref-hist | 2005-04-01 → 2026-10-20 | 2022-07-06 → 2026-10-20 | 1098 | 0.00369 | 0.00370 | 0.00370 | 49.5% |
+| Norwegian krone | ECB eurofxref-hist | 1999-01-04 → 2026-10-20 | 2021-04-12 → 2026-10-20 | 1418 | 0.00749 | 0.00750 | 0.00750 | 51.8% |
+| New Zealand dollar | ECB eurofxref-hist | 1999-01-04 → 2026-10-20 | 2021-04-12 → 2026-10-20 | 1418 | 0.00657 | 0.00658 | 0.00658 | 52.8% |
+| Philippine peso | ECB eurofxref-hist | 2005-04-01 → 2026-10-20 | 2022-07-06 → 2026-10-20 | 1098 | 0.00370 | 0.00370 | 0.00370 | 50.8% |
+| Polish zloty | ECB eurofxref-hist | 1999-01-04 → 2026-10-20 | 2021-04-12 → 2026-10-20 | 1418 | 0.00660 | 0.00660 | 0.00660 | 49.8% |
+| Romanian leu (old) | ECB eurofxref-hist | 1999-01-04 → 2005-06-30 | 2004-03-25 → 2005-06-30 | 327 | 0.00857 | 0.00856 | 0.00862 | 48.9% |
+| Romanian leu | ECB eurofxref-hist | 2005-07-01 → 2026-10-20 | 2022-07-25 → 2026-10-20 | 1085 | 0.00504 | 0.00503 | 0.00503 | 49.3% |
+| Russian ruble | ECB eurofxref-hist | 2005-04-01 → 2022-03-01 | 2018-10-22 → 2022-03-01 | 861 | 0.01165 | 0.01158 | 0.01157 | 48.4% |
+| Swedish krona | ECB eurofxref-hist | 1999-01-04 → 2026-10-20 | 2021-04-12 → 2026-10-20 | 1418 | 0.00699 | 0.00699 | 0.00699 | 52.7% |
+| Singapore dollar | ECB eurofxref-hist | 1999-01-04 → 2026-10-20 | 2021-04-12 → 2026-10-20 | 1418 | 0.00287 | 0.00287 | 0.00287 | 50.4% |
+| Slovenian tolar | ECB eurofxref-hist | 1999-01-04 → 2006-12-29 | 2005-06-06 → 2006-12-29 | 404 | 0.00517 | 0.00516 | 0.00517 | 53.1% |
+| Slovak koruna | ECB eurofxref-hist | 1999-01-04 → 2008-12-31 | 2007-01-09 → 2008-12-31 | 506 | 0.00800 | 0.00801 | 0.00801 | 52.4% |
+| Thai baht | ECB eurofxref-hist | 2005-04-01 → 2026-10-20 | 2022-07-06 → 2026-10-20 | 1098 | 0.00534 | 0.00532 | 0.00532 | 48.5% |
+| Turkish lira (old) | ECB eurofxref-hist | 1999-01-04 → 2004-12-31 | 2003-10-30 → 2004-12-31 | 302 | 0.00783 | 0.00776 | 0.00792 | 57.3% |
+| Turkish lira | ECB eurofxref-hist | 2005-01-03 → 2026-10-20 | 2022-06-17 → 2026-10-20 | 1111 | 0.00401 | 0.00412 | 0.00403 | 76.8% |
+| South African rand | ECB eurofxref-hist | 1999-01-04 → 2026-10-20 | 2021-04-12 → 2026-10-20 | 1418 | 0.00819 | 0.00819 | 0.00819 | 48.3% |
+
+Coverage for every currencies (per 1 usd) series the fetch considered:
+
+| Series | Source | Start | End | Observations | Trained | Note |
+| --- | --- | --- | --- | ---: | --- | --- |
+| Australian dollar | ECB eurofxref-hist | 1999-01-04 | 2026-10-20 | 7118 | yes | AUD per 1 USD |
+| Bulgarian lev | ECB eurofxref-hist | 2000-07-19 | 2025-12-31 | 6515 | yes | BGN per 1 USD |
+| Brazilian real | ECB eurofxref-hist | 2008-01-02 | 2026-10-20 | 4814 | yes | BRL per 1 USD |
+| Canadian dollar | ECB eurofxref-hist | 1999-01-04 | 2026-10-20 | 7118 | yes | CAD per 1 USD |
+| Swiss franc | ECB eurofxref-hist | 1999-01-04 | 2026-10-20 | 7118 | yes | CHF per 1 USD |
+| Chinese yuan | ECB eurofxref-hist | 2005-04-01 | 2026-10-20 | 5519 | yes | CNY per 1 USD |
+| Cypriot pound | ECB eurofxref-hist | 1999-01-04 | 2007-12-31 | 2304 | yes | CYP per 1 USD |
+| Czech koruna | ECB eurofxref-hist | 1999-01-04 | 2026-10-20 | 7118 | yes | CZK per 1 USD |
+| Danish krone | ECB eurofxref-hist | 1999-01-04 | 2026-10-20 | 7118 | yes | DKK per 1 USD |
+| Estonian kroon | ECB eurofxref-hist | 1999-01-04 | 2010-12-31 | 3074 | yes | EEK per 1 USD |
+| Euro | ECB eurofxref-hist | 1999-01-04 | 2026-10-20 | 7118 | yes | EUR per 1 USD |
+| British pound | ECB eurofxref-hist | 1999-01-04 | 2026-10-20 | 7118 | yes | GBP per 1 USD |
+| Hong Kong dollar | ECB eurofxref-hist | 1999-01-04 | 2026-10-20 | 7118 | yes | HKD per 1 USD |
+| Croatian kuna | ECB eurofxref-hist | 2005-04-01 | 2022-12-30 | 4548 | yes | HRK per 1 USD |
+| Hungarian forint | ECB eurofxref-hist | 1999-01-04 | 2026-10-20 | 7118 | yes | HUF per 1 USD |
+| Indonesian rupiah | ECB eurofxref-hist | 2005-04-01 | 2026-10-20 | 5519 | yes | IDR per 1 USD |
+| Israeli shekel | ECB eurofxref-hist | 2011-01-03 | 2026-10-20 | 4044 | yes | ILS per 1 USD |
+| Indian rupee | ECB eurofxref-hist | 2009-01-02 | 2026-10-20 | 4558 | yes | INR per 1 USD |
+| Icelandic krona | ECB eurofxref-hist | 1999-01-04 | 2026-10-20 | 4777 | yes | ISK per 1 USD |
+| Japanese yen | ECB eurofxref-hist | 1999-01-04 | 2026-10-20 | 7118 | yes | JPY per 1 USD |
+| South Korean won | ECB eurofxref-hist | 1999-01-04 | 2026-10-20 | 7118 | yes | KRW per 1 USD |
+| Lithuanian litas | ECB eurofxref-hist | 1999-01-04 | 2014-12-31 | 4097 | yes | LTL per 1 USD |
+| Latvian lats | ECB eurofxref-hist | 1999-01-04 | 2013-12-31 | 3842 | yes | LVL per 1 USD |
+| Maltese lira | ECB eurofxref-hist | 1999-01-04 | 2007-12-31 | 2304 | yes | MTL per 1 USD |
+| Mexican peso | ECB eurofxref-hist | 2008-01-02 | 2026-10-20 | 4814 | yes | MXN per 1 USD |
+| Malaysian ringgit | ECB eurofxref-hist | 2005-04-01 | 2026-10-20 | 5519 | yes | MYR per 1 USD |
+| Norwegian krone | ECB eurofxref-hist | 1999-01-04 | 2026-10-20 | 7118 | yes | NOK per 1 USD |
+| New Zealand dollar | ECB eurofxref-hist | 1999-01-04 | 2026-10-20 | 7118 | yes | NZD per 1 USD |
+| Philippine peso | ECB eurofxref-hist | 2005-04-01 | 2026-10-20 | 5519 | yes | PHP per 1 USD |
+| Polish zloty | ECB eurofxref-hist | 1999-01-04 | 2026-10-20 | 7118 | yes | PLN per 1 USD |
+| Romanian leu (old) | ECB eurofxref-hist | 1999-01-04 | 2005-06-30 | 1664 | yes | ROL per 1 USD |
+| Romanian leu | ECB eurofxref-hist | 2005-07-01 | 2026-10-20 | 5454 | yes | RON per 1 USD |
+| Russian ruble | ECB eurofxref-hist | 2005-04-01 | 2022-03-01 | 4333 | yes | RUB per 1 USD |
+| Swedish krona | ECB eurofxref-hist | 1999-01-04 | 2026-10-20 | 7118 | yes | SEK per 1 USD |
+| Singapore dollar | ECB eurofxref-hist | 1999-01-04 | 2026-10-20 | 7118 | yes | SGD per 1 USD |
+| Slovenian tolar | ECB eurofxref-hist | 1999-01-04 | 2006-12-29 | 2049 | yes | SIT per 1 USD |
+| Slovak koruna | ECB eurofxref-hist | 1999-01-04 | 2008-12-31 | 2560 | yes | SKK per 1 USD |
+| Thai baht | ECB eurofxref-hist | 2005-04-01 | 2026-10-20 | 5519 | yes | THB per 1 USD |
+| Turkish lira (old) | ECB eurofxref-hist | 1999-01-04 | 2004-12-31 | 1537 | yes | TRL per 1 USD |
+| Turkish lira | ECB eurofxref-hist | 2005-01-03 | 2026-10-20 | 5581 | yes | TRY per 1 USD |
+| New Taiwan dollar | unavailable |  |  | 0 | no | HTTP 404 for https://fred.stlouisfed.org/graph/fredgraph.csv?id=DEXTWUS |
+| South African rand | ECB eurofxref-hist | 1999-01-04 | 2026-10-20 | 7118 | yes | ZAR per 1 USD |
+
+#### Cryptocurrencies
+
+Daily crypto closes are volatile, and a useful forecast still has to beat predicting that tomorrow's return is zero. The typical series did not beat a no-change forecast (median RMSE 1.002 times persistence, 12 of 50 series lower). Median directional accuracy was 50.8%.
+
+| Series | Source | Coverage | Holdout | N | Model RMSE | Persistence RMSE | Mean RMSE | Dir. acc. |
+| --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: |
+| Bitcoin | Binance BTCUSDT | 2017-08-17 → 2026-10-21 | 2024-12-26 → 2026-10-21 | 665 | 0.02251 | 0.02252 | 0.02256 | 51.1% |
+| Ethereum | Binance ETHUSDT | 2017-08-17 → 2026-10-21 | 2024-12-26 → 2026-10-21 | 665 | 0.03579 | 0.03579 | 0.03581 | 53.8% |
+| BNB | Binance BNBUSDT | 2017-11-06 → 2026-10-21 | 2025-01-11 → 2026-10-21 | 649 | 0.02558 | 0.02548 | 0.02557 | 48.7% |
+| XRP | Binance XRPUSDT | 2018-05-04 → 2026-10-21 | 2025-02-16 → 2026-10-21 | 613 | 0.03811 | 0.03814 | 0.03816 | 55.7% |
+| Solana | Binance SOLUSDT | 2020-08-11 → 2026-10-21 | 2025-08-01 → 2026-10-21 | 447 | 0.03594 | 0.03583 | 0.03597 | 49.8% |
+| TRON | Binance TRXUSDT | 2018-06-11 → 2026-10-21 | 2025-02-24 → 2026-10-21 | 605 | 0.01516 | 0.01525 | 0.01525 | 54.5% |
+| Zcash | Binance ZECUSDT | 2019-03-21 → 2026-10-21 | 2025-04-21 → 2026-10-21 | 549 | 0.07237 | 0.07213 | 0.07217 | 47.6% |
+| Dogecoin | Binance DOGEUSDT | 2019-07-05 → 2026-10-21 | 2025-05-12 → 2026-10-21 | 528 | 0.03939 | 0.03931 | 0.03947 | 50.7% |
+| Chainlink | Binance LINKUSDT | 2019-01-16 → 2026-10-21 | 2025-04-08 → 2026-10-21 | 562 | 0.03953 | 0.03951 | 0.03953 | 51.0% |
+| Cardano | Binance ADAUSDT | 2018-04-17 → 2026-10-21 | 2025-02-13 → 2026-10-21 | 616 | 0.04787 | 0.04776 | 0.04778 | 52.4% |
+| NEAR Protocol | Binance NEARUSDT | 2020-10-14 → 2026-10-21 | 2025-08-14 → 2026-10-21 | 434 | 0.05464 | 0.05444 | 0.05442 | 51.2% |
+| Stellar | Binance XLMUSDT | 2018-05-31 → 2026-10-21 | 2025-02-21 → 2026-10-21 | 608 | 0.04140 | 0.04135 | 0.04136 | 55.1% |
+| Bitcoin Cash | Binance BCHUSDT | 2019-11-28 → 2026-10-21 | 2025-06-11 → 2026-10-21 | 498 | 0.03851 | 0.03855 | 0.03857 | 53.4% |
+| Litecoin | Binance LTCUSDT | 2017-12-13 → 2026-10-21 | 2025-01-19 → 2026-10-21 | 641 | 0.03517 | 0.03514 | 0.03513 | 50.3% |
+| Uniswap | Binance UNIUSDT | 2020-09-17 → 2026-10-21 | 2025-08-08 → 2026-10-21 | 440 | 0.05096 | 0.05064 | 0.05065 | 48.6% |
+| Avalanche | Binance AVAXUSDT | 2020-09-22 → 2026-10-21 | 2025-08-09 → 2026-10-21 | 439 | 0.04192 | 0.04178 | 0.04184 | 52.8% |
+| Sui | Binance SUIUSDT | 2023-05-03 → 2026-10-21 | 2026-02-16 → 2026-10-21 | 248 | 0.04078 | 0.04035 | 0.04035 | 48.8% |
+| Hedera | Binance HBARUSDT | 2019-09-29 → 2026-10-21 | 2025-05-30 → 2026-10-21 | 510 | 0.04062 | 0.04048 | 0.04052 | 53.7% |
+| Bittensor | Binance TAOUSDT | 2024-04-11 → 2026-10-21 | 2026-04-26 → 2026-10-21 | 179 | 0.04319 | 0.04309 | 0.04311 | 51.1% |
+| Shiba Inu | Binance SHIBUSDT | 2021-05-10 → 2026-10-21 | 2025-09-24 → 2026-10-21 | 393 | 0.03613 | 0.03605 | 0.03607 | 48.8% |
+| Cronos | Coinbase CRO-USD | 2021-11-03 → 2026-10-21 | 2025-10-30 → 2026-10-21 | 357 | 0.03039 | 0.03042 | 0.03035 | 60.1% |
+| Quant | Binance QNTUSDT | 2021-07-29 → 2026-10-21 | 2025-10-10 → 2026-10-21 | 377 | 0.05777 | 0.05742 | 0.05743 | 53.1% |
+| Ethena | Binance ENAUSDT | 2024-04-02 → 2026-10-21 | 2026-04-24 → 2026-10-21 | 181 | 0.05989 | 0.05889 | 0.05912 | 44.4% |
+| Aave | Binance AAVEUSDT | 2020-10-15 → 2026-10-21 | 2025-08-14 → 2026-10-21 | 434 | 0.04515 | 0.04509 | 0.04514 | 50.6% |
+| Worldcoin | Binance WLDUSDT | 2023-07-24 → 2026-10-21 | 2026-03-04 → 2026-10-21 | 232 | 0.06695 | 0.06677 | 0.06682 | 47.0% |
+| Polkadot | Binance DOTUSDT | 2020-08-18 → 2026-10-21 | 2025-08-02 → 2026-10-21 | 446 | 0.04447 | 0.04450 | 0.04448 | 57.2% |
+| Pepe | Binance PEPEUSDT | 2023-05-05 → 2026-10-21 | 2026-02-16 → 2026-10-21 | 248 | 0.04275 | 0.04230 | 0.04232 | 50.0% |
+| PAX Gold | Binance PAXGUSDT | 2020-08-28 → 2026-10-21 | 2025-08-04 → 2026-10-21 | 444 | 0.01467 | 0.01465 | 0.01465 | 49.3% |
+| Internet Computer | Binance ICPUSDT | 2021-05-11 → 2026-10-21 | 2025-09-25 → 2026-10-21 | 392 | 0.05587 | 0.05597 | 0.05597 | 58.2% |
+| Arbitrum | Binance ARBUSDT | 2023-03-23 → 2026-10-21 | 2026-02-08 → 2026-10-21 | 256 | 0.05105 | 0.05100 | 0.05115 | 49.0% |
+| Ethereum Classic | Binance ETCUSDT | 2018-06-12 → 2026-10-21 | 2025-02-24 → 2026-10-21 | 605 | 0.03800 | 0.03804 | 0.03804 | 50.6% |
+| JUST | Binance JSTUSDT | 2020-08-11 → 2026-10-21 | 2025-08-01 → 2026-10-21 | 447 | 0.03002 | 0.03025 | 0.03025 | 58.5% |
+| Jupiter | Binance JUPUSDT | 2024-01-31 → 2026-10-21 | 2026-04-12 → 2026-10-21 | 193 | 0.05160 | 0.05150 | 0.05162 | 46.6% |
+| Algorand | Binance ALGOUSDT | 2019-06-22 → 2026-10-21 | 2025-05-10 → 2026-10-21 | 530 | 0.04199 | 0.04185 | 0.04184 | 49.0% |
+| POL (ex-MATIC) | Binance POLUSDT | 2024-09-13 → 2026-10-21 | 2026-05-27 → 2026-10-21 | 148 | 0.03681 | 0.03639 | 0.03649 | 47.3% |
+| Render | Binance RENDERUSDT | 2024-07-26 → 2026-10-21 | 2026-05-17 → 2026-10-21 | 158 | 0.03803 | 0.03777 | 0.03781 | 46.1% |
+| Cosmos Hub | Binance ATOMUSDT | 2019-04-29 → 2026-10-21 | 2025-04-29 → 2026-10-21 | 541 | 0.03783 | 0.03783 | 0.03783 | 50.9% |
+| Injective | Binance INJUSDT | 2020-10-21 → 2026-10-21 | 2025-08-15 → 2026-10-21 | 433 | 0.05259 | 0.05241 | 0.05247 | 50.6% |
+| Filecoin | Binance FILUSDT | 2020-10-15 → 2026-10-21 | 2025-08-14 → 2026-10-21 | 434 | 0.05746 | 0.05750 | 0.05746 | 51.0% |
+| NEXO | Binance NEXOUSDT | 2022-04-29 → 2026-10-21 | 2025-12-04 → 2026-10-21 | 322 | 0.02370 | 0.02359 | 0.02358 | 49.0% |
+| LayerZero | Binance ZROUSDT | 2024-06-20 → 2026-10-21 | 2026-05-10 → 2026-10-21 | 165 | 0.05327 | 0.05313 | 0.05321 | 52.4% |
+| Aptos | Binance APTUSDT | 2022-10-19 → 2026-10-21 | 2026-01-08 → 2026-10-21 | 287 | 0.04461 | 0.04471 | 0.04467 | 55.0% |
+| PancakeSwap | Binance CAKEUSDT | 2021-02-19 → 2026-10-21 | 2025-09-08 → 2026-10-21 | 409 | 0.04285 | 0.04286 | 0.04287 | 56.0% |
+| Stacks | Binance STXUSDT | 2019-10-25 → 2026-10-21 | 2025-06-04 → 2026-10-21 | 505 | 0.04700 | 0.04672 | 0.04675 | 50.7% |
+| Ether.fi | Binance ETHFIUSDT | 2024-03-18 → 2026-10-21 | 2026-04-21 → 2026-10-21 | 184 | 0.04981 | 0.04919 | 0.04943 | 51.4% |
+| Dash | Binance DASHUSDT | 2019-03-28 → 2026-10-21 | 2025-04-23 → 2026-10-21 | 547 | 0.06567 | 0.06538 | 0.06540 | 50.5% |
+| VeChain | Binance VETUSDT | 2018-07-25 → 2026-10-21 | 2025-03-04 → 2026-10-21 | 597 | 0.04093 | 0.04092 | 0.04094 | 53.1% |
+| Pyth Network | Binance PYTHUSDT | 2024-02-02 → 2026-10-21 | 2026-04-12 → 2026-10-21 | 193 | 0.04733 | 0.04720 | 0.04756 | 49.2% |
+| Curve DAO | Binance CRVUSDT | 2020-08-15 → 2026-10-21 | 2025-08-02 → 2026-10-21 | 446 | 0.04860 | 0.04860 | 0.04859 | 54.2% |
+| Celestia | Binance TIAUSDT | 2023-10-31 → 2026-10-21 | 2026-03-24 → 2026-10-21 | 212 | 0.05402 | 0.05402 | 0.05432 | 50.5% |
+
+Coverage for every cryptocurrencies series the fetch considered:
+
+| Series | Source | Start | End | Observations | Trained | Note |
+| --- | --- | --- | --- | ---: | --- | --- |
+| Bitcoin | Binance BTCUSDT | 2017-08-17 | 2026-10-21 | 3353 | yes | USDT close |
+| Ethereum | Binance ETHUSDT | 2017-08-17 | 2026-10-21 | 3353 | yes | USDT close |
+| Tether | not downloaded |  |  | 0 | no | stablecoin |
+| BNB | Binance BNBUSDT | 2017-11-06 | 2026-10-21 | 3272 | yes | USDT close |
+| XRP | Binance XRPUSDT | 2018-05-04 | 2026-10-21 | 3093 | yes | USDT close |
+| USDC | not downloaded |  |  | 0 | no | stablecoin |
+| Solana | Binance SOLUSDT | 2020-08-11 | 2026-10-21 | 2263 | yes | USDT close |
+| TRON | Binance TRXUSDT | 2018-06-11 | 2026-10-21 | 3055 | yes | USDT close |
+| Figure Heloc | not downloaded |  |  | 0 | no | no Binance USDT market and no Coinbase FIGR_HELOC-USD candles |
+| Zcash | Binance ZECUSDT | 2019-03-21 | 2026-10-21 | 2772 | yes | USDT close |
+| Hyperliquid | Binance HYPEUSDT | 2026-09-24 | 2026-10-21 | 28 | no | coverage is 27 days, shorter than 700 |
+| Dogecoin | Binance DOGEUSDT | 2019-07-05 | 2026-10-21 | 2666 | yes | USDT close |
+| Monero | not downloaded |  |  | 0 | no | no Binance USDT market and no Coinbase XMR-USD candles |
+| USDS | not downloaded |  |  | 0 | no | stablecoin |
+| WhiteBIT Coin | not downloaded |  |  | 0 | no | no Binance USDT market and no Coinbase WBT-USD candles |
+| Chainlink | Binance LINKUSDT | 2019-01-16 | 2026-10-21 | 2836 | yes | USDT close |
+| Cardano | Binance ADAUSDT | 2018-04-17 | 2026-10-21 | 3110 | yes | USDT close |
+| LEO Token | not downloaded |  |  | 0 | no | no Binance USDT market and no Coinbase LEO-USD candles |
+| NEAR Protocol | Binance NEARUSDT | 2020-10-14 | 2026-10-21 | 2199 | yes | USDT close |
+| Rain | not downloaded |  |  | 0 | no | no Binance USDT market and no Coinbase RAIN-USD candles |
+| Stellar | Binance XLMUSDT | 2018-05-31 | 2026-10-21 | 3066 | yes | USDT close |
+| Bitcoin Cash | Binance BCHUSDT | 2019-11-28 | 2026-10-21 | 2520 | yes | USDT close |
+| Litecoin | Binance LTCUSDT | 2017-12-13 | 2026-10-21 | 3235 | yes | USDT close |
+| Ethena USDe | not downloaded |  |  | 0 | no | stablecoin |
+| Uniswap | Binance UNIUSDT | 2020-09-17 | 2026-10-21 | 2226 | yes | USDT close |
+| Dai | not downloaded |  |  | 0 | no | stablecoin |
+| Avalanche | Binance AVAXUSDT | 2020-09-22 | 2026-10-21 | 2221 | yes | USDT close |
+| Canton | not downloaded |  |  | 0 | no | no Binance USDT market and no Coinbase CC-USD candles |
+| Sui | Binance SUIUSDT | 2023-05-03 | 2026-10-21 | 1268 | yes | USDT close |
+| USD1 | not downloaded |  |  | 0 | no | stablecoin |
+| Gram (prev. Toncoin) | Binance GRAMUSDT | 2026-07-02 | 2026-10-21 | 112 | no | coverage is 111 days, shorter than 700 |
+| Hedera | Binance HBARUSDT | 2019-09-29 | 2026-10-21 | 2580 | yes | USDT close |
+| Tether Gold | not downloaded |  |  | 0 | no | stablecoin |
+| Global Dollar | not downloaded |  |  | 0 | no | stablecoin |
+| Bittensor | Binance TAOUSDT | 2024-04-11 | 2026-10-21 | 924 | yes | USDT close |
+| Shiba Inu | Binance SHIBUSDT | 2021-05-10 | 2026-10-21 | 1991 | yes | USDT close |
+| Cronos | Coinbase CRO-USD | 2021-11-03 | 2026-10-21 | 1814 | yes | USD close |
+| PayPal USD | not downloaded |  |  | 0 | no | stablecoin |
+| Quant | Binance QNTUSDT | 2021-07-29 | 2026-10-21 | 1911 | yes | USDT close |
+| Ethena | Binance ENAUSDT | 2024-04-02 | 2026-10-21 | 933 | yes | USDT close |
+| Bitway | not downloaded |  |  | 0 | no | no Binance USDT market and no Coinbase BTW-USD candles |
+| OKB | not downloaded |  |  | 0 | no | no Binance USDT market and no Coinbase OKB-USD candles |
+| Aave | Binance AAVEUSDT | 2020-10-15 | 2026-10-21 | 2198 | yes | USDT close |
+| Circle USYC | not downloaded |  |  | 0 | no | no Binance USDT market and no Coinbase USYC-USD candles |
+| Ripple USD | not downloaded |  |  | 0 | no | stablecoin |
+| Ondo US Dollar Yield | not downloaded |  |  | 0 | no | stablecoin |
+| Ondo | Binance ONDOUSDT | 2025-04-11 | 2026-10-21 | 559 | no | coverage is 558 days, shorter than 700 |
+| Worldcoin | Binance WLDUSDT | 2023-07-24 | 2026-10-21 | 1186 | yes | USDT close |
+| BlackRock USD Institutional Digital Liquidity Fund | not downloaded |  |  | 0 | no | no Binance USDT market and no Coinbase BUIDL-USD candles |
+| Pump.fun | Binance PUMPUSDT | 2025-09-11 | 2026-10-21 | 406 | no | coverage is 405 days, shorter than 700 |
+| Polkadot | Binance DOTUSDT | 2020-08-18 | 2026-10-21 | 2256 | yes | USDT close |
+| Aster | Binance ASTERUSDT | 2025-10-06 | 2026-10-21 | 381 | no | coverage is 380 days, shorter than 700 |
+| Pepe | Binance PEPEUSDT | 2023-05-05 | 2026-10-21 | 1266 | yes | USDT close |
+| Falcon USD | not downloaded |  |  | 0 | no | no Binance USDT market and no Coinbase USDF-USD candles |
+| PAX Gold | Binance PAXGUSDT | 2020-08-28 | 2026-10-21 | 2246 | yes | USDT close |
+| Mantle | not downloaded |  |  | 0 | no | no Binance USDT market and no Coinbase MNT-USD candles |
+| World Liberty Financial | Binance WLFIUSDT | 2025-09-01 | 2026-10-21 | 416 | no | coverage is 415 days, shorter than 700 |
+| Sky | Binance SKYUSDT | 2025-09-17 | 2026-10-21 | 400 | no | coverage is 399 days, shorter than 700 |
+| USDD | not downloaded |  |  | 0 | no | stablecoin |
+| MemeCore | not downloaded |  |  | 0 | no | no Binance USDT market and no Coinbase M-USD candles |
+| Spiko Amundi Overnight Swap Fund (EUR) | not downloaded |  |  | 0 | no | no Binance USDT market and no Coinbase EURSAFO-USD candles |
+| Morpho | Binance MORPHOUSDT | 2025-10-03 | 2026-10-21 | 384 | no | coverage is 383 days, shorter than 700 |
+| Internet Computer | Binance ICPUSDT | 2021-05-11 | 2026-10-21 | 1990 | yes | USDT close |
+| United Stables | Binance UUSDT | 2026-01-13 | 2026-10-21 | 282 | no | coverage is 281 days, shorter than 700 |
+| HTX DAO | not downloaded |  |  | 0 | no | no Binance USDT market and no Coinbase HTX-USD candles |
+| Bitget Token | not downloaded |  |  | 0 | no | no Binance USDT market and no Coinbase BGB-USD candles |
+| Arbitrum | Binance ARBUSDT | 2023-03-23 | 2026-10-21 | 1309 | yes | USDT close |
+| BFUSD | not downloaded |  |  | 0 | no | stablecoin |
+| USDGO | not downloaded |  |  | 0 | no | no Binance USDT market and no Coinbase USDGO-USD candles |
+| Ethereum Classic | Binance ETCUSDT | 2018-06-12 | 2026-10-21 | 3054 | yes | USDT close |
+| Venice Token | Coinbase VVV-USD | 2025-01-28 | 2026-10-21 | 632 | no | coverage is 631 days, shorter than 700 |
+| JUST | Binance JSTUSDT | 2020-08-11 | 2026-10-21 | 2263 | yes | USDT close |
+| Jupiter | Binance JUPUSDT | 2024-01-31 | 2026-10-21 | 995 | yes | USDT close |
+| Gate | not downloaded |  |  | 0 | no | no Binance USDT market and no Coinbase GT-USD candles |
+| Kaspa | not downloaded |  |  | 0 | no | no Binance USDT market and no Coinbase KAS-USD candles |
+| KuCoin | not downloaded |  |  | 0 | no | no Binance USDT market and no Coinbase KCS-USD candles |
+| Algorand | Binance ALGOUSDT | 2019-06-22 | 2026-10-21 | 2679 | yes | USDT close |
+| POL (ex-MATIC) | Binance POLUSDT | 2024-09-13 | 2026-10-21 | 769 | yes | USDT close |
+| Render | Binance RENDERUSDT | 2024-07-26 | 2026-10-21 | 818 | yes | USDT close |
+| Cosmos Hub | Binance ATOMUSDT | 2019-04-29 | 2026-10-21 | 2733 | yes | USDT close |
+| Pi Network | not downloaded |  |  | 0 | no | no Binance USDT market and no Coinbase PI-USD candles |
+| Injective | Binance INJUSDT | 2020-10-21 | 2026-10-21 | 2192 | yes | USDT close |
+| Filecoin | Binance FILUSDT | 2020-10-15 | 2026-10-21 | 2198 | yes | USDT close |
+| Pearl | not downloaded |  |  | 0 | no | no Binance USDT market and no Coinbase PEARL-USD candles |
+| Lighter | not downloaded |  |  | 0 | no | no Binance USDT market and no Coinbase LIT-USD candles |
+| Aerodrome Finance | Binance AEROUSDT | 2026-07-17 | 2026-10-21 | 97 | no | coverage is 96 days, shorter than 700 |
+| Open USD | not downloaded |  |  | 0 | no | no Binance USDT market and no Coinbase OUSD-USD candles |
+| NEXO | Binance NEXOUSDT | 2022-04-29 | 2026-10-21 | 1637 | yes | USDT close |
+| LayerZero | Binance ZROUSDT | 2024-06-20 | 2026-10-21 | 854 | yes | USDT close |
+| Invesco Short Duration US Government Securities Fund | not downloaded |  |  | 0 | no | no Binance USDT market and no Coinbase USTB-USD candles |
+| Aptos | Binance APTUSDT | 2022-10-19 | 2026-10-21 | 1464 | yes | USDT close |
+| PancakeSwap | Binance CAKEUSDT | 2021-02-19 | 2026-10-21 | 2071 | yes | USDT close |
+| GHO | not downloaded |  |  | 0 | no | no Binance USDT market and no Coinbase GHO-USD candles |
+| Stacks | Binance STXUSDT | 2019-10-25 | 2026-10-21 | 2554 | yes | USDT close |
+| Ether.fi | Binance ETHFIUSDT | 2024-03-18 | 2026-10-21 | 948 | yes | USDT close |
+| XDC Network | not downloaded |  |  | 0 | no | no Binance USDT market and no Coinbase XDC-USD candles |
+| Midnight | Binance NIGHTUSDT | 2026-03-11 | 2026-10-21 | 225 | no | coverage is 224 days, shorter than 700 |
+| Dash | Binance DASHUSDT | 2019-03-28 | 2026-10-21 | 2765 | yes | USDT close |
+| Akedo | not downloaded |  |  | 0 | no | no Binance USDT market and no Coinbase AKE-USD candles |
+| VeChain | Binance VETUSDT | 2018-07-25 | 2026-10-21 | 3011 | yes | USDT close |
+| Pyth Network | Binance PYTHUSDT | 2024-02-02 | 2026-10-21 | 993 | yes | USDT close |
+| Curve DAO | Binance CRVUSDT | 2020-08-15 | 2026-10-21 | 2259 | yes | USDT close |
+| Celestia | Binance TIAUSDT | 2023-10-31 | 2026-10-21 | 1087 | yes | USDT close |
+
+#### Commodities
+
+Commodity results use the same return baseline. Front-month futures include contract rolls, so they are not a pure spot series. 5 of 9 series had a lower RMSE than persistence, but the median ratio was 1.000 and median directional accuracy was 50.8%. The sign of the training-set mean return matched the holdout more often (median 52.2%) than the model did.
+
+| Series | Source | Coverage | Holdout | N | Model RMSE | Persistence RMSE | Mean RMSE | Dir. acc. |
+| --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: |
+| Aluminum futures (Yahoo ALI=F) | Yahoo ALI=F | 2014-05-06 → 2026-10-21 | 2024-05-13 → 2026-10-21 | 614 | 0.01522 | 0.01523 | 0.01523 | 49.8% |
+| Brent crude (spot) | FRED DCOILBRENTEU | 1987-05-20 → 2026-10-14 | 2019-08-14 → 2026-10-14 | 1816 | 0.03613 | 0.03613 | 0.03613 | 52.9% |
+| Copper futures (Yahoo HG=F) | Yahoo HG=F | 2010-01-04 → 2026-10-21 | 2023-06-22 → 2026-10-21 | 840 | 0.01831 | 0.01828 | 0.01827 | 51.6% |
+| Gold futures (Yahoo GC=F) | Yahoo GC=F | 2010-01-04 → 2026-10-21 | 2023-06-22 → 2026-10-21 | 840 | 0.01313 | 0.01316 | 0.01315 | 50.3% |
+| Henry Hub natural gas (spot) | FRED DHHNGSP | 1997-01-07 → 2026-10-14 | 2022-03-28 → 2026-10-14 | 1136 | 0.11118 | 0.11160 | 0.11160 | 50.5% |
+| Palladium futures (Yahoo PA=F) | Yahoo PA=F | 2010-01-04 → 2026-10-21 | 2023-06-26 → 2026-10-21 | 836 | 0.02874 | 0.02864 | 0.02865 | 46.4% |
+| Platinum futures (Yahoo PL=F) | Yahoo PL=F | 2010-01-04 → 2026-10-21 | 2023-06-21 → 2026-10-21 | 839 | 0.02455 | 0.02448 | 0.02448 | 53.3% |
+| Silver futures (Yahoo SI=F) | Yahoo SI=F | 2010-01-04 → 2026-10-21 | 2023-06-22 → 2026-10-21 | 839 | 0.02831 | 0.02836 | 0.02836 | 51.8% |
+| WTI crude (Cushing spot) | FRED DCOILWTICO | 1986-01-02 → 2026-10-14 | 2019-02-28 → 2026-10-14 | 1897 | 0.03164 | 0.03164 | 0.03164 | 50.8% |
+
+### Limits
+
+A lower RMSE than persistence on one holdout, especially by a fraction of a percent, is not a trading edge. The model does not see order flow, news, or funding costs, and the commodity futures are front-month contracts. Discontinued ECB currencies (for example the old Romanian leu, or the ruble after the ECB stopped publishing it) are scored on the last 20% of their own sample, which is not 2026. Crypto coins with less than two years of daily candles are listed and not trained. Pegged currencies (the Danish krone, the Hong Kong dollar, and others) mostly import the dollar's move against the peg partner, so their errors are not independent of the euro or the dollar.
+
+Retrain with the commands above. Live rankings and the latest ECB file move, so a later run will not reproduce these digits exactly; the seed, the split, and the checkpoint selection are fixed.
