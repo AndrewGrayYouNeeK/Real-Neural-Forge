@@ -1,12 +1,15 @@
 # Weather-augmented Powerball ticket model.
-# Inputs are the previous draw's numbers plus Tallahassee airport
-# (USW00093805) max temp, min temp, and precipitation on those past draw
-# dates. Central Park TMAX is added only when every training draw aligns.
-# The target draw's own weather is not an input.
+# The monthly runner builds the column list from the joined frame. It does
+# not read input_dim from this file. Inputs are the previous draw's numbers
+# plus Tallahassee airport (USW00093805) max temp, min temp, and precipitation
+# on those past draw dates. Central Park TMAX is added only when every
+# training draw aligns, which makes 10 inputs instead of 9. The 2026-10 and
+# 2026-11 logs included Central Park. The target draw's own weather is not
+# an input.
 
 model:
   name: time_series_transformer
-  input_dim: 9
+  input_dim: 10
   output_dim: 6
   d_model: 32
   nhead: 4

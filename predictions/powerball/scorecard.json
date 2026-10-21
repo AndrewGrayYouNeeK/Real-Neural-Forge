@@ -1,0 +1,813 @@
+{
+  "schema_version": 1,
+  "note": "Scorecard for logged tickets only. No tickets are purchased. Chance expectations are 25/69 white-ball matches and 1/26 Powerball hits per ticket. Base prize tiers label matches; they are not payouts.",
+  "chance_white_matches_per_ticket": 0.36231884057971014,
+  "chance_powerball_hit_per_ticket": 0.038461538461538464,
+  "months": [
+    {
+      "month": "2026-10",
+      "training_draws_through": "2026-09-30",
+      "scored_draws": [
+        {
+          "draw_date": "2026-10-03",
+          "actual": {
+            "whites": [
+              4,
+              42,
+              44,
+              55,
+              59
+            ],
+            "powerball": 14
+          },
+          "scores": {
+            "model": {
+              "white_matches": 1,
+              "powerball_hit": false,
+              "tier": "none",
+              "base_prize_usd": 0
+            },
+            "model_weather": {
+              "white_matches": 0,
+              "powerball_hit": true,
+              "tier": "match_pb",
+              "base_prize_usd": 4
+            },
+            "most_hit": {
+              "white_matches": 0,
+              "powerball_hit": true,
+              "tier": "match_pb",
+              "base_prize_usd": 4
+            },
+            "hot_pairs": {
+              "white_matches": 0,
+              "powerball_hit": true,
+              "tier": "match_pb",
+              "base_prize_usd": 4
+            },
+            "neighbors": {
+              "white_matches": 0,
+              "powerball_hit": false,
+              "tier": "none",
+              "base_prize_usd": 0
+            },
+            "overdue": {
+              "white_matches": 0,
+              "powerball_hit": false,
+              "tier": "none",
+              "base_prize_usd": 0
+            },
+            "random": {
+              "white_matches": 1,
+              "powerball_hit": false,
+              "tier": "none",
+              "base_prize_usd": 0
+            }
+          }
+        },
+        {
+          "draw_date": "2026-10-05",
+          "actual": {
+            "whites": [
+              16,
+              23,
+              32,
+              36,
+              54
+            ],
+            "powerball": 9
+          },
+          "scores": {
+            "model": {
+              "white_matches": 1,
+              "powerball_hit": false,
+              "tier": "none",
+              "base_prize_usd": 0
+            },
+            "model_weather": {
+              "white_matches": 1,
+              "powerball_hit": false,
+              "tier": "none",
+              "base_prize_usd": 0
+            },
+            "most_hit": {
+              "white_matches": 1,
+              "powerball_hit": false,
+              "tier": "none",
+              "base_prize_usd": 0
+            },
+            "hot_pairs": {
+              "white_matches": 2,
+              "powerball_hit": false,
+              "tier": "none",
+              "base_prize_usd": 0
+            },
+            "neighbors": {
+              "white_matches": 0,
+              "powerball_hit": false,
+              "tier": "none",
+              "base_prize_usd": 0
+            },
+            "overdue": {
+              "white_matches": 0,
+              "powerball_hit": false,
+              "tier": "none",
+              "base_prize_usd": 0
+            },
+            "random": {
+              "white_matches": 1,
+              "powerball_hit": false,
+              "tier": "none",
+              "base_prize_usd": 0
+            }
+          }
+        },
+        {
+          "draw_date": "2026-10-07",
+          "actual": {
+            "whites": [
+              11,
+              13,
+              14,
+              21,
+              65
+            ],
+            "powerball": 19
+          },
+          "scores": {
+            "model": {
+              "white_matches": 0,
+              "powerball_hit": false,
+              "tier": "none",
+              "base_prize_usd": 0
+            },
+            "model_weather": {
+              "white_matches": 0,
+              "powerball_hit": false,
+              "tier": "none",
+              "base_prize_usd": 0
+            },
+            "most_hit": {
+              "white_matches": 1,
+              "powerball_hit": false,
+              "tier": "none",
+              "base_prize_usd": 0
+            },
+            "hot_pairs": {
+              "white_matches": 1,
+              "powerball_hit": false,
+              "tier": "none",
+              "base_prize_usd": 0
+            },
+            "neighbors": {
+              "white_matches": 0,
+              "powerball_hit": false,
+              "tier": "none",
+              "base_prize_usd": 0
+            },
+            "overdue": {
+              "white_matches": 0,
+              "powerball_hit": true,
+              "tier": "match_pb",
+              "base_prize_usd": 4
+            },
+            "random": {
+              "white_matches": 0,
+              "powerball_hit": false,
+              "tier": "none",
+              "base_prize_usd": 0
+            }
+          }
+        },
+        {
+          "draw_date": "2026-10-10",
+          "actual": {
+            "whites": [
+              1,
+              4,
+              19,
+              33,
+              51
+            ],
+            "powerball": 15
+          },
+          "scores": {
+            "model": {
+              "white_matches": 0,
+              "powerball_hit": false,
+              "tier": "none",
+              "base_prize_usd": 0
+            },
+            "model_weather": {
+              "white_matches": 0,
+              "powerball_hit": false,
+              "tier": "none",
+              "base_prize_usd": 0
+            },
+            "most_hit": {
+              "white_matches": 0,
+              "powerball_hit": false,
+              "tier": "none",
+              "base_prize_usd": 0
+            },
+            "hot_pairs": {
+              "white_matches": 0,
+              "powerball_hit": false,
+              "tier": "none",
+              "base_prize_usd": 0
+            },
+            "neighbors": {
+              "white_matches": 0,
+              "powerball_hit": false,
+              "tier": "none",
+              "base_prize_usd": 0
+            },
+            "overdue": {
+              "white_matches": 2,
+              "powerball_hit": false,
+              "tier": "none",
+              "base_prize_usd": 0
+            },
+            "random": {
+              "white_matches": 2,
+              "powerball_hit": false,
+              "tier": "none",
+              "base_prize_usd": 0
+            }
+          }
+        },
+        {
+          "draw_date": "2026-10-12",
+          "actual": {
+            "whites": [
+              22,
+              28,
+              38,
+              51,
+              69
+            ],
+            "powerball": 9
+          },
+          "scores": {
+            "model": {
+              "white_matches": 0,
+              "powerball_hit": false,
+              "tier": "none",
+              "base_prize_usd": 0
+            },
+            "model_weather": {
+              "white_matches": 0,
+              "powerball_hit": false,
+              "tier": "none",
+              "base_prize_usd": 0
+            },
+            "most_hit": {
+              "white_matches": 1,
+              "powerball_hit": false,
+              "tier": "none",
+              "base_prize_usd": 0
+            },
+            "hot_pairs": {
+              "white_matches": 0,
+              "powerball_hit": false,
+              "tier": "none",
+              "base_prize_usd": 0
+            },
+            "neighbors": {
+              "white_matches": 0,
+              "powerball_hit": false,
+              "tier": "none",
+              "base_prize_usd": 0
+            },
+            "overdue": {
+              "white_matches": 2,
+              "powerball_hit": false,
+              "tier": "none",
+              "base_prize_usd": 0
+            },
+            "random": {
+              "white_matches": 0,
+              "powerball_hit": false,
+              "tier": "none",
+              "base_prize_usd": 0
+            }
+          }
+        },
+        {
+          "draw_date": "2026-10-14",
+          "actual": {
+            "whites": [
+              3,
+              34,
+              37,
+              42,
+              46
+            ],
+            "powerball": 20
+          },
+          "scores": {
+            "model": {
+              "white_matches": 0,
+              "powerball_hit": false,
+              "tier": "none",
+              "base_prize_usd": 0
+            },
+            "model_weather": {
+              "white_matches": 0,
+              "powerball_hit": false,
+              "tier": "none",
+              "base_prize_usd": 0
+            },
+            "most_hit": {
+              "white_matches": 0,
+              "powerball_hit": false,
+              "tier": "none",
+              "base_prize_usd": 0
+            },
+            "hot_pairs": {
+              "white_matches": 2,
+              "powerball_hit": false,
+              "tier": "none",
+              "base_prize_usd": 0
+            },
+            "neighbors": {
+              "white_matches": 1,
+              "powerball_hit": false,
+              "tier": "none",
+              "base_prize_usd": 0
+            },
+            "overdue": {
+              "white_matches": 1,
+              "powerball_hit": false,
+              "tier": "none",
+              "base_prize_usd": 0
+            },
+            "random": {
+              "white_matches": 1,
+              "powerball_hit": false,
+              "tier": "none",
+              "base_prize_usd": 0
+            }
+          }
+        },
+        {
+          "draw_date": "2026-10-17",
+          "actual": {
+            "whites": [
+              12,
+              13,
+              24,
+              32,
+              35
+            ],
+            "powerball": 11
+          },
+          "scores": {
+            "model": {
+              "white_matches": 2,
+              "powerball_hit": false,
+              "tier": "none",
+              "base_prize_usd": 0
+            },
+            "model_weather": {
+              "white_matches": 2,
+              "powerball_hit": false,
+              "tier": "none",
+              "base_prize_usd": 0
+            },
+            "most_hit": {
+              "white_matches": 0,
+              "powerball_hit": false,
+              "tier": "none",
+              "base_prize_usd": 0
+            },
+            "hot_pairs": {
+              "white_matches": 1,
+              "powerball_hit": false,
+              "tier": "none",
+              "base_prize_usd": 0
+            },
+            "neighbors": {
+              "white_matches": 1,
+              "powerball_hit": false,
+              "tier": "none",
+              "base_prize_usd": 0
+            },
+            "overdue": {
+              "white_matches": 0,
+              "powerball_hit": false,
+              "tier": "none",
+              "base_prize_usd": 0
+            },
+            "random": {
+              "white_matches": 0,
+              "powerball_hit": false,
+              "tier": "none",
+              "base_prize_usd": 0
+            }
+          }
+        },
+        {
+          "draw_date": "2026-10-19",
+          "actual": {
+            "whites": [
+              8,
+              31,
+              32,
+              42,
+              48
+            ],
+            "powerball": 23
+          },
+          "scores": {
+            "model": {
+              "white_matches": 1,
+              "powerball_hit": false,
+              "tier": "none",
+              "base_prize_usd": 0
+            },
+            "model_weather": {
+              "white_matches": 1,
+              "powerball_hit": false,
+              "tier": "none",
+              "base_prize_usd": 0
+            },
+            "most_hit": {
+              "white_matches": 0,
+              "powerball_hit": false,
+              "tier": "none",
+              "base_prize_usd": 0
+            },
+            "hot_pairs": {
+              "white_matches": 1,
+              "powerball_hit": false,
+              "tier": "none",
+              "base_prize_usd": 0
+            },
+            "neighbors": {
+              "white_matches": 0,
+              "powerball_hit": false,
+              "tier": "none",
+              "base_prize_usd": 0
+            },
+            "overdue": {
+              "white_matches": 0,
+              "powerball_hit": false,
+              "tier": "none",
+              "base_prize_usd": 0
+            },
+            "random": {
+              "white_matches": 0,
+              "powerball_hit": false,
+              "tier": "none",
+              "base_prize_usd": 0
+            }
+          }
+        }
+      ],
+      "unscored_dates": [
+        "2026-10-21",
+        "2026-10-24",
+        "2026-10-26",
+        "2026-10-28",
+        "2026-10-31"
+      ],
+      "strategies": {
+        "model": {
+          "tickets": 13,
+          "scored": 8,
+          "white_matches": 5,
+          "powerball_hits": 0,
+          "prize_tickets": 0,
+          "tiers": {
+            "none": 8
+          },
+          "mean_white_matches": 0.625,
+          "expected_white_matches": 2.898550724637681,
+          "expected_powerball_hits": 0.3076923076923077,
+          "white_matches_minus_chance": 2.101449275362319,
+          "powerball_hits_minus_chance": -0.3076923076923077
+        },
+        "model_weather": {
+          "tickets": 13,
+          "scored": 8,
+          "white_matches": 4,
+          "powerball_hits": 1,
+          "prize_tickets": 1,
+          "tiers": {
+            "match_pb": 1,
+            "none": 7
+          },
+          "mean_white_matches": 0.5,
+          "expected_white_matches": 2.898550724637681,
+          "expected_powerball_hits": 0.3076923076923077,
+          "white_matches_minus_chance": 1.1014492753623188,
+          "powerball_hits_minus_chance": 0.6923076923076923
+        },
+        "most_hit": {
+          "tickets": 13,
+          "scored": 8,
+          "white_matches": 3,
+          "powerball_hits": 1,
+          "prize_tickets": 1,
+          "tiers": {
+            "match_pb": 1,
+            "none": 7
+          },
+          "mean_white_matches": 0.375,
+          "expected_white_matches": 2.898550724637681,
+          "expected_powerball_hits": 0.3076923076923077,
+          "white_matches_minus_chance": 0.10144927536231885,
+          "powerball_hits_minus_chance": 0.6923076923076923
+        },
+        "hot_pairs": {
+          "tickets": 13,
+          "scored": 8,
+          "white_matches": 7,
+          "powerball_hits": 1,
+          "prize_tickets": 1,
+          "tiers": {
+            "match_pb": 1,
+            "none": 7
+          },
+          "mean_white_matches": 0.875,
+          "expected_white_matches": 2.898550724637681,
+          "expected_powerball_hits": 0.3076923076923077,
+          "white_matches_minus_chance": 4.101449275362318,
+          "powerball_hits_minus_chance": 0.6923076923076923
+        },
+        "neighbors": {
+          "tickets": 13,
+          "scored": 8,
+          "white_matches": 2,
+          "powerball_hits": 0,
+          "prize_tickets": 0,
+          "tiers": {
+            "none": 8
+          },
+          "mean_white_matches": 0.25,
+          "expected_white_matches": 2.898550724637681,
+          "expected_powerball_hits": 0.3076923076923077,
+          "white_matches_minus_chance": -0.8985507246376812,
+          "powerball_hits_minus_chance": -0.3076923076923077
+        },
+        "overdue": {
+          "tickets": 13,
+          "scored": 8,
+          "white_matches": 5,
+          "powerball_hits": 1,
+          "prize_tickets": 1,
+          "tiers": {
+            "none": 7,
+            "match_pb": 1
+          },
+          "mean_white_matches": 0.625,
+          "expected_white_matches": 2.898550724637681,
+          "expected_powerball_hits": 0.3076923076923077,
+          "white_matches_minus_chance": 2.101449275362319,
+          "powerball_hits_minus_chance": 0.6923076923076923
+        },
+        "random": {
+          "tickets": 13,
+          "scored": 8,
+          "white_matches": 5,
+          "powerball_hits": 0,
+          "prize_tickets": 0,
+          "tiers": {
+            "none": 8
+          },
+          "mean_white_matches": 0.625,
+          "expected_white_matches": 2.898550724637681,
+          "expected_powerball_hits": 0.3076923076923077,
+          "white_matches_minus_chance": 2.101449275362319,
+          "powerball_hits_minus_chance": -0.3076923076923077
+        }
+      }
+    },
+    {
+      "month": "2026-11",
+      "training_draws_through": "2026-10-19",
+      "scored_draws": [],
+      "unscored_dates": [
+        "2026-11-02",
+        "2026-11-04",
+        "2026-11-07",
+        "2026-11-09",
+        "2026-11-11",
+        "2026-11-14",
+        "2026-11-16",
+        "2026-11-18",
+        "2026-11-21",
+        "2026-11-23",
+        "2026-11-25",
+        "2026-11-28",
+        "2026-11-30"
+      ],
+      "strategies": {
+        "model": {
+          "tickets": 13,
+          "scored": 0,
+          "white_matches": 0,
+          "powerball_hits": 0,
+          "prize_tickets": 0,
+          "tiers": {},
+          "mean_white_matches": null,
+          "expected_white_matches": 0.0,
+          "expected_powerball_hits": 0.0,
+          "white_matches_minus_chance": 0.0,
+          "powerball_hits_minus_chance": 0.0
+        },
+        "model_weather": {
+          "tickets": 13,
+          "scored": 0,
+          "white_matches": 0,
+          "powerball_hits": 0,
+          "prize_tickets": 0,
+          "tiers": {},
+          "mean_white_matches": null,
+          "expected_white_matches": 0.0,
+          "expected_powerball_hits": 0.0,
+          "white_matches_minus_chance": 0.0,
+          "powerball_hits_minus_chance": 0.0
+        },
+        "most_hit": {
+          "tickets": 13,
+          "scored": 0,
+          "white_matches": 0,
+          "powerball_hits": 0,
+          "prize_tickets": 0,
+          "tiers": {},
+          "mean_white_matches": null,
+          "expected_white_matches": 0.0,
+          "expected_powerball_hits": 0.0,
+          "white_matches_minus_chance": 0.0,
+          "powerball_hits_minus_chance": 0.0
+        },
+        "hot_pairs": {
+          "tickets": 13,
+          "scored": 0,
+          "white_matches": 0,
+          "powerball_hits": 0,
+          "prize_tickets": 0,
+          "tiers": {},
+          "mean_white_matches": null,
+          "expected_white_matches": 0.0,
+          "expected_powerball_hits": 0.0,
+          "white_matches_minus_chance": 0.0,
+          "powerball_hits_minus_chance": 0.0
+        },
+        "neighbors": {
+          "tickets": 13,
+          "scored": 0,
+          "white_matches": 0,
+          "powerball_hits": 0,
+          "prize_tickets": 0,
+          "tiers": {},
+          "mean_white_matches": null,
+          "expected_white_matches": 0.0,
+          "expected_powerball_hits": 0.0,
+          "white_matches_minus_chance": 0.0,
+          "powerball_hits_minus_chance": 0.0
+        },
+        "overdue": {
+          "tickets": 13,
+          "scored": 0,
+          "white_matches": 0,
+          "powerball_hits": 0,
+          "prize_tickets": 0,
+          "tiers": {},
+          "mean_white_matches": null,
+          "expected_white_matches": 0.0,
+          "expected_powerball_hits": 0.0,
+          "white_matches_minus_chance": 0.0,
+          "powerball_hits_minus_chance": 0.0
+        },
+        "random": {
+          "tickets": 13,
+          "scored": 0,
+          "white_matches": 0,
+          "powerball_hits": 0,
+          "prize_tickets": 0,
+          "tiers": {},
+          "mean_white_matches": null,
+          "expected_white_matches": 0.0,
+          "expected_powerball_hits": 0.0,
+          "white_matches_minus_chance": 0.0,
+          "powerball_hits_minus_chance": 0.0
+        }
+      }
+    }
+  ],
+  "cumulative": {
+    "model": {
+      "tickets": 26,
+      "scored": 8,
+      "white_matches": 5,
+      "powerball_hits": 0,
+      "prize_tickets": 0,
+      "tiers": {
+        "none": 8
+      },
+      "mean_white_matches": 0.625,
+      "expected_white_matches": 2.898550724637681,
+      "expected_powerball_hits": 0.3076923076923077,
+      "white_matches_minus_chance": 2.101449275362319,
+      "powerball_hits_minus_chance": -0.3076923076923077
+    },
+    "model_weather": {
+      "tickets": 26,
+      "scored": 8,
+      "white_matches": 4,
+      "powerball_hits": 1,
+      "prize_tickets": 1,
+      "tiers": {
+        "match_pb": 1,
+        "none": 7
+      },
+      "mean_white_matches": 0.5,
+      "expected_white_matches": 2.898550724637681,
+      "expected_powerball_hits": 0.3076923076923077,
+      "white_matches_minus_chance": 1.1014492753623188,
+      "powerball_hits_minus_chance": 0.6923076923076923
+    },
+    "most_hit": {
+      "tickets": 26,
+      "scored": 8,
+      "white_matches": 3,
+      "powerball_hits": 1,
+      "prize_tickets": 1,
+      "tiers": {
+        "match_pb": 1,
+        "none": 7
+      },
+      "mean_white_matches": 0.375,
+      "expected_white_matches": 2.898550724637681,
+      "expected_powerball_hits": 0.3076923076923077,
+      "white_matches_minus_chance": 0.10144927536231885,
+      "powerball_hits_minus_chance": 0.6923076923076923
+    },
+    "hot_pairs": {
+      "tickets": 26,
+      "scored": 8,
+      "white_matches": 7,
+      "powerball_hits": 1,
+      "prize_tickets": 1,
+      "tiers": {
+        "match_pb": 1,
+        "none": 7
+      },
+      "mean_white_matches": 0.875,
+      "expected_white_matches": 2.898550724637681,
+      "expected_powerball_hits": 0.3076923076923077,
+      "white_matches_minus_chance": 4.101449275362318,
+      "powerball_hits_minus_chance": 0.6923076923076923
+    },
+    "neighbors": {
+      "tickets": 26,
+      "scored": 8,
+      "white_matches": 2,
+      "powerball_hits": 0,
+      "prize_tickets": 0,
+      "tiers": {
+        "none": 8
+      },
+      "mean_white_matches": 0.25,
+      "expected_white_matches": 2.898550724637681,
+      "expected_powerball_hits": 0.3076923076923077,
+      "white_matches_minus_chance": -0.8985507246376812,
+      "powerball_hits_minus_chance": -0.3076923076923077
+    },
+    "overdue": {
+      "tickets": 26,
+      "scored": 8,
+      "white_matches": 5,
+      "powerball_hits": 1,
+      "prize_tickets": 1,
+      "tiers": {
+        "none": 7,
+        "match_pb": 1
+      },
+      "mean_white_matches": 0.625,
+      "expected_white_matches": 2.898550724637681,
+      "expected_powerball_hits": 0.3076923076923077,
+      "white_matches_minus_chance": 2.101449275362319,
+      "powerball_hits_minus_chance": 0.6923076923076923
+    },
+    "random": {
+      "tickets": 26,
+      "scored": 8,
+      "white_matches": 5,
+      "powerball_hits": 0,
+      "prize_tickets": 0,
+      "tiers": {
+        "none": 8
+      },
+      "mean_white_matches": 0.625,
+      "expected_white_matches": 2.898550724637681,
+      "expected_powerball_hits": 0.3076923076923077,
+      "white_matches_minus_chance": 2.101449275362319,
+      "powerball_hits_minus_chance": -0.3076923076923077
+    }
+  },
+  "summary": "Scored 8 draws. model: white matches 5 (chance 2.90), Powerball hits 0 (chance 0.31), prize tiers 0; model_weather: white matches 4 (chance 2.90), Powerball hits 1 (chance 0.31), prize tiers 1; most_hit: white matches 3 (chance 2.90), Powerball hits 1 (chance 0.31), prize tiers 1; hot_pairs: white matches 7 (chance 2.90), Powerball hits 1 (chance 0.31), prize tiers 1; neighbors: white matches 2 (chance 2.90), Powerball hits 0 (chance 0.31), prize tiers 0; overdue: white matches 5 (chance 2.90), Powerball hits 1 (chance 0.31), prize tiers 1; random: white matches 5 (chance 2.90), Powerball hits 0 (chance 0.31), prize tiers 0."
+}

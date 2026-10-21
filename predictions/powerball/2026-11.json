@@ -1,0 +1,1033 @@
+{
+  "schema_version": 1,
+  "month": "2026-11",
+  "generated_on": "2026-10-21",
+  "training_draws_through": "2026-10-19",
+  "draw_schedule": "Monday, Wednesday, Saturday",
+  "purchases": false,
+  "weather": "Tallahassee airport USW00093805 daily max temp, min temp, and precipitation on dates already inside the input window, carried back at most 2 days. The draw being forecast does not contribute weather. Central Park: included from USW00094728.",
+  "feature_columns": [
+    "white_1",
+    "white_2",
+    "white_3",
+    "white_4",
+    "white_5",
+    "powerball",
+    "tmax_c",
+    "tmin_c",
+    "prcp_mm",
+    "central_park_tmax_c"
+  ],
+  "hyperparameters": {
+    "seq_len": 16,
+    "val_split": 0.2,
+    "ticket_val_split": 0.1,
+    "epochs": 12,
+    "patience": 4,
+    "batch_size": 64,
+    "learning_rate": 0.001,
+    "d_model": 32,
+    "nhead": 4,
+    "num_layers": 2,
+    "dim_feedforward": 64,
+    "dropout": 0.1,
+    "seed": 0,
+    "plain_epochs_ran": 6,
+    "weather_epochs_ran": 12,
+    "training_rows": 1422,
+    "tallahassee_station": "USW00093805",
+    "weather_licence": "Public domain (U.S. government work, 17 U.S.C. \u00a7 105). NOAA NCEI Daily Summaries, GHCNd, metric units.",
+    "draws_source": {
+      "dataset": "Lottery Powerball Winning Numbers: Beginning 2010",
+      "dataset_id": "d6yy-54nr",
+      "page": "https://data.ny.gov/Government-Finance/Lottery-Powerball-Winning-Numbers-Beginning-2010/d6yy-54nr",
+      "api": "https://data.ny.gov/resource/d6yy-54nr.json",
+      "publisher": "New York State Gaming Commission",
+      "licence": "OPEN-NY Terms of Use",
+      "licence_url": "https://data.ny.gov/api/views/77gx-ii52/files/ef0c1840-ad54-4240-92fd-6397c49fde46?filename=OPEN-NY_20Terms_20of_20Use.pdf",
+      "licence_summary": "OPEN-NY Terms of Use (last modified March 8, 2013) grant a non-exclusive, revocable licence to use content published on data.ny.gov. Those terms do not require attribution, share-alike, or pre-approval. The dataset view does not attach a separate SPDX licence.",
+      "matrix_start": "2015-10-07",
+      "white_ball_range": "1-69",
+      "powerball_range": "1-26"
+    }
+  },
+  "random_seed_formula": "crc32('powerball-control-{month}-{YYYY-MM-DD}') unsigned",
+  "note": "Model and pattern tickets are the one-step forecast from training_draws_through and are repeated for each scheduled draw. The random ticket changes with the draw date. training_draws_through is on or before the day before this month, including when the file is written later as a backfill. Weather features, when present, come from earlier draws only. No ticket is purchased.",
+  "draws": [
+    {
+      "draw_date": "2026-11-02",
+      "tickets": {
+        "model": {
+          "whites": [
+            12,
+            24,
+            37,
+            47,
+            58
+          ],
+          "powerball": 13
+        },
+        "model_weather": {
+          "whites": [
+            12,
+            23,
+            36,
+            47,
+            59
+          ],
+          "powerball": 13
+        },
+        "most_hit": {
+          "whites": [
+            21,
+            28,
+            32,
+            61,
+            64
+          ],
+          "powerball": 14
+        },
+        "hot_pairs": {
+          "whites": [
+            3,
+            16,
+            21,
+            32,
+            37
+          ],
+          "powerball": 14
+        },
+        "neighbors": {
+          "whites": [
+            9,
+            32,
+            33,
+            43,
+            49
+          ],
+          "powerball": 23
+        },
+        "overdue": {
+          "whites": [
+            27,
+            43,
+            60,
+            63,
+            66
+          ],
+          "powerball": 21
+        },
+        "random": {
+          "whites": [
+            5,
+            51,
+            55,
+            58,
+            68
+          ],
+          "powerball": 8
+        }
+      }
+    },
+    {
+      "draw_date": "2026-11-04",
+      "tickets": {
+        "model": {
+          "whites": [
+            12,
+            24,
+            37,
+            47,
+            58
+          ],
+          "powerball": 13
+        },
+        "model_weather": {
+          "whites": [
+            12,
+            23,
+            36,
+            47,
+            59
+          ],
+          "powerball": 13
+        },
+        "most_hit": {
+          "whites": [
+            21,
+            28,
+            32,
+            61,
+            64
+          ],
+          "powerball": 14
+        },
+        "hot_pairs": {
+          "whites": [
+            3,
+            16,
+            21,
+            32,
+            37
+          ],
+          "powerball": 14
+        },
+        "neighbors": {
+          "whites": [
+            9,
+            32,
+            33,
+            43,
+            49
+          ],
+          "powerball": 23
+        },
+        "overdue": {
+          "whites": [
+            27,
+            43,
+            60,
+            63,
+            66
+          ],
+          "powerball": 21
+        },
+        "random": {
+          "whites": [
+            2,
+            25,
+            28,
+            55,
+            67
+          ],
+          "powerball": 3
+        }
+      }
+    },
+    {
+      "draw_date": "2026-11-07",
+      "tickets": {
+        "model": {
+          "whites": [
+            12,
+            24,
+            37,
+            47,
+            58
+          ],
+          "powerball": 13
+        },
+        "model_weather": {
+          "whites": [
+            12,
+            23,
+            36,
+            47,
+            59
+          ],
+          "powerball": 13
+        },
+        "most_hit": {
+          "whites": [
+            21,
+            28,
+            32,
+            61,
+            64
+          ],
+          "powerball": 14
+        },
+        "hot_pairs": {
+          "whites": [
+            3,
+            16,
+            21,
+            32,
+            37
+          ],
+          "powerball": 14
+        },
+        "neighbors": {
+          "whites": [
+            9,
+            32,
+            33,
+            43,
+            49
+          ],
+          "powerball": 23
+        },
+        "overdue": {
+          "whites": [
+            27,
+            43,
+            60,
+            63,
+            66
+          ],
+          "powerball": 21
+        },
+        "random": {
+          "whites": [
+            14,
+            15,
+            34,
+            38,
+            46
+          ],
+          "powerball": 13
+        }
+      }
+    },
+    {
+      "draw_date": "2026-11-09",
+      "tickets": {
+        "model": {
+          "whites": [
+            12,
+            24,
+            37,
+            47,
+            58
+          ],
+          "powerball": 13
+        },
+        "model_weather": {
+          "whites": [
+            12,
+            23,
+            36,
+            47,
+            59
+          ],
+          "powerball": 13
+        },
+        "most_hit": {
+          "whites": [
+            21,
+            28,
+            32,
+            61,
+            64
+          ],
+          "powerball": 14
+        },
+        "hot_pairs": {
+          "whites": [
+            3,
+            16,
+            21,
+            32,
+            37
+          ],
+          "powerball": 14
+        },
+        "neighbors": {
+          "whites": [
+            9,
+            32,
+            33,
+            43,
+            49
+          ],
+          "powerball": 23
+        },
+        "overdue": {
+          "whites": [
+            27,
+            43,
+            60,
+            63,
+            66
+          ],
+          "powerball": 21
+        },
+        "random": {
+          "whites": [
+            8,
+            15,
+            17,
+            44,
+            54
+          ],
+          "powerball": 14
+        }
+      }
+    },
+    {
+      "draw_date": "2026-11-11",
+      "tickets": {
+        "model": {
+          "whites": [
+            12,
+            24,
+            37,
+            47,
+            58
+          ],
+          "powerball": 13
+        },
+        "model_weather": {
+          "whites": [
+            12,
+            23,
+            36,
+            47,
+            59
+          ],
+          "powerball": 13
+        },
+        "most_hit": {
+          "whites": [
+            21,
+            28,
+            32,
+            61,
+            64
+          ],
+          "powerball": 14
+        },
+        "hot_pairs": {
+          "whites": [
+            3,
+            16,
+            21,
+            32,
+            37
+          ],
+          "powerball": 14
+        },
+        "neighbors": {
+          "whites": [
+            9,
+            32,
+            33,
+            43,
+            49
+          ],
+          "powerball": 23
+        },
+        "overdue": {
+          "whites": [
+            27,
+            43,
+            60,
+            63,
+            66
+          ],
+          "powerball": 21
+        },
+        "random": {
+          "whites": [
+            17,
+            42,
+            50,
+            56,
+            66
+          ],
+          "powerball": 2
+        }
+      }
+    },
+    {
+      "draw_date": "2026-11-14",
+      "tickets": {
+        "model": {
+          "whites": [
+            12,
+            24,
+            37,
+            47,
+            58
+          ],
+          "powerball": 13
+        },
+        "model_weather": {
+          "whites": [
+            12,
+            23,
+            36,
+            47,
+            59
+          ],
+          "powerball": 13
+        },
+        "most_hit": {
+          "whites": [
+            21,
+            28,
+            32,
+            61,
+            64
+          ],
+          "powerball": 14
+        },
+        "hot_pairs": {
+          "whites": [
+            3,
+            16,
+            21,
+            32,
+            37
+          ],
+          "powerball": 14
+        },
+        "neighbors": {
+          "whites": [
+            9,
+            32,
+            33,
+            43,
+            49
+          ],
+          "powerball": 23
+        },
+        "overdue": {
+          "whites": [
+            27,
+            43,
+            60,
+            63,
+            66
+          ],
+          "powerball": 21
+        },
+        "random": {
+          "whites": [
+            13,
+            50,
+            56,
+            58,
+            62
+          ],
+          "powerball": 6
+        }
+      }
+    },
+    {
+      "draw_date": "2026-11-16",
+      "tickets": {
+        "model": {
+          "whites": [
+            12,
+            24,
+            37,
+            47,
+            58
+          ],
+          "powerball": 13
+        },
+        "model_weather": {
+          "whites": [
+            12,
+            23,
+            36,
+            47,
+            59
+          ],
+          "powerball": 13
+        },
+        "most_hit": {
+          "whites": [
+            21,
+            28,
+            32,
+            61,
+            64
+          ],
+          "powerball": 14
+        },
+        "hot_pairs": {
+          "whites": [
+            3,
+            16,
+            21,
+            32,
+            37
+          ],
+          "powerball": 14
+        },
+        "neighbors": {
+          "whites": [
+            9,
+            32,
+            33,
+            43,
+            49
+          ],
+          "powerball": 23
+        },
+        "overdue": {
+          "whites": [
+            27,
+            43,
+            60,
+            63,
+            66
+          ],
+          "powerball": 21
+        },
+        "random": {
+          "whites": [
+            2,
+            11,
+            29,
+            42,
+            56
+          ],
+          "powerball": 5
+        }
+      }
+    },
+    {
+      "draw_date": "2026-11-18",
+      "tickets": {
+        "model": {
+          "whites": [
+            12,
+            24,
+            37,
+            47,
+            58
+          ],
+          "powerball": 13
+        },
+        "model_weather": {
+          "whites": [
+            12,
+            23,
+            36,
+            47,
+            59
+          ],
+          "powerball": 13
+        },
+        "most_hit": {
+          "whites": [
+            21,
+            28,
+            32,
+            61,
+            64
+          ],
+          "powerball": 14
+        },
+        "hot_pairs": {
+          "whites": [
+            3,
+            16,
+            21,
+            32,
+            37
+          ],
+          "powerball": 14
+        },
+        "neighbors": {
+          "whites": [
+            9,
+            32,
+            33,
+            43,
+            49
+          ],
+          "powerball": 23
+        },
+        "overdue": {
+          "whites": [
+            27,
+            43,
+            60,
+            63,
+            66
+          ],
+          "powerball": 21
+        },
+        "random": {
+          "whites": [
+            5,
+            16,
+            51,
+            53,
+            55
+          ],
+          "powerball": 24
+        }
+      }
+    },
+    {
+      "draw_date": "2026-11-21",
+      "tickets": {
+        "model": {
+          "whites": [
+            12,
+            24,
+            37,
+            47,
+            58
+          ],
+          "powerball": 13
+        },
+        "model_weather": {
+          "whites": [
+            12,
+            23,
+            36,
+            47,
+            59
+          ],
+          "powerball": 13
+        },
+        "most_hit": {
+          "whites": [
+            21,
+            28,
+            32,
+            61,
+            64
+          ],
+          "powerball": 14
+        },
+        "hot_pairs": {
+          "whites": [
+            3,
+            16,
+            21,
+            32,
+            37
+          ],
+          "powerball": 14
+        },
+        "neighbors": {
+          "whites": [
+            9,
+            32,
+            33,
+            43,
+            49
+          ],
+          "powerball": 23
+        },
+        "overdue": {
+          "whites": [
+            27,
+            43,
+            60,
+            63,
+            66
+          ],
+          "powerball": 21
+        },
+        "random": {
+          "whites": [
+            2,
+            18,
+            42,
+            55,
+            61
+          ],
+          "powerball": 17
+        }
+      }
+    },
+    {
+      "draw_date": "2026-11-23",
+      "tickets": {
+        "model": {
+          "whites": [
+            12,
+            24,
+            37,
+            47,
+            58
+          ],
+          "powerball": 13
+        },
+        "model_weather": {
+          "whites": [
+            12,
+            23,
+            36,
+            47,
+            59
+          ],
+          "powerball": 13
+        },
+        "most_hit": {
+          "whites": [
+            21,
+            28,
+            32,
+            61,
+            64
+          ],
+          "powerball": 14
+        },
+        "hot_pairs": {
+          "whites": [
+            3,
+            16,
+            21,
+            32,
+            37
+          ],
+          "powerball": 14
+        },
+        "neighbors": {
+          "whites": [
+            9,
+            32,
+            33,
+            43,
+            49
+          ],
+          "powerball": 23
+        },
+        "overdue": {
+          "whites": [
+            27,
+            43,
+            60,
+            63,
+            66
+          ],
+          "powerball": 21
+        },
+        "random": {
+          "whites": [
+            14,
+            24,
+            27,
+            34,
+            64
+          ],
+          "powerball": 8
+        }
+      }
+    },
+    {
+      "draw_date": "2026-11-25",
+      "tickets": {
+        "model": {
+          "whites": [
+            12,
+            24,
+            37,
+            47,
+            58
+          ],
+          "powerball": 13
+        },
+        "model_weather": {
+          "whites": [
+            12,
+            23,
+            36,
+            47,
+            59
+          ],
+          "powerball": 13
+        },
+        "most_hit": {
+          "whites": [
+            21,
+            28,
+            32,
+            61,
+            64
+          ],
+          "powerball": 14
+        },
+        "hot_pairs": {
+          "whites": [
+            3,
+            16,
+            21,
+            32,
+            37
+          ],
+          "powerball": 14
+        },
+        "neighbors": {
+          "whites": [
+            9,
+            32,
+            33,
+            43,
+            49
+          ],
+          "powerball": 23
+        },
+        "overdue": {
+          "whites": [
+            27,
+            43,
+            60,
+            63,
+            66
+          ],
+          "powerball": 21
+        },
+        "random": {
+          "whites": [
+            11,
+            29,
+            43,
+            61,
+            62
+          ],
+          "powerball": 22
+        }
+      }
+    },
+    {
+      "draw_date": "2026-11-28",
+      "tickets": {
+        "model": {
+          "whites": [
+            12,
+            24,
+            37,
+            47,
+            58
+          ],
+          "powerball": 13
+        },
+        "model_weather": {
+          "whites": [
+            12,
+            23,
+            36,
+            47,
+            59
+          ],
+          "powerball": 13
+        },
+        "most_hit": {
+          "whites": [
+            21,
+            28,
+            32,
+            61,
+            64
+          ],
+          "powerball": 14
+        },
+        "hot_pairs": {
+          "whites": [
+            3,
+            16,
+            21,
+            32,
+            37
+          ],
+          "powerball": 14
+        },
+        "neighbors": {
+          "whites": [
+            9,
+            32,
+            33,
+            43,
+            49
+          ],
+          "powerball": 23
+        },
+        "overdue": {
+          "whites": [
+            27,
+            43,
+            60,
+            63,
+            66
+          ],
+          "powerball": 21
+        },
+        "random": {
+          "whites": [
+            13,
+            15,
+            19,
+            40,
+            61
+          ],
+          "powerball": 1
+        }
+      }
+    },
+    {
+      "draw_date": "2026-11-30",
+      "tickets": {
+        "model": {
+          "whites": [
+            12,
+            24,
+            37,
+            47,
+            58
+          ],
+          "powerball": 13
+        },
+        "model_weather": {
+          "whites": [
+            12,
+            23,
+            36,
+            47,
+            59
+          ],
+          "powerball": 13
+        },
+        "most_hit": {
+          "whites": [
+            21,
+            28,
+            32,
+            61,
+            64
+          ],
+          "powerball": 14
+        },
+        "hot_pairs": {
+          "whites": [
+            3,
+            16,
+            21,
+            32,
+            37
+          ],
+          "powerball": 14
+        },
+        "neighbors": {
+          "whites": [
+            9,
+            32,
+            33,
+            43,
+            49
+          ],
+          "powerball": 23
+        },
+        "overdue": {
+          "whites": [
+            27,
+            43,
+            60,
+            63,
+            66
+          ],
+          "powerball": 21
+        },
+        "random": {
+          "whites": [
+            11,
+            15,
+            26,
+            27,
+            63
+          ],
+          "powerball": 5
+        }
+      }
+    }
+  ]
+}
