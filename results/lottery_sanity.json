@@ -1,0 +1,140 @@
+{
+  "schema_version": 1,
+  "source": {
+    "dataset": "Lottery Powerball Winning Numbers: Beginning 2010",
+    "dataset_id": "d6yy-54nr",
+    "page": "https://data.ny.gov/Government-Finance/Lottery-Powerball-Winning-Numbers-Beginning-2010/d6yy-54nr",
+    "api": "https://data.ny.gov/resource/d6yy-54nr.json",
+    "publisher": "New York State Gaming Commission",
+    "licence": "OPEN-NY Terms of Use",
+    "licence_url": "https://data.ny.gov/api/views/77gx-ii52/files/ef0c1840-ad54-4240-92fd-6397c49fde46?filename=OPEN-NY_20Terms_20of_20Use.pdf",
+    "licence_summary": "OPEN-NY Terms of Use (last modified March 8, 2013) grant a non-exclusive, revocable licence to use content published on data.ny.gov. Those terms do not require attribution, share-alike, or pre-approval. The dataset view does not attach a separate SPDX licence.",
+    "matrix_start": "2015-10-07",
+    "white_ball_range": "1-69",
+    "powerball_range": "1-26"
+  },
+  "series": {
+    "n_draws": 1422,
+    "min": 1,
+    "max": 26,
+    "mean": 13.483825597749648,
+    "std": 7.661396463614064,
+    "theoretical_mean": 13.5,
+    "theoretical_std": 7.5,
+    "lag1_correlation": -0.06665935058695431,
+    "consecutive_repeat_rate": 0.033075299085151305,
+    "chance_exact_match_rate": 0.038461538461538464,
+    "start": "2015-10-07",
+    "end": "2026-10-19"
+  },
+  "split": {
+    "n_windows": 1390,
+    "n_fit": 1112,
+    "n_val": 278,
+    "first_val_target": 1144,
+    "seq_len": 32,
+    "val_split": 0.2,
+    "split_mode": "temporal"
+  },
+  "chance_exact_match_rate": 0.038461538461538464,
+  "exact_match_null_se": 0.01153384892123206,
+  "historical_mean_value": 13.558566433566433,
+  "uniform_seed": 0,
+  "baselines": {
+    "historical_mean": {
+      "mse": 62.37049102783203,
+      "rmse": 7.897499084472656,
+      "mae": 6.870081901550293,
+      "exact_match_rate": 0.06115107913669065,
+      "exact_matches": 17,
+      "n": 278
+    },
+    "persistence": {
+      "mse": 135.07554626464844,
+      "rmse": 11.622200965881348,
+      "mae": 9.471222877502441,
+      "exact_match_rate": 0.02158273381294964,
+      "exact_matches": 6,
+      "n": 278
+    },
+    "uniform_sample": {
+      "mse": 107.08633422851562,
+      "rmse": 10.348252296447754,
+      "mae": 8.294963836669922,
+      "exact_match_rate": 0.03597122302158273,
+      "exact_matches": 10,
+      "n": 278
+    },
+    "uniform_expected": {
+      "mse": 118.57913669064749,
+      "rmse": 10.889404790467085,
+      "mae": 8.887659103486442,
+      "exact_match_rate": 0.038461538461538464,
+      "exact_matches": 10.692307692307693,
+      "n": 278
+    }
+  },
+  "models": [
+    {
+      "seed": 0,
+      "epochs_ran": 13,
+      "best_scaled_val_loss": 1.0685802698135376,
+      "metrics": {
+        "mse": 61.854373931884766,
+        "rmse": 7.864755153656006,
+        "mae": 6.789299488067627,
+        "exact_match_rate": 0.046762589928057555,
+        "exact_matches": 13,
+        "n": 278
+      },
+      "exact_match_z": 0.7197121726848804,
+      "skill_vs_historical_mean_mse": 0.008275020565686297
+    },
+    {
+      "seed": 1,
+      "epochs_ran": 14,
+      "best_scaled_val_loss": 1.0698260068893433,
+      "metrics": {
+        "mse": 61.926483154296875,
+        "rmse": 7.869338035583496,
+        "mae": 6.83502197265625,
+        "exact_match_rate": 0.03237410071942446,
+        "exact_matches": 9,
+        "n": 278
+      },
+      "exact_match_z": -0.5277889266355793,
+      "skill_vs_historical_mean_mse": 0.0071188773123017635
+    },
+    {
+      "seed": 2,
+      "epochs_ran": 7,
+      "best_scaled_val_loss": 1.0693042278289795,
+      "metrics": {
+        "mse": 61.89628219604492,
+        "rmse": 7.867419242858887,
+        "mae": 6.825436592102051,
+        "exact_match_rate": 0.046762589928057555,
+        "exact_matches": 13,
+        "n": 278
+      },
+      "exact_match_z": 0.7197121726848804,
+      "skill_vs_historical_mean_mse": 0.0076030960149968685
+    }
+  ],
+  "hyperparameters": {
+    "d_model": 64,
+    "nhead": 4,
+    "num_encoder_layers": 3,
+    "dim_feedforward": 256,
+    "dropout": 0.1,
+    "seq_len": 32,
+    "val_split": 0.2,
+    "split_mode": "temporal",
+    "normalize": true,
+    "batch_size": 64,
+    "learning_rate": 0.001,
+    "epochs": 20,
+    "patience": 5,
+    "max_grad_norm": 1.0
+  }
+}
