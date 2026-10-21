@@ -1,14 +1,16 @@
-"""Download the Central Park daily maximum temperature series.
+"""Download the Central Park daily weather series.
 
 The file is a U.S. government work, so it is in the public domain (17 U.S.C.
 § 105) and may be copied and redistributed. NOAA National Centers for
 Environmental Information (NCEI) distribute it through the Daily Summaries
 access service with no use fee.
 
-Station ``USW00094728`` (New York Central Park), variable ``TMAX``, metric
-units (degrees Celsius), 1981-01-01 through 2025-12-31. Scientific background
-for the underlying GHCNd archive: Menne et al., 2012, *Journal of Atmospheric
-and Oceanic Technology*.
+Station ``USW00094728`` (New York Central Park), 1981-01-01 through
+2025-12-31, metric units. The target is daily maximum temperature (``TMAX``,
+degrees Celsius). The same file also carries minimum temperature, precipitation,
+snowfall, snow depth, and average wind speed when NCEI returns them. Scientific
+background for the underlying GHCNd archive: Menne et al., 2012, *Journal of
+Atmospheric and Oceanic Technology*.
 
 The CSV is written under ``data/`` and is not committed (that directory is
 gitignored).
@@ -36,12 +38,25 @@ SOURCE_URL = "https://www.ncei.noaa.gov/access/services/data/v1"
 LICENCE = (
     "Public domain (U.S. government work, 17 U.S.C. § 105). "
     "NOAA NCEI Daily Summaries for GHCND station USW00094728, "
-    "variable TMAX, degrees Celsius. Redistribution is permitted."
+    "variables TMAX, TMIN, PRCP, SNOW, SNWD, and AWND, metric units. "
+    "Redistribution is permitted."
 )
 DEFAULT_OUTPUT = Path("data/weather_central_park.csv")
 # Mean tropical year, so the calendar features stay aligned across leap years.
 _YEAR_LENGTH_DAYS = 365.25
 _NOAA_COLUMNS = ("STATION", "DATE", "TMAX")
+# GHCNd names to CSV columns. TMAX is required; the others are kept when the
+# response includes them. A trace ("T") is zero for the water-equivalent fields.
+_FIELD_COLUMNS = {
+    "TMAX": "temperature_c",
+    "TMIN": "tmin_c",
+    "PRCP": "prcp_mm",
+    "SNOW": "snow_mm",
+    "SNWD": "snwd_mm",
+    "AWND": "awnd_ms",
+}
+_TRACE_AS_ZERO = {"PRCP", "SNOW", "SNWD"}
+DEFAULT_DATA_TYPES = ("TMAX", "TMIN", "PRCP", "SNOW", "SNWD", "AWND")
 
 
 def build_download_url(
@@ -49,9 +64,9 @@ def build_download_url(
     station: str = STATION_ID,
     start_date: str = START_DATE,
     end_date: str = END_DATE,
-    data_type: str = "TMAX",
+    data_type: str = ",".join(DEFAULT_DATA_TYPES),
 ) -> str:
-    """Return the NCEI Daily Summaries URL for one station and variable."""
+    """Return the NCEI Daily Summaries URL for one station and its variables."""
     query = urllib.parse.urlencode(
         {
             "dataset": "daily-summaries",
@@ -107,7 +122,13 @@ def assert_regular_daily(dates: pd.Series) -> None:
 def parse_noaa_daily_summaries(
     csv_text: str, *, station: str = STATION_ID
 ) -> pd.DataFrame:
-    """Parse an NCEI Daily Summaries CSV into ``date`` and ``temperature_c``."""
+    """Parse an NCEI Daily Summaries CSV into date, temperature, and covariates.
+
+    ``TMAX`` is required on every row. Other known fields are included when the
+    response has that column; gaps in those fields stay missing rather than
+    being interpolated. A recorded trace (``T``) in precipitation, snowfall, or
+    snow depth is stored as zero.
+    """
     frame = pd.read_csv(io.StringIO(csv_text))
     missing = [column for column in _NOAA_COLUMNS if column not in frame.columns]
     if missing:
@@ -118,17 +139,29 @@ def parse_noaa_daily_summaries(
     if stations != {station}:
         raise ValueError(f"Expected only station {station}, found {sorted(stations)}")
 
-    parsed = pd.DataFrame(
-        {
-            "date": pd.to_datetime(frame["DATE"], format="%Y-%m-%d"),
-            "temperature_c": pd.to_numeric(frame["TMAX"], errors="coerce"),
-        }
-    )
+    columns: dict[str, pd.Series] = {
+        "date": pd.to_datetime(frame["DATE"], format="%Y-%m-%d")
+    }
+    for source, name in _FIELD_COLUMNS.items():
+        if source not in frame.columns:
+            continue
+        columns[name] = _coerce_measurement(
+            frame[source], trace_as_zero=source in _TRACE_AS_ZERO
+        )
+    parsed = pd.DataFrame(columns)
     if bool(parsed["temperature_c"].isna().any()):
         raise ValueError("NOAA daily summaries response contains missing TMAX values.")
     parsed = parsed.sort_values("date").reset_index(drop=True)
     assert_regular_daily(parsed["date"])
     return parsed
+
+
+def _coerce_measurement(series: pd.Series, *, trace_as_zero: bool) -> pd.Series:
+    values = series.astype(str).str.strip()
+    if trace_as_zero:
+        values = values.replace({"T": "0", "t": "0"})
+    values = values.replace({"": pd.NA, "nan": pd.NA, "None": pd.NA})
+    return pd.to_numeric(values, errors="coerce")
 
 
 def add_calendar_features(frame: pd.DataFrame) -> pd.DataFrame:
@@ -263,7 +296,7 @@ def fetch_weather(
     end_date: str = END_DATE,
     timeout: float = 120.0,
 ) -> Path:
-    """Download the series and write ``date,temperature_c,doy_sin,doy_cos``."""
+    """Download the series and write the observed columns plus day-of-year features."""
     url = build_download_url(station=station, start_date=start_date, end_date=end_date)
     frame = add_calendar_features(
         parse_noaa_daily_summaries(

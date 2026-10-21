@@ -9,3 +9,6 @@ pytest-cov>=4.1.0,<8
 httpx2>=2.0.0,<3
 ruff>=0.1.0,<1
 mypy>=1.5.0,<3
+optuna>=4,<5
+# SQLAlchemy 2.1 dropped Python 3.10. Optuna accepts 1.4.2+.
+sqlalchemy>=1.4.2,<2.1

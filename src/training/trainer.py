@@ -4,20 +4,26 @@ from __future__ import annotations
 
 import logging
 import time
+from collections.abc import Callable
 from typing import Any, cast
 
+import numpy as np
+import pandas as pd
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader, Dataset, Subset, TensorDataset
 
 from src.data.prepare import load_series, resolve_split_mode, split_indices
 from src.data.scaling import StandardScaler
+from src.data.windows import prepare_csv_series
 from src.evaluation.baselines import (
     compare_to_baselines,
     format_score_table,
     load_baseline_series,
+    regression_scores,
     temporal_validation_target_rows,
 )
+from src.evaluation.classical import covariate_frame, score_classical_baselines
 from src.evaluation.metrics import mae, mse, rmse
 from src.forecasting.intervals import calibrate_intervals, pinball_loss
 from src.forecasting.output import horizon_targets, training_targets
@@ -30,6 +36,31 @@ from src.utils.config import load_config, merge_config
 from src.utils.paths import resolve_repo_path
 
 logger = logging.getLogger(__name__)
+
+EpochCallback = Callable[[int, float], None]
+
+
+def ensemble_seeds(cfg: dict[str, Any]) -> list[int | None]:
+    """Seeds for one run, or one seed per ensemble member."""
+    size = int(cfg.get("model", {}).get("ensemble_size", 1) or 1)
+    training = cfg.get("training", {})
+    configured = training.get("ensemble_seeds")
+    if size <= 1:
+        if configured:
+            raise ValueError(
+                "training.ensemble_seeds requires model.ensemble_size greater than 1."
+            )
+        seed = training.get("seed")
+        return [None if seed is None else int(seed)]
+    if configured is None:
+        base = int(training.get("seed", 0) or 0)
+        return [base + offset for offset in range(size)]
+    seeds: list[int | None] = [int(seed) for seed in configured]
+    if len(seeds) != size:
+        raise ValueError(
+            f"model.ensemble_size is {size} but {len(seeds)} ensemble seeds were given."
+        )
+    return seeds
 
 
 class TimeSeriesTrainer:
@@ -53,23 +84,47 @@ class TimeSeriesTrainer:
             device_str = "cpu"
         return torch.device(device_str)
 
-    def train(self, *, checkpoint_name: str = "best_model.pt") -> dict[str, Any]:
+    def train(
+        self,
+        epoch_callback: EpochCallback | None = None,
+        *,
+        checkpoint_name: str = "best_model.pt",
+    ) -> dict[str, Any]:
         cfg = self.cfg
         t_cfg = cfg["training"]
         device = self._resolve_device(t_cfg.get("device", "cpu"))
         logger.info("Using device: %s", device)
         started = time.perf_counter()
 
-        seed = t_cfg.get("seed")
-        if seed is not None:
-            torch.manual_seed(int(seed))
-
         spec = forecast_spec_from_config(cfg)
-        model = build_model(cfg).to(device)
+        seeds = ensemble_seeds(cfg)
+        if len(seeds) == 1 and seeds[0] is not None:
+            torch.manual_seed(int(seeds[0]))
+        if len(seeds) > 1 and (spec.model_horizon != 1 or spec.quantiles):
+            raise ValueError("Seed ensembles train one-step point models.")
+
+        # Members of a seed ensemble are averaged after independent fits. The
+        # training loop below fits one network; ensemble_size 1 is the default.
+        model = build_model(cfg, ensemble=False).to(device)
+        if len(seeds) > 1:
+            raise ValueError(
+                "model.ensemble_size above 1 is available on the model, but this "
+                "training loop fits one seed. Set ensemble_size to 1."
+            )
         param_count = sum(p.numel() for p in model.parameters() if p.requires_grad)
         logger.info("Model parameters: %d", param_count)
 
-        optimizer = torch.optim.Adam(model.parameters(), lr=t_cfg["learning_rate"])
+        weight_decay = float(t_cfg.get("weight_decay", 0) or 0)
+        if weight_decay < 0:
+            raise ValueError("training.weight_decay must be >= 0")
+        if weight_decay > 0:
+            optimizer: torch.optim.Optimizer = torch.optim.AdamW(
+                model.parameters(),
+                lr=t_cfg["learning_rate"],
+                weight_decay=weight_decay,
+            )
+        else:
+            optimizer = torch.optim.Adam(model.parameters(), lr=t_cfg["learning_rate"])
         mse_loss = nn.MSELoss()
         quantiles = spec.quantiles
 
@@ -80,7 +135,35 @@ class TimeSeriesTrainer:
 
         data_cfg = cfg.get("data", {})
         seq_len = int(data_cfg.get("seq_len", 64))
-        inputs, targets = load_series(cfg)
+        prepared = None
+        uses_dated_windows = bool(
+            data_cfg.get("source") == "csv"
+            and data_cfg.get("path")
+            and (
+                data_cfg.get("val_start")
+                or data_cfg.get("test_start")
+                or data_cfg.get("missing_indicators")
+                or data_cfg.get("calendar_features")
+                or data_cfg.get("future_calendar")
+                or float(data_cfg.get("test_split", 0) or 0) > 0
+            )
+        )
+        if uses_dated_windows:
+            if spec.horizon != 1 or spec.quantiles:
+                raise ValueError(
+                    "Date splits and missing indicators score one-step point targets."
+                )
+            prepared = prepare_csv_series(data_cfg)
+            inputs, targets = prepared.inputs, prepared.targets
+            feature_count = int(inputs.shape[-1])
+            configured = cfg.get("model", {}).get("input_dim")
+            if configured is not None and int(configured) != feature_count:
+                raise ValueError(
+                    f"model.input_dim is {configured} but the series windows have "
+                    f"{feature_count} features ({', '.join(prepared.feature_names)})."
+                )
+        else:
+            inputs, targets = load_series(cfg)
         fit_targets = training_targets(targets, spec)
 
         full_dataset = TensorDataset(inputs, fit_targets)
@@ -88,12 +171,21 @@ class TimeSeriesTrainer:
         # near-duplicate windows into validation; hold out the most recent ones.
         split_mode = resolve_split_mode(data_cfg)
         val_split = float(data_cfg.get("val_split", 0.0))
-        train_idx, val_idx = split_indices(
-            len(full_dataset),
-            val_split,
-            split_mode,
-            int(data_cfg.get("split_seed", 0)),
-        )
+        if prepared is not None:
+            if split_mode != "temporal":
+                raise ValueError(
+                    "val_start, test_start, test_split, and missing_indicators "
+                    "require a temporal split."
+                )
+            train_idx = prepared.train_index.tolist()
+            val_idx = prepared.val_index.tolist()
+        else:
+            train_idx, val_idx = split_indices(
+                len(full_dataset),
+                val_split,
+                split_mode,
+                int(data_cfg.get("split_seed", 0)),
+            )
         # Load before any checkpoint is written so a missing date or target
         # column fails before epochs run. The same arrays are scored at the end.
         baseline_frame = None
@@ -102,9 +194,9 @@ class TimeSeriesTrainer:
                 raise ValueError(
                     "data.report_baselines requires a CSV source with a path."
                 )
-            if not val_idx or split_mode != "temporal":
+            if split_mode != "temporal" or not val_idx:
                 raise ValueError(
-                    "data.report_baselines requires a temporal validation split."
+                    "data.report_baselines requires a non-empty temporal validation split."
                 )
             if spec.horizon != 1:
                 raise ValueError(
@@ -116,6 +208,15 @@ class TimeSeriesTrainer:
                 resolve_repo_path(data_cfg["path"]),
                 target_column=data_cfg.get("target_column", "value"),
                 date_column=data_cfg.get("date_column") or None,
+            )
+        if (
+            data_cfg.get("blend_with")
+            and not data_cfg.get("report_baselines")
+            and val_idx
+        ):
+            raise ValueError(
+                "data.blend_with requires data.report_baselines "
+                "when validation is scored."
             )
         dataset: Dataset[tuple[torch.Tensor, ...]]
         val_dataset: Dataset[tuple[torch.Tensor, ...]] | None
@@ -168,11 +269,17 @@ class TimeSeriesTrainer:
         checkpoint_dir = resolve_repo_path(t_cfg.get("checkpoint_dir", "checkpoints"))
         checkpoint_dir.mkdir(parents=True, exist_ok=True)
         best_loss = float("inf")
+        best_epoch = 0
         log_interval = t_cfg.get("log_interval", 10)
         history: list[dict[str, float]] = []
         patience = int(t_cfg.get("patience", 0) or 0)
         max_grad_norm = float(t_cfg.get("max_grad_norm", 0) or 0)
         forecast_meta = _forecast_checkpoint(spec)
+        rule = str(t_cfg.get("checkpoint_rule", "best"))
+        if rule not in ("best", "last"):
+            raise ValueError(
+                f"training.checkpoint_rule must be 'best' or 'last', got {rule!r}"
+            )
         if patience < 0 or max_grad_norm < 0:
             raise ValueError(
                 "training.patience and training.max_grad_norm must be >= 0"
@@ -238,14 +345,26 @@ class TimeSeriesTrainer:
                             original_rmse,
                         )
 
-                if select_loss < best_loss:
+                improved = select_loss < best_loss
+                if improved:
                     epochs_without_improvement = 0
                     best_loss = select_loss
+                    best_epoch = epoch
+                else:
+                    epochs_without_improvement += 1
+
+                save_this_epoch = improved or (
+                    rule == "last" and epoch == t_cfg["epochs"]
+                )
+                if save_this_epoch:
+                    if rule == "last" and epoch == t_cfg["epochs"]:
+                        best_epoch = epoch
+                        best_loss = select_loss
                     checkpoint_path = checkpoint_dir / checkpoint_name
                     save_checkpoint(
                         model,
                         optimizer,
-                        epoch,
+                        best_epoch,
                         best_loss,
                         cfg,
                         checkpoint_path,
@@ -258,15 +377,24 @@ class TimeSeriesTrainer:
                         best_loss=best_loss,
                         checkpoint_path=str(checkpoint_path),
                     )
-                else:
-                    epochs_without_improvement += 1
-                    if patience and epochs_without_improvement >= patience:
-                        logger.info(
-                            "Early stopping at epoch %d (no improvement for %d epochs).",
-                            epoch,
-                            patience,
-                        )
-                        break
+
+                reported = select_loss**0.5
+                if scaler is not None and not quantiles:
+                    reported *= float(scaler.y_std.reshape(-1)[0])
+                if epoch_callback is not None:
+                    epoch_callback(epoch, reported)
+
+                if (
+                    rule == "best"
+                    and patience
+                    and epochs_without_improvement >= patience
+                ):
+                    logger.info(
+                        "Early stopping at epoch %d (no improvement for %d epochs).",
+                        epoch,
+                        patience,
+                    )
+                    break
 
             # The checkpoint is the best epoch. Score that model, not whatever
             # weights the loop stopped on after the patience window.
@@ -289,15 +417,33 @@ class TimeSeriesTrainer:
                 saved = torch.load(best_path, map_location="cpu", weights_only=True)
                 saved["forecast"] = forecast_meta
                 torch.save(saved, best_path)
-            for name, value in metrics.items():
-                self.store.log_metric(experiment_id, name, value)
 
             baseline_scores: dict[str, dict[str, float]] | None = None
             if baseline_frame is not None:
                 series_values, series_dates = baseline_frame
-                target_rows = temporal_validation_target_rows(
-                    len(series_values), seq_len, val_split
-                )
+                if prepared is not None:
+                    target_rows = prepared.val_index + seq_len
+                else:
+                    target_rows = temporal_validation_target_rows(
+                        len(series_values), seq_len, val_split
+                    )
+                classical = None
+                if series_dates is not None and data_cfg.get("blend_with"):
+                    frame = pd.read_csv(resolve_repo_path(data_cfg["path"]))
+                    classical = _classical_forecasts(
+                        frame,
+                        data_cfg,
+                        series_values,
+                        series_dates,
+                        target_rows,
+                        seed=int(t_cfg.get("seed", 0) or 0),
+                    )
+                    flat = point.reshape(-1)
+                    blended = _apply_blend(flat, classical, data_cfg)
+                    point = blended.reshape(point.shape)
+                    metrics["mse"] = mse(point, observed)
+                    metrics["rmse"] = rmse(point, observed)
+                    metrics["mae"] = mae(point, observed)
                 baseline_scores = compare_to_baselines(
                     series_values,
                     target_rows,
@@ -305,10 +451,17 @@ class TimeSeriesTrainer:
                     dates=series_dates,
                     model_targets=observed.detach().cpu().numpy(),
                 )
+                if classical is not None:
+                    reference = series_values[np.asarray(target_rows)]
+                    for name, forecast in classical.items():
+                        baseline_scores[name] = regression_scores(forecast, reference)
                 logger.info(
                     "Validation comparison (original units):\n%s",
                     format_score_table(baseline_scores),
                 )
+            for name, value in metrics.items():
+                self.store.log_metric(experiment_id, name, value)
+            if baseline_scores is not None:
                 for name, scores in baseline_scores.items():
                     if name == "model":
                         continue
@@ -348,6 +501,7 @@ class TimeSeriesTrainer:
             "param_count": param_count,
             "elapsed_seconds": elapsed_seconds,
             "baselines": baseline_scores,
+            "best_epoch": best_epoch,
         }
 
 
@@ -433,3 +587,70 @@ def _served_metrics(
         metrics["interval_width"] = calibration.interval_width
     metrics["nominal_coverage"] = calibration.nominal_coverage
     return metrics, point, observed
+
+
+def _classical_forecasts(
+    frame: pd.DataFrame,
+    data_cfg: dict[str, Any],
+    series_values: Any,
+    series_dates: Any,
+    target_rows: Any,
+    *,
+    seed: int,
+) -> dict[str, Any]:
+    target_column = data_cfg.get("target_column", "value")
+    covariate_columns = [
+        column
+        for column in data_cfg.get("feature_columns", [])
+        if column != target_column
+        and column in frame.columns
+        and not str(column).endswith(("_sin", "_cos"))
+    ]
+    return score_classical_baselines(
+        series_values,
+        target_rows,
+        dates=series_dates,
+        covariates=covariate_frame(frame, covariate_columns, int(np.min(target_rows))),
+        seed=seed,
+        ridge_alpha=_optional_float(data_cfg.get("ridge_alpha")),
+        ar_order=_optional_int(data_cfg.get("ar_order")),
+        boosting_params=data_cfg.get("boosting_params"),
+    )
+
+
+def _apply_blend(
+    predictions: torch.Tensor,
+    classical: dict[str, Any] | None,
+    data_cfg: dict[str, Any],
+) -> torch.Tensor:
+    """Average the network with one classical forecast when configured.
+
+    ``blend_weight`` is the network's share. The default is an equal average,
+    which is fixed in advance rather than fit on the split being scored.
+    """
+    blend_with = data_cfg.get("blend_with") or None
+    if not blend_with:
+        return predictions
+    if classical is None or blend_with not in classical:
+        raise ValueError(
+            f"data.blend_with is {blend_with!r}, which needs dated classical forecasts."
+        )
+    weight = float(data_cfg.get("blend_weight", 0.5))
+    if not 0.0 <= weight <= 1.0:
+        raise ValueError(f"data.blend_weight must be in [0, 1], got {weight}")
+    other = torch.tensor(classical[blend_with], dtype=predictions.dtype).reshape(
+        predictions.shape
+    )
+    return weight * predictions + (1.0 - weight) * other
+
+
+def _optional_float(value: Any) -> float | None:
+    if value is None or value == "":
+        return None
+    return float(value)
+
+
+def _optional_int(value: Any) -> int | None:
+    if value is None or value == "":
+        return None
+    return int(value)

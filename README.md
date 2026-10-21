@@ -220,6 +220,14 @@ Set `data.report_baselines: true` on a one-step CSV run (`forecast.horizon` 1 or
 
 The logged model metrics are from the best checkpoint (lowest validation loss), which is the file written to `training.checkpoint_dir`. A horizon longer than 1 is rejected for this flag, because those reference rows are the next observation only. `python -m src.compare` scores multi-step horizons.
 
+`data.val_start` and `data.test_start` (`YYYY-MM-DD`) hold out label dates instead of a fraction, so a different `seq_len` still scores the same days. With only `test_start`, every earlier label is training and validation is empty. `data.missing_indicators: true` adds a 0/1 column for each feature that is missing in the fitting rows and fills the holes with that block's median. `data.calendar_features` (`doy`, `dow`, `month`) and `data.future_calendar` add the same encodings from the row date or the label date.
+
+The transformer accepts `patch_len` (default 1; patches keep the latest observations), `use_revin` (default false), and `residual` (default false; adds the last target observation to the head). `training.weight_decay` above 0 selects AdamW. `training.checkpoint_rule: last` writes the final epoch instead of the best selection loss.
+
+`data.blend_with` (`climatology`, `anomaly_ar`, `ridge`, or `gradient_boosting`) averages the network with that classical forecast. `data.blend_weight` is the network's share (default 0.5) and is not fit on the scored days. Those classical models train only on rows before the first scored label. On a validation run the blend is part of the logged model metrics; a refit with an empty validation split leaves the blend for `python -m src.evaluation.holdout`.
+
+`python -m src.training.search --family neural` (12 trials, at most 20 epochs, patience 5) or `--family boosting` (20 trials) minimizes the validation RMSE of the config you pass. Point the config's `val_start` at an inner slice when the decision split has to stay untouched. `python -m src.evaluation.holdout --split test` scores a saved checkpoint and does not run during training.
+
 ### Forecasting
 
 `forecast.horizon` is how many future steps to predict (default `1`). `forecast.strategy` is `direct` (one multi-output head) or `recursive` (a one-step model rolled forward). With `horizon: 1` and `strategy: direct` and no `quantiles`, the network, checkpoints, and `POST /predict` response are unchanged.
@@ -269,23 +277,62 @@ python -m scripts.fetch_weather
 python -m src.train --config config/weather.yaml
 ```
 
-`python -m src.data.weather` is the same download. The script writes `data/weather_central_park.csv` with columns `date`, `temperature_c`, `doy_sin`, and `doy_cos`. The calendar columns are `sin` and `cos` of `2π * day_of_year / 365.25`. They depend only on the date, so they are known before that day's temperature.
+`python -m src.data.weather` is the same download. The script writes `data/weather_central_park.csv` with `date`, `temperature_c` (TMAX), `tmin_c`, `prcp_mm`, `snow_mm`, `snwd_mm`, `awnd_ms` (metres per second), `doy_sin`, and `doy_cos`. A trace in the water-equivalent fields is stored as 0. Snow depth and wind are missing on part of the record and stay missing in the file; the trainer adds a missingness indicator for each and fills holes with the median of the fitting rows. The calendar columns are `sin` and `cos` of `2π * day_of_year / 365.25`.
 
-The weather config uses the CSV source, a temporal 20% validation holdout, z-score normalization fit on the training split only, early stopping (`patience: 5`), gradient clipping, and `training.seed: 0`. The held-out labels are the 3,281 days from 2017-01-07 through 2025-12-31. Checkpoints go to `checkpoints/weather/` (gitignored), not the API default `checkpoints/best_model.pt`. The model sees 28 days of temperature plus the calendar features and predicts the next day's maximum.
+`config/weather.yaml` predicts the next day's maximum from 28 days of those columns. Validation labels are 2009-10-31 through 2017-01-06 (2,625 days). The 3,281 days from 2017-01-07 through 2025-12-31 are the test split. Training does not score them. Checkpoints go to `checkpoints/weather/` (gitignored), separate from the API default `checkpoints/best_model.pt`.
 
-### Validation results
+### How a change was allowed to stay
 
-One CPU run of `config/weather.yaml` (seed 0, 67,265 parameters). Training stopped at epoch 17 because validation loss had not improved for 5 epochs. The best checkpoint is epoch 12. Wall time was 52.9 seconds.
+Every candidate was scored on the 2009–2016 validation days in degrees Celsius. A change stayed only when a circular block bootstrap (blocks of 14 days, 1,000 resamples, seed 0) put the 5th percentile of its RMSE drop above zero. The point estimate was not enough. The 2017–2025 days were not used for any of these choices.
 
-Metrics are degrees Celsius on those 3,281 validation days, scored from that checkpoint:
+The search that proposed hyperparameters used an earlier slice, labels 2004-01-31 through 2009-10-30, so the decision days stayed out of the objective. Neural search: 12 trials, at most 20 epochs, patience 5, TPE sampler seed 0, pruning a trial that was worse than the running median after 6 scored epochs. The architecture was frozen to the residual network below (RevIN and patching had already lost). Boosting search: 20 trials of `HistGradientBoostingRegressor` on the same slice. Both searches ran on CPU. Re-run them with `python -m src.training.search --config <inner.yaml> --family neural` or `--family boosting`.
+
+### Decision-validation results
+
+| Step | RMSE | MAE | RMSE drop | Bootstrap 5% | Decision |
+| --- | ---: | ---: | ---: | ---: | --- |
+| Persistence (tomorrow = today) | 4.0750 | 3.0968 |  |  | reference |
+| Seasonal naive (same calendar day last year) | 6.5683 | 5.1566 |  |  | reference |
+| Day-of-year climatology | 4.6240 | 3.6402 |  |  | reference |
+| Anomaly autoregression | 3.6272 | 2.8240 |  |  | reference |
+| Ridge regression on the anomaly | 3.4786 | 2.7278 |  |  | reference |
+| Calendar-only transformer (temperature, day-of-year) | 3.6881 | 2.8649 |  |  | starting point |
+| Multivariate transformer | 3.4564 | 2.7137 | +0.2317 | +0.1753 | kept |
+| Gradient boosting, same covariates | 3.3831 | 2.6564 | +0.0733 | +0.0352 | kept |
+| Residual multivariate transformer | 3.3277 | 2.5950 | +0.0553 | +0.0131 | kept |
+| RevIN on that residual network | 3.3669 | 2.6314 | −0.0391 | −0.0839 | dropped |
+| Residual network plus the label date | 3.3397 | 2.6251 | −0.0120 | −0.0359 | dropped |
+| Patched context (84 days, patch length 7) with RevIN | 3.4027 | 2.6785 | −0.0750 | −0.1227 | dropped |
+| Five-seed ensemble of the residual network | 3.3170 | 2.5979 | +0.0107 | −0.0054 | dropped |
+| Equal blend of the residual network and gradient boosting | 3.3007 | 2.5819 | +0.0271 | +0.0043 | kept |
+| Boosting hyperparameters from the 20-trial search | 3.4132 | 2.6733 | −0.0301 | −0.0497 | dropped |
+| Equal blend using that tuned boosting model | 3.3180 |  | −0.0174 | −0.0274 | dropped |
+| Network from the 12-trial search, refit on this split | 3.3405 | 2.6175 | −0.0128 | −0.0367 | dropped |
+| Equal blend using that tuned network | 3.3187 |  | −0.0180 | −0.0303 | dropped |
+
+The RMSE drop is against the previous kept forecast (the multivariate transformer against the calendar-only transformer, boosting against that multivariate network, the residual network against boosting, and the blend against the residual network). The two tuned blends are compared with the equal blend of 3.3007. Positive means a lower RMSE.
+
+The shipped recipe is that equal blend. The network is a residual transformer (64-wide, 4 heads, 2 layers, dropout 0.1, context 28, seed 0, 67,713 parameters) on maximum temperature, minimum temperature, precipitation, snowfall, snow depth, wind speed, and the two day-of-year features, with missingness indicators for snow depth and wind. The gradient-boosting partner uses the library's small default grid, chosen on the last 20% of the fitting labels and then refit on all of them. The blend weight is 0.5, chosen before this split was scored. RevIN, patching, a longer context, the label-date features, the five-seed ensemble, and both hyperparameter searches stay in the code with the defaults that lost left off, so another dataset can turn them on.
+
+The inner-slice winners that failed to transfer were: boosting `max_depth=2`, `learning_rate=0.192`, `max_iter=300`, `min_samples_leaf=40`, `l2_regularization=0.0213` (inner RMSE 3.4553); and a network with `d_model=128`, `nhead=2`, one layer, `dim_feedforward=256`, `dropout=0.111`, `seq_len=14`, `learning_rate=2.83e-4`, `weight_decay=1.12e-4` (inner RMSE 3.4061).
+
+A GPU was not used. The wider network from the search scored 3.3405 against the residual network's 3.3277 on this split, so extra capacity did not show up as accuracy. A T4-class GPU would shorten the same search (these runs are about a minute of CPU per full training, and the 12-trial search took about 15 minutes) at a spot price of roughly $0.10–$0.50 per hour.
+
+### Held-out test
+
+One refit, then one score. `config/weather_refit.yaml` trains the residual network for 17 epochs on every label before 2017-01-07. Seventeen is the epoch with the best decision-validation loss. `checkpoint_rule: last` and `patience: 0` keep that epoch, with no early stop on the test days. The same 0.5 blend is applied by `python -m src.evaluation.holdout --config config/weather_refit.yaml --split test`. The refit took 49.9 seconds on CPU.
 
 | Method | RMSE (°C) | MAE (°C) |
 | --- | ---: | ---: |
-| Transformer | 3.7959 | 2.9376 |
-| Persistence (tomorrow = today) | 4.3009 | 3.2516 |
-| Seasonal naive (same calendar day last year) | 6.4337 | 5.0134 |
+| Equal blend (the shipped forecast) | 3.4599 | 2.7083 |
+| Gradient boosting | 3.4998 | 2.7420 |
+| Ridge regression on the anomaly | 3.5888 | 2.8169 |
+| Anomaly autoregression | 3.7804 | 2.9313 |
+| Persistence | 4.3009 | 3.2516 |
+| Day-of-year climatology | 4.6016 | 3.5916 |
+| Seasonal naive | 6.4337 | 5.0134 |
 
-The transformer RMSE and MAE are lower than both references, so the model is learning the next-day maximum rather than fitting noise. Repeating yesterday is the tighter of the two references. This table is that first run; the hyperparameters in `config/weather.yaml` were not changed afterward.
+The blend was chosen on 2009–2016. The other rows are references on the same 3,281 days, not candidates. Persistence and the seasonal naive match the previously published figures for this window (4.3009 and 6.4337). An earlier transformer RMSE of 3.7959 on these days was early-stopped on the test window itself, so it is not a comparable score.
 
 ## API Reference
 

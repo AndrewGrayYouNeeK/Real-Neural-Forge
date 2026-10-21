@@ -1,11 +1,23 @@
 """Tests for multi-step forecasts, quantile heads, and calibrated intervals."""
 
+import math
+
+import numpy as np
 import pandas as pd
 import pytest
 import torch
 import torch.nn as nn
 
+from src.data.calendar import calendar_features
+from src.data.splits import (
+    fraction_window_indices,
+    split_by_label_dates,
+    split_counts,
+)
 from src.data.timeseries import load_csv_timeseries, make_sine_dataset
+from src.data.windows import prepare_csv_series
+from src.evaluation.bootstrap import block_bootstrap_improvement
+from src.evaluation.classical import score_classical_baselines
 from src.forecasting.head import ForecastHead
 from src.forecasting.intervals import (
     apply_qhat,
@@ -19,6 +31,7 @@ from src.forecasting.recursive import advance_window
 from src.forecasting.spec import ForecastSpec, forecast_spec_from_config
 from src.inference.predictor import Predictor
 from src.models.registry import build_model
+from src.models.revin import RevIN
 from src.models.transformer import TimeSeriesTransformer
 from src.storage.experiments import ExperimentStore
 from src.training.trainer import TimeSeriesTrainer
@@ -336,3 +349,177 @@ class TestPredictorRollout:
         )
         shorter = predictor.forecast(torch.linspace(0, 1, 4).unsqueeze(-1), horizon=1)
         assert shorter.validation_coverage is None
+
+
+def test_fraction_counts_match_the_historical_validation_rule():
+    train, val, test = fraction_window_indices(10, val_split=0.2, test_split=0.0)
+    assert train.tolist() == [0, 1, 2, 3, 4, 5, 6, 7]
+    assert val.tolist() == [8, 9]
+    assert test.tolist() == []
+    assert split_counts(10, 0.2, 0.3) == (6, 1, 3)
+
+
+def test_test_start_alone_leaves_validation_empty():
+    labels = np.arange(np.datetime64("2020-01-01"), np.datetime64("2020-01-08"))
+    train, val, test = split_by_label_dates(labels, test_start="2020-01-05")
+    assert train.tolist() == [0, 1, 2, 3]
+    assert val.tolist() == []
+    assert test.tolist() == [4, 5, 6]
+
+
+def test_date_split_holds_out_the_named_days():
+    labels = np.arange(np.datetime64("2020-01-01"), np.datetime64("2020-01-11"))
+    train, val, test = split_by_label_dates(
+        labels, val_start="2020-01-06", test_start="2020-01-09"
+    )
+    assert train.tolist() == [0, 1, 2, 3, 4]
+    assert val.tolist() == [5, 6, 7]
+    assert test.tolist() == [8, 9]
+
+
+def test_prepare_without_extensions_matches_the_csv_loader(tmp_path):
+    frame = pd.DataFrame(
+        {
+            "date": pd.date_range("2020-01-01", periods=40, freq="D").strftime(
+                "%Y-%m-%d"
+            ),
+            "value": np.linspace(0.0, 4.0, 40),
+        }
+    )
+    path = tmp_path / "series.csv"
+    frame.to_csv(path, index=False)
+    cfg = {
+        "path": str(path),
+        "feature_columns": ["value"],
+        "target_column": "value",
+        "seq_len": 5,
+        "val_split": 0.2,
+        "split_mode": "temporal",
+        "date_column": "date",
+    }
+    prepared = prepare_csv_series(cfg)
+    loaded_x, loaded_y = load_csv_timeseries(path, ["value"], "value", seq_len=5)
+    assert torch.equal(prepared.inputs, loaded_x)
+    assert torch.equal(prepared.targets, loaded_y)
+    assert len(prepared.val_index) == int(35 * 0.2)
+
+
+def test_missing_indicator_uses_only_rows_before_validation(tmp_path):
+    dates = pd.date_range("2020-01-01", periods=30, freq="D")
+    values = np.arange(30, dtype=float)
+    covariate = values.copy()
+    covariate[0] = np.nan
+    covariate[25] = np.nan
+    frame = pd.DataFrame(
+        {
+            "date": dates.strftime("%Y-%m-%d"),
+            "value": values,
+            "extra": covariate,
+        }
+    )
+    path = tmp_path / "series.csv"
+    frame.to_csv(path, index=False)
+    prepared = prepare_csv_series(
+        {
+            "path": str(path),
+            "feature_columns": ["value", "extra"],
+            "target_column": "value",
+            "seq_len": 4,
+            "date_column": "date",
+            "val_start": "2020-01-21",
+            "missing_indicators": True,
+        }
+    )
+    assert prepared.feature_names == ["value", "extra", "extra_missing"]
+    # Row 0 is in the fitting block, so the indicator exists. The median of the
+    # fitting rows (extra[1:20], since the label boundary is 2020-01-21 and
+    # seq_len is 4) fills the gap. Row 25 is a validation day and must not
+    # change that median.
+    assert prepared.inputs[0, 0, 2].item() == 1.0
+    assert np.isfinite(prepared.inputs.numpy()).all()
+
+
+def test_calendar_day_of_year_matches_the_weather_encoding():
+    frame = pd.DataFrame({"date": ["2020-01-01", "2020-01-02"]})
+    features = calendar_features(frame["date"], ["doy"])
+    angle = 2.0 * math.pi * 1 / 365.25
+    assert features.loc[0, "doy_sin"] == pytest.approx(math.sin(angle))
+    assert features.loc[0, "doy_cos"] == pytest.approx(math.cos(angle))
+
+
+def test_revin_round_trip_restores_the_window():
+    torch.manual_seed(0)
+    layer = RevIN(3, affine=True)
+    window = torch.randn(4, 8, 3)
+    normalized, stats = layer.normalize(window)
+    restored = normalized.clone()
+    restored = (restored - layer.bias) / layer.weight
+    mean, stdev = stats
+    restored = restored * stdev + mean
+    assert torch.allclose(restored, window, atol=1e-5)
+
+
+def test_zero_head_residual_is_persistence():
+    model = TimeSeriesTransformer(
+        input_dim=1,
+        output_dim=1,
+        d_model=8,
+        nhead=2,
+        num_encoder_layers=1,
+        dim_feedforward=16,
+        dropout=0.0,
+        residual=True,
+    )
+    torch.nn.init.zeros_(model.output_projection.weight)
+    torch.nn.init.zeros_(model.output_projection.bias)
+    window = torch.randn(4, 10, 1)
+    output = model(window)
+    assert torch.allclose(output, window[:, -1, :], atol=1e-5)
+
+
+def test_patched_forward_keeps_the_latest_step():
+    model = TimeSeriesTransformer(
+        input_dim=2,
+        output_dim=1,
+        d_model=8,
+        nhead=2,
+        num_encoder_layers=1,
+        dim_feedforward=16,
+        dropout=0.0,
+        patch_len=4,
+        patch_stride=4,
+        use_revin=True,
+        residual=True,
+    )
+    torch.nn.init.zeros_(model.output_projection.weight)
+    torch.nn.init.zeros_(model.output_projection.bias)
+    window = torch.randn(3, 12, 2)
+    output = model(window)
+    assert output.shape == (3, 1)
+    assert torch.allclose(output, window[:, -1, :1], atol=1e-4)
+
+
+def test_block_bootstrap_is_zero_for_identical_forecasts():
+    target = np.linspace(0.0, 1.0, 40)
+    stats = block_bootstrap_improvement(
+        target, target + 1.0, target + 1.0, block=7, n_resamples=50, seed=0
+    )
+    assert stats["improvement"] == pytest.approx(0.0)
+    assert stats["p05"] == pytest.approx(0.0)
+    assert stats["p95"] == pytest.approx(0.0)
+
+
+def test_classical_climatology_beats_persistence_on_a_seasonal_series():
+    dates = pd.date_range("2000-01-01", periods=1200, freq="D")
+    doy = dates.dayofyear.to_numpy()
+    signal = 15.0 + 10.0 * np.sin(2.0 * np.pi * doy / 365.25)
+    rows = np.arange(1000, 1200)
+    forecasts = score_classical_baselines(
+        signal, rows, dates=dates.to_numpy(dtype="datetime64[D]"), seed=0
+    )
+    actual = signal[rows]
+    persistence = signal[rows - 1]
+    clim_rmse = float(np.sqrt(np.mean((forecasts["climatology"] - actual) ** 2)))
+    persist_rmse = float(np.sqrt(np.mean((persistence - actual) ** 2)))
+    assert clim_rmse < persist_rmse
+    assert forecasts["gradient_boosting"].shape == rows.shape
