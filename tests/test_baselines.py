@@ -126,7 +126,25 @@ class TestBaselineReporting:
         assert data["normalize"] is True
         assert data["report_baselines"] is True
         assert data["val_split"] == 0.2
-        assert cfg["model"]["input_dim"] == len(data["feature_columns"])
+        assert data["val_start"] == "2009-10-31"
+        assert data["test_start"] == "2017-01-07"
+        assert data["missing_indicators"] is True
+        assert data["blend_with"] == "gradient_boosting"
+        assert data["blend_weight"] == 0.5
+        assert data["feature_columns"] == [
+            "temperature_c",
+            "tmin_c",
+            "prcp_mm",
+            "snow_mm",
+            "snwd_mm",
+            "awnd_ms",
+            "doy_sin",
+            "doy_cos",
+        ]
+        # Two missingness indicators are appended to those eight columns.
+        assert cfg["model"]["input_dim"] == 10
+        assert cfg["model"]["residual"] is True
+        assert cfg["model"]["use_revin"] is False
         assert cfg["training"]["seed"] == 0
         assert cfg["training"]["patience"] > 0
         assert cfg["training"]["checkpoint_dir"] == "checkpoints/weather"
@@ -265,7 +283,119 @@ class TestBaselineReporting:
         assert not (tmp_path / "ckpt").exists()
 
 
+def test_zero_blend_weight_reports_the_classical_forecast(tmp_path):
+    n = 500
+    dates = pd.date_range("2019-01-01", periods=n, freq="D")
+    temperature = 10 + 8 * np.sin(2 * np.pi * np.arange(n) / 365.25)
+    path = tmp_path / "series.csv"
+    pd.DataFrame(
+        {
+            "date": dates.strftime("%Y-%m-%d"),
+            "temperature_c": temperature,
+        }
+    ).to_csv(path, index=False)
+    cfg = _tiny_model(load_config("config/config.yaml"))
+    cfg["training"]["checkpoint_dir"] = str(tmp_path / "ckpt")
+    cfg["data"] = {
+        "source": "csv",
+        "path": str(path),
+        "date_column": "date",
+        "feature_columns": ["temperature_c"],
+        "target_column": "temperature_c",
+        "seq_len": 8,
+        "val_split": 0.2,
+        "split_mode": "temporal",
+        "normalize": True,
+        "report_baselines": True,
+        "blend_with": "gradient_boosting",
+        "blend_weight": 0.0,
+    }
+    result = _trainer(tmp_path, cfg).train()
+    assert result["metrics"]["rmse"] == pytest.approx(
+        result["baselines"]["gradient_boosting"]["rmse"]
+    )
+
+
+def test_blend_without_baselines_rejected_when_validation_is_scored(tmp_path):
+    n = 80
+    path = tmp_path / "series.csv"
+    pd.DataFrame(
+        {
+            "date": pd.date_range("2019-01-01", periods=n, freq="D").strftime(
+                "%Y-%m-%d"
+            ),
+            "temperature_c": np.linspace(0.0, 1.0, n),
+        }
+    ).to_csv(path, index=False)
+    cfg = _tiny_model(load_config("config/config.yaml"))
+    cfg["training"]["checkpoint_dir"] = str(tmp_path / "ckpt")
+    cfg["data"] = {
+        "source": "csv",
+        "path": str(path),
+        "date_column": "date",
+        "feature_columns": ["temperature_c"],
+        "target_column": "temperature_c",
+        "seq_len": 8,
+        "val_split": 0.2,
+        "split_mode": "temporal",
+        "blend_with": "gradient_boosting",
+    }
+    with pytest.raises(ValueError, match="report_baselines"):
+        _trainer(tmp_path, cfg).train()
+    assert not (tmp_path / "ckpt").exists()
+
+
+def test_empty_validation_refit_accepts_a_holdout_blend(tmp_path):
+    n = 80
+    path = tmp_path / "series.csv"
+    pd.DataFrame(
+        {
+            "date": pd.date_range("2019-01-01", periods=n, freq="D").strftime(
+                "%Y-%m-%d"
+            ),
+            "temperature_c": np.linspace(0.0, 1.0, n),
+        }
+    ).to_csv(path, index=False)
+    cfg = _tiny_model(load_config("config/config.yaml"))
+    cfg["training"]["checkpoint_dir"] = str(tmp_path / "ckpt")
+    cfg["training"]["checkpoint_rule"] = "last"
+    cfg["data"] = {
+        "source": "csv",
+        "path": str(path),
+        "date_column": "date",
+        "feature_columns": ["temperature_c"],
+        "target_column": "temperature_c",
+        "seq_len": 8,
+        "val_split": 0.0,
+        "test_start": "2019-03-01",
+        "split_mode": "temporal",
+        "blend_with": "gradient_boosting",
+        "blend_weight": 0.5,
+    }
+    result = _trainer(tmp_path, cfg).train()
+    assert result["baselines"] is None
+    assert result["best_epoch"] == 1
+    assert (tmp_path / "ckpt" / "best_model.pt").is_file()
+
+
+def test_weather_refit_uses_the_decision_epoch_and_does_not_score_validation():
+    cfg = load_config("config/weather_refit.yaml")
+    data = cfg["data"]
+    assert data["test_start"] == "2017-01-07"
+    assert not data.get("val_start")
+    assert data["report_baselines"] is False
+    assert data["blend_with"] == "gradient_boosting"
+    assert data["blend_weight"] == 0.5
+    assert data["seq_len"] == 28
+    assert cfg["model"]["input_dim"] == 10
+    assert cfg["model"]["residual"] is True
+    assert cfg["training"]["epochs"] == 17
+    assert cfg["training"]["patience"] == 0
+    assert cfg["training"]["checkpoint_rule"] == "last"
+
+
 def test_build_model_accepts_weather_width():
     cfg = load_config("config/weather.yaml")
     model = build_model(cfg)
-    assert model.input_dim == 3
+    assert model.input_dim == 10
+    assert model.residual is True

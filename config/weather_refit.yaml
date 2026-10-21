@@ -1,0 +1,70 @@
+# One refit of the decision recipe on every label before the held-out test.
+# Epoch count is the decision-validation best epoch (17) of the residual
+# network. `checkpoint_rule: last` keeps that epoch. Patience is off so this
+# run cannot stop early on the test period. Score it once:
+#   python -m src.evaluation.holdout --config config/weather_refit.yaml --split test
+# The blend weight matches config/weather.yaml and is not fit on these days.
+
+model:
+  name: time_series_transformer
+  input_dim: 10
+  output_dim: 1
+  d_model: 64
+  nhead: 4
+  num_encoder_layers: 2
+  dim_feedforward: 128
+  dropout: 0.1
+  max_seq_len: 512
+  patch_len: 1
+  use_revin: false
+  residual: true
+  target_index: 0
+
+data:
+  source: csv
+  path: data/weather_central_park.csv
+  date_column: date
+  feature_columns:
+    - temperature_c
+    - tmin_c
+    - prcp_mm
+    - snow_mm
+    - snwd_mm
+    - awnd_ms
+    - doy_sin
+    - doy_cos
+  target_column: temperature_c
+  missing_indicators: true
+  seq_len: 28
+  val_split: 0.0
+  split_mode: temporal
+  test_start: "2017-01-07"
+  normalize: true
+  report_baselines: false
+  blend_with: gradient_boosting
+  blend_weight: 0.5
+  seed: 0
+
+training:
+  experiment_name: weather_central_park_tmax_refit
+  batch_size: 64
+  learning_rate: 0.001
+  epochs: 17
+  patience: 0
+  checkpoint_rule: last
+  max_grad_norm: 1.0
+  weight_decay: 0
+  device: cpu
+  checkpoint_dir: checkpoints/weather_refit
+  log_interval: 17
+  seed: 0
+
+inference:
+  device: cpu
+  checkpoint_path: checkpoints/weather_refit/best_model.pt
+
+api:
+  training_enabled: true
+
+storage:
+  db_path: data/weather_refit_experiments.db
