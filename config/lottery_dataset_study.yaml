@@ -9,6 +9,17 @@
 # (prior_calendar_day, or same_day_before_draw for a daily market close).
 # Clock times are compared with the draw instant directly.
 # Run: python -m src.lottery_study --config config/lottery_dataset_study.yaml
+#
+# Scheduled retraining scans every config with model and training mappings.
+# This file drives the lottery comparison, so it is disabled as a dataset
+# and is not refreshed or trained by `python -m src.retrain`.
+
+dataset:
+  id: lottery_dataset_study
+  enabled: false
+
+model:
+  name: time_series_transformer
 
 alpha: 0.05
 min_aligned: 80

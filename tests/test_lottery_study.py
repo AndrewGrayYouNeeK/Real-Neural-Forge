@@ -47,6 +47,8 @@ from src.lottery_study.stats import (
     regularized_incomplete_beta,
     student_t_two_sided_p,
 )
+from src.retrain.discover import discover
+from src.utils.paths import REPO_ROOT
 
 REQUIRED_DATASETS = {
     "weather",
@@ -288,6 +290,11 @@ class TestWindowsAndRegistry:
 
     def test_catalog_hooks_cover_every_requested_dataset(self):
         assert REQUIRED_DATASETS <= {row.dataset_id for row in dataset_catalog()}
+
+    def test_study_config_stays_out_of_scheduled_retraining(self):
+        specs, errors = discover(REPO_ROOT / "config")
+        assert errors == []
+        assert "lottery_dataset_study" not in {spec.id for spec in specs}
 
     def test_a_catalog_csv_is_not_discovered_under_a_second_name(self):
         loads = resolve_datasets(
