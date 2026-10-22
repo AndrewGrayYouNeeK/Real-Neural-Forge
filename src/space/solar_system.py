@@ -727,9 +727,7 @@ def _monthly_in_window(
         freq="MS",
     )
     counts = {
-        planet.column: dict.fromkeys(index, 0)
-        for planet in PLANETS
-        if planet.train
+        planet.column: dict.fromkeys(index, 0) for planet in PLANETS if planet.train
     }
     perihelion_counts = dict.fromkeys(index, 0)
     for row in approaches:
