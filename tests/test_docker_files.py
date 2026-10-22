@@ -58,6 +58,8 @@ def test_publish_workflow_waits_for_ci_and_keeps_tags():
     assert 'workflows: ["CI"]' in text
     assert 'tags: ["v*.*.*"]' in text
     assert "needs: verify" in text
+    assert "main-${SHA::7}" in text
+    assert "steps.rev.outputs.main_tag" in text
     assert "uses: ./.github/workflows/ci.yml" in text
     assert (
         "branches: [main]"

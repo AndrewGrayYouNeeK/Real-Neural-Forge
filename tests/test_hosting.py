@@ -31,7 +31,15 @@ def test_container_worker_is_not_a_dashboard_worker():
     assert container["class_name"] == "NeuralForgeContainer"
     assert container["instance_type"] == "standard-1"
     assert container["max_instances"] == 1
-    assert "REPLACE_ACCOUNT_ID" in container["image"]
+    assert container["image"] == (
+        "registry.cloudflare.com/d74b0de637f4d9d9eb3efb9e13142784/"
+        "real-neural-forge:main-6ce3b6f"
+    )
+    assert ":latest" not in container["image"]
+    assert config["migrations"] == [
+        {"tag": "v1", "new_sqlite_classes": ["NeuralForgeContainer"]}
+    ]
+    assert "exports" not in config
     assert config["vars"]["NEURAL_FORGE_CHECKPOINT_URL"].endswith(
         "/champion-default.pt"
     )

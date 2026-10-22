@@ -12,7 +12,7 @@
   "containers": [
     {
       "class_name": "NeuralForgeContainer",
-      "image": "registry.cloudflare.com/REPLACE_ACCOUNT_ID/real-neural-forge:latest",
+      "image": "registry.cloudflare.com/d74b0de637f4d9d9eb3efb9e13142784/real-neural-forge:main-6ce3b6f",
       "instance_type": "standard-1",
       "max_instances": 1
     }
@@ -25,12 +25,11 @@
       }
     ]
   },
-  "exports": {
-    "NeuralForgeContainer": {
-      "type": "durable-object",
-      "storage": "sqlite"
-    }
-  },
+  // Lifecycle stays on this migration. Wrangler rejects a Durable Object
+  // `exports` entry in the same file. Do not delete tag v1.
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["NeuralForgeContainer"] }
+  ],
   "vars": {
     "NEURAL_FORGE_CONFIG": "config/config.yaml",
     "NEURAL_FORGE_CHECKPOINT_URL": "https://github.com/AndrewGrayYouNeeK/Real-Neural-Forge/releases/download/champions/champion-default.pt"
