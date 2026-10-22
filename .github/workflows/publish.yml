@@ -1,7 +1,8 @@
 name: Publish image
 
-# :latest is published only after CI succeeds on a push to main.
-# Version tags and manual runs execute that same CI workflow first.
+# After CI succeeds on a push to main, the image is pushed as :latest,
+# sha-<7>, and main-<7>. Version tags and manual runs publish those same
+# commit tags after that CI workflow.
 on:
   workflow_run:
     workflows: ["CI"]
@@ -58,7 +59,9 @@ jobs:
         id: rev
         env:
           SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
-        run: echo "short_tag=sha-${SHA::7}" >> "$GITHUB_OUTPUT"
+        run: |
+          echo "short_tag=sha-${SHA::7}" >> "$GITHUB_OUTPUT"
+          echo "main_tag=main-${SHA::7}" >> "$GITHUB_OUTPUT"
 
       - uses: docker/metadata-action@v6
         id: meta
@@ -67,6 +70,7 @@ jobs:
           tags: |
             type=raw,value=latest,enable=${{ github.event_name == 'workflow_run' || github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
             type=raw,value=${{ steps.rev.outputs.short_tag }}
+            type=raw,value=${{ steps.rev.outputs.main_tag }}
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
 

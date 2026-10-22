@@ -85,7 +85,7 @@ cd Real-Neural-Forge
 
 ### GitHub Container Registry (recommended)
 
-After CI succeeds on `main`, the [Publish image](https://github.com/AndrewGrayYouNeeK/Real-Neural-Forge/actions/workflows/publish.yml) workflow pushes `:latest`:
+After CI succeeds on `main`, the [Publish image](https://github.com/AndrewGrayYouNeeK/Real-Neural-Forge/actions/workflows/publish.yml) workflow pushes `:latest`, `sha-<sha>`, and `main-<sha>` (the first 7 characters of that commit):
 
 ```bash
 docker pull ghcr.io/andrewgrayyouneek/real-neural-forge:latest
@@ -535,7 +535,9 @@ Forecast JSON uses `schema_version` 1. `forecast.values` is the next model outpu
 
 ## Live hosting
 
-Workers cannot run PyTorch. The API container is a different Cloudflare product from the dashboard Workers. This repository does not deploy it. The steps below are what the owner runs, and they create paid resources.
+Workers cannot run PyTorch. The API container is a different Cloudflare product from the dashboard Workers. CI does not deploy it. The owner runs the redeploy steps below, and they use paid resources.
+
+The live API is <https://real-neural-forge-api.youneekartifacts.workers.dev>.
 
 ### Cloudflare Containers
 
@@ -545,18 +547,33 @@ Instance: `standard-1` (1/2 vCPU, 4 GiB RAM, 8 GB disk) with `max_instances` 1. 
 
 The Worker name is `real-neural-forge-api`. Leave the existing Workers Builds for `real-neural-forge` and `youneek-xyz` on the repository root so they keep publishing `frontend/`.
 
-GHCR is not a registry Containers pulls from directly. Push the image CI already published into Cloudflare's registry, then deploy the Worker from `deploy/cloudflare/`:
+GHCR is not a registry Containers pulls from directly. The Worker config pins one image tag. It does not follow `:latest`. The pin in `deploy/cloudflare/wrangler.jsonc` is `registry.cloudflare.com/d74b0de637f4d9d9eb3efb9e13142784/real-neural-forge:main-6ce3b6f`. Account id `d74b0de637f4d9d9eb3efb9e13142784` is the Cloudflare account that owns the Worker. The `migrations` entry `v1` created the SQLite Durable Object class `NeuralForgeContainer`. Leave that entry in the file. Add a new tag only when that class's storage changes. Do not add a Durable Object `exports` entry beside it. Current Wrangler rejects `migrations` and `exports` together. The class is still exported from `deploy/cloudflare/src/index.ts`, and the container binds it by `class_name`.
+
+To serve a dataset other than `default`, change `vars.NEURAL_FORGE_CONFIG` and `vars.NEURAL_FORGE_CHECKPOINT_URL` in that file. The URL pattern is the champion asset above.
+
+### Redeploy
+
+Wait until [Publish image](https://github.com/AndrewGrayYouNeeK/Real-Neural-Forge/actions/workflows/publish.yml) succeeds for the commit you want. On a push to `main` it pushes three GHCR tags for that commit: `:latest`, `sha-<sha>`, and `main-<sha>`. `<sha>` is the first 7 characters of the commit. Tagged releases and manual runs push the same commit tags.
+
+Copy that image into Cloudflare's registry and point the Worker at the new tag. From a machine that can pull GHCR and is logged into the same Cloudflare account:
 
 ```bash
-docker pull ghcr.io/andrewgrayyouneek/real-neural-forge:latest
-docker tag ghcr.io/andrewgrayyouneek/real-neural-forge:latest real-neural-forge:latest
+SHA=6ce3b6f
+docker pull ghcr.io/andrewgrayyouneek/real-neural-forge:main-$SHA
+docker tag ghcr.io/andrewgrayyouneek/real-neural-forge:main-$SHA real-neural-forge:main-$SHA
 cd deploy/cloudflare
 npm install
 npx wrangler login
-npx wrangler containers push real-neural-forge:latest
+npx wrangler containers push real-neural-forge:main-$SHA
 ```
 
-`wrangler containers push` prints `registry.cloudflare.com/<ACCOUNT_ID>/real-neural-forge:latest`. Replace `REPLACE_ACCOUNT_ID` in `deploy/cloudflare/wrangler.jsonc` with that account id. To serve a dataset other than `default`, change `vars.NEURAL_FORGE_CONFIG` and `vars.NEURAL_FORGE_CHECKPOINT_URL` in that file. The URL pattern is the champion asset above.
+`wrangler containers push` prints `registry.cloudflare.com/d74b0de637f4d9d9eb3efb9e13142784/real-neural-forge:main-<sha>`. Set `containers[0].image` in `deploy/cloudflare/wrangler.jsonc` to that string and commit the pin. Do not set the tag to `latest`. Then, still in `deploy/cloudflare/`:
+
+```bash
+npx wrangler deploy
+```
+
+A restart of the container picks up a newly promoted champion. Changing a secret does not affect an already-running instance until it sleeps and starts again.
 
 Secrets are not in git. From `deploy/cloudflare/`:
 
@@ -574,13 +591,7 @@ npx wrangler secret put NEURAL_FORGE_CHECKPOINT_TOKEN
 | `NEURAL_FORGE_CHECKPOINT_PATH` | No | Where the file is saved. Default is `inference.checkpoint_path`. |
 | `NEURAL_FORGE_CHECKPOINT_MAX_BYTES` | No | Download cap. Default 256 MiB. |
 
-Then:
-
-```bash
-npx wrangler deploy
-```
-
-The container needs outbound internet so it can download the champion. A restart picks up a newly promoted file. Changing a secret does not affect an already-running instance until it sleeps and starts again.
+The container needs outbound internet so it can download the champion.
 
 ### Fly.io (one command after the token is filled in)
 
@@ -624,7 +635,7 @@ mypy src/ workers_ci/ --ignore-missing-imports
 ### CI/CD
 
 - **CI** (`.github/workflows/ci.yml`) runs tests, linting, formatting, type checks, coverage, and a Docker image smoke test on Python 3.10–3.13 for every pull request and for pushes to `main` and `develop`.
-- **Publish** (`.github/workflows/publish.yml`) pushes `:latest` to GitHub Container Registry only after that CI workflow succeeds for a push to `main`. Version tags (`vX.Y.Z`) and manual runs publish after the same CI workflow completes successfully inside the publish run.
+- **Publish** (`.github/workflows/publish.yml`) pushes `:latest`, `sha-<sha>`, and `main-<sha>` to GitHub Container Registry only after that CI workflow succeeds for a push to `main`. `<sha>` is the first 7 characters of the commit. Version tags (`vX.Y.Z`) and manual runs publish those commit tags after the same CI workflow completes successfully inside the publish run. The Cloudflare Worker pins `main-<sha>` and does not follow `:latest`.
 - **Retrain** (`.github/workflows/retrain.yml`) fetches, retrains, and promotes champion checkpoints weekly. It also runs from the Actions tab. Forecast JSON and checkpoints are release assets, not commits.
 - **Dependabot** (`.github/dependabot.yml`) opens weekly grouped PRs for GitHub Actions and the pip locks. Pip updates resolve with the Python in `.python-version` (3.10) so they stay installable on the whole CI matrix.
 - **actionlint** lints `.github/workflows/` in CI.
