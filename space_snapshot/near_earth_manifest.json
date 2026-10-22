@@ -1,0 +1,60 @@
+{
+  "sources": [
+    {
+      "id": "cad",
+      "name": "JPL SBDB close approaches to Earth and the Moon",
+      "url": "https://ssd-api.jpl.nasa.gov/cad.api",
+      "licence": "NASA/JPL SBDB Close-Approach Data API, public domain U.S. government work. https://ssd-api.jpl.nasa.gov/cad.api. Distances are AU. The training counts use approaches within 0.05 AU. The lookahead file also keeps interstellar approaches out to 1 AU."
+    },
+    {
+      "id": "fireballs",
+      "name": "JPL fireball and bolide reports",
+      "url": "https://ssd-api.jpl.nasa.gov/fireball.api",
+      "licence": "NASA/JPL Fireball Data API, public domain U.S. government work. https://ssd-api.jpl.nasa.gov/fireball.api. Radiated energy is in units of 10^10 joules. Impact energy is an estimate in kilotons of TNT."
+    },
+    {
+      "id": "sentry",
+      "name": "JPL Sentry impact-risk list",
+      "url": "https://ssd-api.jpl.nasa.gov/sentry.api",
+      "licence": "NASA/JPL Sentry API, public domain U.S. government work. https://ssd-api.jpl.nasa.gov/sentry.api. A current snapshot, not a historical series."
+    },
+    {
+      "id": "sbdb",
+      "name": "JPL SBDB designations and first observations",
+      "url": "https://ssd-api.jpl.nasa.gov/sbdb_query.api",
+      "licence": "NASA/JPL Small-Body Database Query API, public domain U.S. government work. https://ssd-api.jpl.nasa.gov/sbdb_query.api. first_obs is the discovery control for close-approach counts."
+    },
+    {
+      "id": "satcat",
+      "name": "CelesTrak SATCAT decay dates",
+      "url": "https://celestrak.org/pub/satcat.csv",
+      "licence": "CelesTrak SATCAT redistribution of the public satellite catalog. https://celestrak.org/pub/satcat.csv. Cite CelesTrak (T.S. Kelso). Decay dates record reentries that have already happened."
+    }
+  ],
+  "fetched_on": "2026-10-22",
+  "date_min": "1900-01-01",
+  "date_max": "2028-10-21",
+  "dist_max_au": 0.05,
+  "near_earth": {
+    "rows": 1521,
+    "start": "1900-01-01",
+    "end": "2026-09-01",
+    "earth_approaches": 33307,
+    "moon_approaches": 6313
+  },
+  "fireballs": {
+    "rows": 462,
+    "start": "1988-04-01",
+    "end": "2026-09-01",
+    "events": 1073,
+    "energy_kt": 1207.428
+  },
+  "reentries": {
+    "rows": 826,
+    "start": "1957-12-01",
+    "end": "2026-09-01",
+    "events": 35652
+  },
+  "sentry_objects": 2223,
+  "interstellar_objects": 3
+}

@@ -5,8 +5,10 @@ Run from the repository root:
     python -m scripts.fetch_solar_system
 
 Raw responses and the processed CSVs live under ``data/space/`` and are not
-committed. No API key is used. The weekly retrain calls the same fetch; each
-page is cached, so later configs in that job do not download it again.
+committed. The event files the API serves are also committed in
+``space_snapshot/`` so the image can answer before a refresh finishes. No API
+key is used. The weekly retrain calls the same fetch; each page is cached, so
+later configs in that job do not download it again.
 """
 
 from __future__ import annotations

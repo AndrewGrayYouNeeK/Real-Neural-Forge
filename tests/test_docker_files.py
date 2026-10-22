@@ -21,7 +21,16 @@ def test_dockerignore_excludes_local_artifacts():
     # A bare "data" pattern would also drop the src/data package.
     assert "data" not in entries
     # Things the image needs at runtime must not be excluded.
-    for needed in ("src", "config", "frontend", "requirements.txt", "workers_ci"):
+    for needed in (
+        "src",
+        "config",
+        "frontend",
+        "requirements.txt",
+        "workers_ci",
+        "space_snapshot",
+        "predictions",
+        "results",
+    ):
         assert needed not in entries
 
 
@@ -50,6 +59,7 @@ def test_dockerfile_uses_cpu_torch_without_build_tools():
     assert "USER forge" in dockerfile
     assert "/app/checkpoints" in dockerfile
     assert "/app/data" in dockerfile
+    assert "COPY --chown=forge:forge space_snapshot/ /app/data/space/" in dockerfile
 
 
 def test_publish_workflow_waits_for_ci_and_keeps_tags():
@@ -60,6 +70,9 @@ def test_publish_workflow_waits_for_ci_and_keeps_tags():
     assert "needs: verify" in text
     assert "main-${SHA::7}" in text
     assert "steps.rev.outputs.main_tag" in text
+    for line in text.splitlines():
+        if "outputs.main_tag" in line:
+            assert "enable=" not in line
     assert "uses: ./.github/workflows/ci.yml" in text
     assert (
         "branches: [main]"
