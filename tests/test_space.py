@@ -355,6 +355,12 @@ def test_space_configs_use_the_trainer_contract():
             assert data["season_length"] == 12
             assert space["outlook_months"] == 24
             assert "fetch_near_earth" in str(data["fetch"])
+        elif space.get("group") == "solar_system":
+            assert cfg["retrain"]["enabled"] is True
+            assert cfg["retrain"]["baselines"] == ["persistence", "mean", "seasonal"]
+            assert data["season_length"] == 12
+            assert space["outlook_months"] == 24
+            assert "fetch_solar_system" in str(data["fetch"])
         else:
             assert cfg["retrain"]["enabled"] is False
     assert "f107" in seen
@@ -370,7 +376,7 @@ def test_recorded_forecast_covers_every_space_config():
     configs = {
         load_config(path)["space"]["id"]
         for path in Path("config/space").glob("*.yaml")
-        if load_config(path)["space"].get("group") != "near_earth"
+        if load_config(path)["space"].get("group") not in {"near_earth", "solar_system"}
     }
     series = recorded["series"]
     assert {row["id"] for row in series} == configs

@@ -28,6 +28,7 @@ from src.space.approaches import (
 from src.space.charts import write_forecast_svg
 from src.space.evaluate import extra_baseline_scores, validation_frame
 from src.space.outlook import build_outlook
+from src.space.planets import SOLAR_SYSTEM_NOTE
 from src.training.trainer import TimeSeriesTrainer
 from src.utils.config import load_config
 from src.utils.paths import resolve_repo_path
@@ -166,6 +167,7 @@ def train_configs(
             "title": space_cfg.get("title", path.stem),
             "survey_growth": bool(space_cfg.get("survey_growth")),
             "control": space_cfg.get("control"),
+            "physics_column": space_cfg.get("physics_column"),
             "rows": int(len(trace["values"])),
             "val_rows": int(len(rows)),
             "val_start": None if dates is None else str(dates[int(rows[0])]),
@@ -263,7 +265,7 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument(
         "--package",
         action="store_true",
-        help="Wrap the scores as a near-Earth forecast document.",
+        help="Wrap the scores as a forecast document for the dashboard.",
     )
     args = parser.parse_args(argv)
     selected = {item.strip() for item in args.only.split(",") if item.strip()}
@@ -285,7 +287,11 @@ def main(argv: list[str] | None = None) -> None:
             "trained_on": utc_today().strftime("%Y-%m-%d"),
             "lookahead_days": LOOKAHEAD_DAYS,
             "outlook_months": OUTLOOK_MONTHS,
-            "survey_growth_note": SURVEY_GROWTH_NOTE,
+            "survey_growth_note": (
+                SOLAR_SYSTEM_NOTE
+                if records and records[0].get("group") == "solar_system"
+                else SURVEY_GROWTH_NOTE
+            ),
             "total_train_seconds": round(
                 sum(float(row.get("train_seconds") or 0.0) for row in records), 1
             ),

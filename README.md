@@ -458,6 +458,14 @@ The list is JPL CAD approaches to Earth and the Moon with `dist <= 0.05` AU, and
 
 The dashboard panel "What's coming close to Earth" reads this route. The day menu is 90, 180, 365, or 730.
 
+### `GET /space/solar-system`
+
+Upcoming events for the rest of the solar system, plus the saved monthly forecasts. `days` defaults to **730** and must be an integer from 1 to 730. The window is inclusive: UTC today through today plus `days`.
+
+The payload lists JPL CAD approaches to Mercury, Venus, Mars, Jupiter, Saturn, Uranus, Neptune, and Pluto, comet perihelia stepped from SBDB, and Horizons elongation extrema (oppositions, conjunctions, and greatest elongations). Mercury, Venus, and Mars are limited to 0.05 AU. Jupiter is limited to 1 AU. The other four bodies are queried at 10 AU and are not trained. `forecasts` holds the 24-month outlook for each trained series. Distance series include a Horizons value on each outlook month and `physics_outlook_mae` against that ephemeris. A missing cache or score file still returns `200` with `"available": false`. `showers.available` is false. `731` returns `422`.
+
+The dashboard panel "The rest of the solar system" reads this route. The day menu is 90, 180, 365, or 730.
+
 ### YouNeeK Time
 
 YouNeeK Time is **100 units / 100 minutes / 100 seconds** (not App Store 10/10/10). Noon is `50:00:00`. The year is 354 days with 10-day weeks, epoch `2026-01-01`. Lunar phase uses the mean synodic month (`00:00:00` new, `50:00:00` full).
@@ -757,7 +765,7 @@ python -m scripts.train_space
 
 `python -m src.space.fetch` and `python -m src.space.train` are the same commands. `--refresh` re-downloads the raw files. `--only f107,kp` trains a subset. A later fetch moves the end dates forward and will change the holdout.
 
-The solar, launch, exoplanet, and catalog close-approach configs set `retrain.enabled: false`. The weekly champion job trains every enabled file under `config/`. Those series stay out of that job: one fetch script builds all of them, and the CSVs are not in git. The near-Earth group below is the exception: each of those configs is enabled and refreshes through `python -m scripts.fetch_near_earth`.
+The solar, launch, exoplanet, and catalog close-approach configs set `retrain.enabled: false`. The weekly champion job trains every enabled file under `config/`. Those series stay out of that job: one fetch script builds all of them, and the CSVs are not in git. The near-Earth group and the solar-system group below are the exceptions: those configs are enabled and refresh through `python -m scripts.fetch_near_earth` or `python -m scripts.fetch_solar_system`.
 
 Configs live in `config/space/`. Each one uses a temporal 20% holdout, z-score normalization fit on the training split only, early stopping, gradient clipping at 1.0, and `training.seed: 0`. Daily models see 27 days (one solar rotation) and may train for 20 epochs with patience 5. Monthly models see 24 months and may train for 40 epochs with patience 6. The univariate network has 67,137 parameters (d_model 64, 4 heads, 2 layers). The exoplanet model is smaller (2,273 parameters, 5-year windows, 80 epochs, patience 10) because the series has 34 points.
 
@@ -862,7 +870,7 @@ python -m src.space.train --results results/near_earth_forecast.json --package \
 
 `GET /space/near-earth?days=` defaults to **730** (today through two years, inclusive). The approach list follows `days`. Each model is still a one-step network, scored on a temporal 20% holdout against persistence, the same month a year earlier, and the mean of every observation before the first validation label. The 24-month path is that one-step model rolled forward. `p10` and `p90` are residual quantiles (nominal 0.1 and 0.9) fit on the earlier half of the validation origins that still contain that lead. Coverage in the table is the later half of that same validation split. Early stopping already used the validation loss, so the coverage is not a second untouched test. Counts, energy, and the rate are clipped at 0. Closest distance is clipped to `[0, 0.05]` AU because a month with no approach inside the search is stored as 0.05 AU with a censor flag. The flag is not a model input.
 
-Other planets, comet perihelia, and a solar-system summary are not in this change.
+Other planets, comet perihelia, discovery counts by orbit class, and Horizons distances are the next section.
 
 #### Sources
 
@@ -923,6 +931,87 @@ Closest Earth approaches in the 730-day CAD list on the fetch day, distance in l
 | 137108 (1999 AN10) | 2027-08-07 07:11 | 1.01 LD | 18.1 |
 
 Closest Moon approaches in that same list: (2025 UK9) on 2026-10-30 at 0.32 LD, (2026 UA1) on 2026-10-23 at 0.35 LD, and (2024 QP2) on 2028-10-16 at 0.54 LD.
+
+### The rest of the solar system
+
+This group does not retrain the solar-activity or solar-wind configs. It adds planetary close approaches, discovery counts, comet perihelia, and Earth-planet distances. The score file is `results/solar_system_forecast.json`. This run took **130.5 seconds** on CPU, seed 0, on 2026-10-22.
+
+```bash
+python -m scripts.fetch_solar_system
+python -m src.space.train --results results/solar_system_forecast.json --package \
+  --only mercury_approaches,venus_approaches,mars_approaches,jupiter_approaches,discoveries_neo,discoveries_main_belt,discoveries_trojan,discoveries_centaur,discoveries_tno,discoveries_comet,comet_perihelia,mercury_distance,venus_distance,mars_distance,jupiter_distance,saturn_distance,uranus_distance,neptune_distance,pluto_distance
+```
+
+`GET /space/solar-system?days=` defaults to **730**. The lists follow `days`. Each model is still one-step, scored on a temporal 20% holdout against persistence, the same month a year earlier, and the mean of every observation before the first validation label. The 24-month path rolls that one-step model forward. `p10` and `p90` are residual quantiles fit on the earlier half of the validation origins. Coverage is the later half of that same split, not a second untouched test. Counts are clipped at 0. Distances are clipped at 0.
+
+#### Sources
+
+No API key. Raw files stay under `data/space/` and are gitignored. The fetch on 2026-10-22 used CAD `date-max=2028-10-21` and Horizons through the same day. CAD times are TDB. Horizons observer times are UT.
+
+| Series | What is counted | Source | Licence |
+| --- | --- | --- | --- |
+| Mercury, Venus, Mars approaches | Monthly counts within 0.05 AU | JPL CAD, body codes `Merc`, `Venus`, `Mars` | Public domain, U.S. government work |
+| Jupiter approaches | Monthly counts within 1 AU. 0.05 AU has 8 Jupiter encounters since 1900, which is too thin to train | JPL CAD, `body=Juptr` | Public domain, U.S. government work |
+| Saturn, Uranus, Neptune, Pluto | Listed from a 10 AU query. Not trained | JPL CAD, `Satrn`, `Urnus`, `Neptn`, `Pluto` | Public domain, U.S. government work. Wider cutoffs do not add rows |
+| Discoveries | Monthly counts for NEO (APO, AMO, ATE, IEO), main belt (IMB, MBA, OMB), Jupiter trojans (TJN), centaurs (CEN), TNOs (TNO), and comets (`sb-kind=c`) | JPL SBDB Query API | Public domain, U.S. government work. `first_obs` values like `YYYY-??-??` are dropped |
+| Comet perihelia | Passages stepped from the osculating perihelion `tp` and period `per` when the period is 100 days to 200 years. The training series keeps a passage only when `first_obs` is on or before it | Same comet query, fields `pdes,full_name,first_obs,tp,per` | Public domain, U.S. government work. One osculating perihelion is not a published history |
+| Earth-planet distance | Monthly geocentric range. Sun-centered range is stored and not trained | JPL Horizons, quantities 20 and 23 (`S-O-T` elongation, not quantity 24) | Public domain, U.S. government work |
+| Oppositions and conjunctions | Interior daily elongation extrema over the lookahead window | Horizons quantity 23, step 1 day | Public domain, U.S. government work |
+| Moons | Discovery year and planet, shown and not trained | [JPL planetary satellite discoveries](https://ssd.jpl.nasa.gov/sats/discovery.html) | Public domain, U.S. government work. A year cell such as `1975, 2000` keeps the first year |
+| Meteor showers | Not available | IMO calendar pages returned a restoration notice, and the linked PDFs were HTML | No ZHR table is invented |
+
+The fetch wrote approach months 1900-01 through 2026-09 and discovery months 1701-10 through 2026-09. Dated discoveries, after dropping incomplete dates: **42,566** NEOs (1 dropped), **1,470,106** main-belt (4,791 dropped), **16,366** Jupiter trojans (45 dropped), **1,057** centaurs (5 dropped), **7,109** TNOs (193 dropped), **3,967** comets (114 dropped). Known-at-the-time perihelia in the training series: **5,186**. Horizons training months: 1,521, 1900-01 through 2026-09. The open month and later ephemeris months stay out of that CSV. The full monthly file runs through 2028-10 so the outlook can be compared with Horizons. Moons parsed: Mars 2, Jupiter 115, Saturn 293, Uranus 29, Neptune 16, Pluto 5 (460, matching the page headers).
+
+On 2026-10-22 the next 730 days contained **77** Mercury, **137** Venus, **81** Mars, and **31** Jupiter approaches inside those distance limits, **266** comet perihelia, and **53** elongation extrema. Saturn has **12** historical CAD rows and **0** in the window. Uranus has **1** historical row and **0** in the window. Neptune and Pluto returned no rows at 10 AU.
+
+#### Holdout scores
+
+Cells are **MAE / RMSE**. The 12-month column is the calendar seasonal naive. Discovery regression is ordinary least squares of the count on `log1p(objects of that class known before the month)` for discoveries, or on known NEOs for the approach counts, fit only before the first validation label. It is blank for distances. The Physics column is the mean absolute error of the published 24-month p50 against Horizons on those outlook months. It is not a holdout score.
+
+| Series | Validation | n | Epoch | Model | Persistence | 12-month | Mean | Discovery | Band | Physics |
+| --- | --- | ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Mercury within 0.05 AU | 2001-11 to 2026-09 | 299 | 1/7 | 1.6171 / 1.9825 | 2.2575 / 2.8806 | 2.0669 / 2.6413 | 1.6781 / 2.0982 | 1.6036 | 0.78 | |
+| Venus within 0.05 AU | 2001-11 to 2026-09 | 299 | 4/10 | 1.9027 / 2.4056 | 2.5686 / 3.2064 | 2.6154 / 3.3830 | 2.2900 / 3.0148 | 1.8947 | 0.65 | |
+| Mars within 0.05 AU | 2001-11 to 2026-09 | 299 | 3/9 | 1.5339 / 2.1405 | 1.9565 / 2.6242 | 2.3512 / 3.1266 | 1.9321 / 2.6703 | 1.6527 | 0.75 | |
+| Jupiter within 1 AU | 2001-11 to 2026-09 | 299 | 1/7 | 0.9381 / 1.3099 | 1.2709 / 1.7253 | 1.2542 / 1.7165 | 0.9583 / 1.3482 | 0.9369 | 0.79 | |
+| NEO discoveries | 1962-03 to 2026-09 | 775 | 7/13 | 53.9712 / 101.5576 | 16.9781 / 37.0474 | 14.6684 / 29.5014 | 54.7674 / 102.2108 | 54.3640 | 0.03 | |
+| Main-belt discoveries | 1962-03 to 2026-09 | 775 | 10/16 | 1806.9941 / 3327.6521 | 990.1561 / 2108.6204 | 942.4542 / 2156.5391 | 1876.8949 / 3395.9138 | 1860.9949 | 0.16 | |
+| Jupiter-trojan discoveries | 1962-03 to 2026-09 | 775 | 7/13 | 20.0177 / 61.5473 | 21.6852 / 59.4767 | 22.7974 / 62.5724 | 20.7686 / 62.4905 | 20.5520 | 0.27 | |
+| Centaur discoveries | 1962-03 to 2026-09 | 775 | 2/8 | 1.3596 / 3.2209 | 1.1045 / 2.8502 | 1.2735 / 3.2359 | 1.3602 / 3.2213 | 1.3589 | 0.03 | |
+| TNO discoveries | 1962-03 to 2026-09 | 775 | 18/24 | 9.0722 / 33.4662 | 8.9639 / 32.3393 | 10.4194 / 39.2675 | 9.1551 / 33.5364 | 9.1128 | 0.01 | |
+| Comet discoveries | 1962-03 to 2026-09 | 775 | 4/10 | 4.1912 / 7.4383 | 2.4271 / 4.1474 | 2.3923 / 4.4423 | 4.4546 / 7.7630 | 4.3563 | 0.12 | |
+| Comet perihelia known at the time | 1962-03 to 2026-09 | 775 | 3/9 | 5.7030 / 9.0336 | 2.7019 / 5.0333 | 2.8129 / 5.1240 | 5.9974 / 9.3662 | 5.8487 | 0.04 | |
+| Mercury distance (AU) | 2001-11 to 2026-09 | 299 | 25/31 | 0.0204 / 0.0264 | 0.3482 / 0.3923 | 0.2209 / 0.2479 | 0.2432 / 0.2738 |  | 0.80 | 0.0179 |
+| Venus distance (AU) | 2001-11 to 2026-09 | 299 | 7/13 | 0.0180 / 0.0249 | 0.1483 / 0.1654 | 0.7824 / 0.8838 | 0.4253 / 0.4811 |  | 0.81 | 0.0642 |
+| Mars distance (AU) | 2001-11 to 2026-09 | 299 | 13/19 | 0.0203 / 0.0252 | 0.1573 / 0.1772 | 1.1882 / 1.3485 | 0.6019 / 0.6843 |  | 0.82 | 0.0461 |
+| Jupiter distance (AU) | 2001-11 to 2026-09 | 299 | 14/20 | 0.0275 / 0.0327 | 0.3023 / 0.3355 | 0.3363 / 0.3802 | 0.6462 / 0.7283 |  | 0.80 | 0.0988 |
+| Saturn distance (AU) | 2001-11 to 2026-09 | 299 | 8/14 | 0.0291 / 0.0387 | 0.3190 / 0.3542 | 0.1413 / 0.1653 | 0.6785 / 0.7921 |  | 0.19 | 0.1274 |
+| Uranus distance (AU) | 2001-11 to 2026-09 | 299 | 11/17 | 0.0179 / 0.0243 | 0.3265 / 0.3631 | 0.0498 / 0.0600 | 0.8019 / 0.9873 |  | 0.02 | 0.0995 |
+| Neptune distance (AU) | 2001-11 to 2026-09 | 299 | 10/16 | 0.0293 / 0.0331 | 0.3285 / 0.3654 | 0.0251 / 0.0289 | 0.6481 / 0.7371 |  | 0.84 | 0.0341 |
+| Pluto distance (AU) | 2001-11 to 2026-09 | 299 | 5/11 | 0.1616 / 0.1713 | 0.3245 / 0.3616 | 0.2051 / 0.2101 | 4.0809 / 4.4064 |  | 0.91 | 0.4217 |
+
+Discovery counts are survey effort. NEO, main-belt, centaur, TNO, and comet discoveries, and known-at-the-time perihelia, all lose to persistence or the 12-month lag. Main-belt MAE is about 1,807 against a 12-month lag of 942. Discovery regression beats the transformer on those counts and still loses to the seasonal naive, except for trojans, where the regression (20.55) is between the model (20.02) and the mean (20.77). Trojan discoveries are the only discovery series where the transformer has a lower MAE than persistence, the 12-month lag, and the mean. The margin over the mean is under one discovery a month. Band coverage on the discovery series is 0.01 to 0.27, so those p10–p90 ranges did not cover the later validation half.
+
+Mars approaches within 0.05 AU are the approach series where the transformer also beats the discovery regression (1.53 against 1.65, persistence 1.96, and the 12-month lag 2.35). Mercury (1.62) and Venus (1.90) beat the three naive baselines and lose to the discovery regression by a few hundredths (1.60 and 1.89). Jupiter within 1 AU does the same: model 0.938, mean 0.958, discovery regression 0.937. That Jupiter edge over the mean is smaller than the discovery control.
+
+Earth-planet distance is an orbital signal. The 12-month lag is a poor description of Mars (synodic period about 26 months; seasonal MAE 1.19 AU against model 0.020). The transformer beats persistence, the 12-month lag, and the mean for Mercury, Venus, Mars, Jupiter, Saturn, Uranus, and Pluto. Neptune does not: the 12-month lag MAE is 0.0251 and the model is 0.0293. A slow outer planet is close to where it was a year ago. The Physics column is the honest check against the ephemeris on the 24 outlook months. Mercury's rolled-forward p50 is 0.018 AU from Horizons. Pluto's is 0.42 AU. The network is not a substitute for Horizons, and a holdout win over a 12-month lag does not mean the outlook reproduces the orbit. Uranus point MAE is 0.018 with band coverage 0.02: the point forecast tracked the holdout and the quantile band did not.
+
+The weekly job includes these 19 configs (`retrain.enabled: true`, fetch timeout 600 seconds, shared cached fetch). A cold fetch on 2026-10-22 paged the main belt at 100,000 rows and finished well inside that cap; later configs reuse the cache. Promotion still requires a fresh run to beat persistence, the seasonal naive, and the mean. Discovery-count models that lose that comparison do not replace a champion. The dashboard reads the committed score file above.
+
+Closest approaches in the 730-day window on the fetch day:
+
+| Body | Object | Date (TDB) | Distance |
+| --- | --- | --- | ---: |
+| Mercury | (2001 CP36) | 2027-12-23 18:10 | 0.0027 AU (1.06 LD) |
+| Mercury | (2018 VB1) | 2028-05-23 01:21 | 0.0029 AU (1.12 LD) |
+| Venus | (2013 UB3) | 2028-05-20 11:56 | 0.0030 AU (1.18 LD) |
+| Venus | (2021 CU1) | 2027-11-12 04:26 | 0.0051 AU (1.98 LD) |
+| Mars | (2015 MY53) | 2027-05-18 23:06 | 0.0038 AU (1.48 LD) |
+| Mars | (2011 PU1) | 2028-09-24 18:49 | 0.0080 AU (3.13 LD) |
+| Jupiter | 323P/SOHO | 2026-12-08 19:59 | 0.283 AU |
+| Jupiter | (2002 GJ8) | 2027-04-24 06:05 | 0.302 AU |
+
+Saturn, Uranus, Neptune, and Pluto have no CAD approach inside the window. Upcoming elongation extrema from the daily Horizons file include a Venus conjunction on 2026-10-25, a Mercury conjunction on 2026-11-05, Uranus at opposition on 2026-11-26 (elongation 179.8°), Jupiter at opposition on 2027-02-11, Mars at opposition on 2027-02-20, and Saturn at opposition on 2027-10-18. The next comet perihelia in the catalog stepping are 73P/Schwassmann-Wachmann 3-BM on 2026-10-22 and 324P/La Sagra on 2026-10-24. The newest satellites in the JPL year table are S/2025 U1, S/2024 J1, and the S/2023 S designations at Saturn.
 
 ## Real-world series
 

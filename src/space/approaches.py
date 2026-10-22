@@ -621,8 +621,9 @@ def _recent_fireballs(today: pd.Timestamp) -> list[dict[str, Any]]:
     return rows
 
 
-def _forecast_payload() -> list[dict[str, Any]]:
-    document = _read_json(FORECAST_PATH)
+def published_forecasts(path: str) -> list[dict[str, Any]]:
+    """Slim saved outlook rows from a forecast JSON file."""
+    document = _read_json(path)
     if isinstance(document, dict):
         series = document.get("series")
     elif isinstance(document, list):
@@ -636,6 +637,10 @@ def _forecast_payload() -> list[dict[str, Any]]:
         if isinstance(row, dict) and isinstance(row.get("outlook"), dict):
             payloads.append(_slim_forecast(row))
     return payloads
+
+
+def _forecast_payload() -> list[dict[str, Any]]:
+    return published_forecasts(FORECAST_PATH)
 
 
 def _slim_forecast(row: dict[str, Any]) -> dict[str, Any]:
@@ -656,6 +661,7 @@ def _slim_forecast(row: dict[str, Any]) -> dict[str, Any]:
         "units": row.get("units"),
         "survey_growth": bool(row.get("survey_growth")),
         "control": row.get("control"),
+        "physics_column": row.get("physics_column"),
         "model_mae": model,
         "model_rmse": _metric(row.get("model"), "rmse"),
         "baselines": naive,
