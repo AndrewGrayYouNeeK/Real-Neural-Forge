@@ -1,0 +1,76 @@
+# Weekly retrain. The fetch is cached, so later configs in the same job reuse it.
+retrain:
+  enabled: true
+  metric: mae
+  baselines:
+    - persistence
+    - mean
+    - seasonal
+
+model:
+  name: time_series_transformer
+  input_dim: 1
+  output_dim: 1
+  d_model: 64
+  nhead: 4
+  num_encoder_layers: 2
+  dim_feedforward: 128
+  dropout: 0.1
+  max_seq_len: 512
+
+data:
+  source: csv
+  path: data/space/near_earth_monthly.csv
+  date_column: date
+  feature_columns: [moon_within_0_05au]
+  target_column: moon_within_0_05au
+  seq_len: 24
+  val_split: 0.2
+  split_mode: temporal
+  split_seed: 0
+  normalize: true
+  report_baselines: true
+  seed: 0
+  season_length: 12
+  fetch: python -m scripts.fetch_near_earth
+  fetch_timeout_seconds: 600
+
+training:
+  experiment_name: space_moon_within_0_05au
+  batch_size: 32
+  learning_rate: 0.001
+  epochs: 40
+  patience: 6
+  max_grad_norm: 1.0
+  device: cpu
+  checkpoint_dir: checkpoints/space/moon_within_0_05au
+  log_interval: 10
+  seed: 0
+
+inference:
+  device: cpu
+  checkpoint_path: checkpoints/space/moon_within_0_05au/best_model.pt
+
+api:
+  training_enabled: true
+
+storage:
+  db_path: data/space/experiments.db
+
+dataset:
+  id: moon_within_0_05au
+
+space:
+  id: moon_within_0_05au
+  group: near_earth
+  title: Moon approaches within 0.05 AU
+  units: count
+  control: raw
+  survey_growth: true
+  discovery_column: known_neos_prev
+  lags: [12]
+  drift: true
+  mean: true
+  chart: false
+  outlook_months: 24
+  outlook_min: 0

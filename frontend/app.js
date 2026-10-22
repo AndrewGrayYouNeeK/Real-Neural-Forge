@@ -932,10 +932,266 @@ async function refreshScorecard() {
   }
 }
 
+const NEAR_COLUMNS = [
+  ["date", "Date"],
+  ["name", "Name"],
+  ["body", "Body"],
+  ["dist_ld", "Distance (LD)"],
+  ["h", "H"],
+  ["kind", "Kind"],
+];
+
+let nearEarthPayload = null;
+let nearSort = { key: "date", direction: 1 };
+
+function nearDays() {
+  const value = Number(document.getElementById("near-earth-days").value);
+  return Number.isFinite(value) ? value : 730;
+}
+
+function formatLd(value) {
+  const number = asNumber(value);
+  return number == null ? "—" : number.toFixed(2);
+}
+
+function formatMaybe(value, digits) {
+  const number = asNumber(value);
+  return number == null ? "—" : number.toFixed(digits);
+}
+
+function nearPassesFilter(row) {
+  const body = document.getElementById("near-earth-body").value;
+  return body === "all" || row.body === body;
+}
+
+function compareNear(left, right) {
+  const key = nearSort.key;
+  const direction = nearSort.direction;
+  const a = left[key];
+  const b = right[key];
+  const aNumber = asNumber(a);
+  const bNumber = asNumber(b);
+  if (aNumber != null || bNumber != null) {
+    if (aNumber == null) return 1;
+    if (bNumber == null) return -1;
+    return (aNumber - bNumber) * direction;
+  }
+  return String(a == null ? "" : a).localeCompare(String(b == null ? "" : b)) * direction;
+}
+
+function renderNearTable() {
+  const head = document.getElementById("near-earth-head");
+  const body = document.getElementById("near-earth-body-rows");
+  head.replaceChildren();
+  body.replaceChildren();
+  for (const [key, label] of NEAR_COLUMNS) {
+    const cell = document.createElement("th");
+    cell.setAttribute("scope", "col");
+    if (nearSort.key === key) {
+      cell.setAttribute("aria-sort", nearSort.direction > 0 ? "ascending" : "descending");
+    }
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "header-sort";
+    button.textContent = label;
+    button.addEventListener("click", () => {
+      nearSort = {
+        key,
+        direction: nearSort.key === key ? -nearSort.direction : 1,
+      };
+      renderNearTable();
+    });
+    cell.append(button);
+    head.append(cell);
+  }
+  const rows = ((nearEarthPayload && nearEarthPayload.approaches) || [])
+    .filter(nearPassesFilter)
+    .slice()
+    .sort(compareNear);
+  for (const row of rows) {
+    const tr = document.createElement("tr");
+    for (const [key] of NEAR_COLUMNS) {
+      const cell = document.createElement("td");
+      if (key === "dist_ld") cell.textContent = formatLd(row.dist_ld);
+      else if (key === "h") cell.textContent = formatMaybe(row.h, 1);
+      else cell.textContent = row[key] == null ? "—" : String(row[key]);
+      tr.append(cell);
+    }
+    body.append(tr);
+  }
+}
+
+function renderNearChart() {
+  const host = document.getElementById("near-earth-chart");
+  const select = document.getElementById("near-earth-series");
+  const forecasts = (nearEarthPayload && nearEarthPayload.forecasts) || [];
+  const selected = select.value;
+  const forecast = forecasts.find((item) => item.id === selected) || forecasts[0];
+  if (!forecast || !forecast.outlook || !Array.isArray(forecast.outlook.months)) {
+    charts.renderLineChart(host, {
+      ariaLabel: "Near-Earth monthly forecast",
+      empty: "No monthly forecast has been saved yet.",
+      labels: [],
+      series: [],
+    });
+    return;
+  }
+  const months = forecast.outlook.months;
+  const labels = months.map((month) => String(month.date).slice(0, 7));
+  const jplKey = forecast.jpl_monthly_key;
+  const jplByMonth = new Map(
+    ((nearEarthPayload && nearEarthPayload.monthly) || []).map((month) => [
+      month.month,
+      month,
+    ])
+  );
+  const jpl = months.map((month) => {
+    const bucket = jplByMonth.get(month.date);
+    if (!bucket || !jplKey) return null;
+    return asNumber(bucket[jplKey]);
+  });
+  const series = [
+    {
+      name: "Model p50",
+      color: "#7cffd6",
+      markers: true,
+      values: months.map((month) => asNumber(month.p50)),
+    },
+  ];
+  if (jpl.some((value) => value != null)) {
+    series.push({
+      name: "JPL in window",
+      color: "#ffd166",
+      markers: true,
+      values: jpl,
+    });
+  }
+  charts.renderLineChart(host, {
+    ariaLabel: `${forecast.title || "Forecast"} over 24 months`,
+    labels,
+    series,
+    bands: [
+      {
+        name: "p10–p90",
+        color: "#7cffd6",
+        low: months.map((month) => asNumber(month.p10)),
+        high: months.map((month) => asNumber(month.p90)),
+      },
+    ],
+  });
+}
+
+function renderNearContext() {
+  const note = document.getElementById("near-earth-context");
+  const payload = nearEarthPayload || {};
+  const sentry = payload.sentry || {};
+  const interstellar = payload.interstellar || {};
+  const known = (interstellar.known || []).map((item) => item.id || item.name).filter(Boolean);
+  const sentryCount = sentry.count == null ? "0" : String(sentry.count);
+  const top = (sentry.objects || [])[0];
+  const topText = top ? `${top.name || top.designation} (Palermo ${top.palermo})` : "none listed";
+  const upcoming = (interstellar.upcoming || []).length;
+  note.textContent =
+    `Known interstellar objects: ${known.length ? known.join(", ") : "none resolved"}. ` +
+    `${upcoming} interstellar approach${upcoming === 1 ? "" : "es"} in this window. ` +
+    `Sentry currently lists ${sentryCount} impact-risk objects. Highest Palermo: ${topText}. ` +
+    (payload.fireball_note || "");
+}
+
+function renderNearReentries() {
+  const body = document.getElementById("near-earth-reentries");
+  const note = document.getElementById("near-earth-reentry-note");
+  const payload = nearEarthPayload || {};
+  note.textContent = payload.reentries_note || "";
+  body.replaceChildren();
+  const rows = payload.reentries || [];
+  if (!rows.length) {
+    const tr = document.createElement("tr");
+    const cell = document.createElement("td");
+    cell.colSpan = 3;
+    cell.textContent = "No decay date in this window falls in the future.";
+    tr.append(cell);
+    body.append(tr);
+    return;
+  }
+  for (const row of rows) {
+    const tr = document.createElement("tr");
+    for (const value of [row.name, row.norad_id, row.date]) {
+      const cell = document.createElement("td");
+      cell.textContent = value == null ? "—" : String(value);
+      tr.append(cell);
+    }
+    body.append(tr);
+  }
+}
+
+function renderNearEarth() {
+  const payload = nearEarthPayload || {};
+  const summary = document.getElementById("near-earth-summary");
+  const note = document.getElementById("near-earth-note");
+  const approaches = (payload.approaches || []).filter(nearPassesFilter);
+  const cap = payload.truncated
+    ? " The list keeps the closest approaches and drops the rest."
+    : "";
+  summary.textContent = payload.available
+    ? `${approaches.length} approaches shown for ${payload.window_start} through ${payload.window_end}.${cap}`
+    : "No cached close-approach file yet. Run python -m scripts.fetch_near_earth.";
+  note.textContent = payload.survey_growth_note || "";
+  const closest = approaches
+    .slice()
+    .sort((left, right) => Number(left.dist_ld) - Number(right.dist_ld))[0];
+  fillStatGrid(document.getElementById("near-earth-stats"), [
+    ["Window", payload.window_end ? `${payload.days} days` : "—"],
+    ["Shown", String(approaches.length)],
+    [
+      "Closest",
+      closest ? `${closest.name} · ${formatLd(closest.dist_ld)} LD` : "—",
+    ],
+    [
+      "Forecasts",
+      String((payload.forecasts || []).length),
+    ],
+  ]);
+  const select = document.getElementById("near-earth-series");
+  const current = select.value;
+  select.replaceChildren();
+  for (const forecast of payload.forecasts || []) {
+    const option = document.createElement("option");
+    option.value = String(forecast.id);
+    option.textContent = String(forecast.title || forecast.id);
+    select.append(option);
+  }
+  if (current && [...select.options].some((option) => option.value === current)) {
+    select.value = current;
+  }
+  renderNearChart();
+  renderNearTable();
+  renderNearReentries();
+  renderNearContext();
+}
+
+async function refreshNearEarth() {
+  const summary = document.getElementById("near-earth-summary");
+  try {
+    nearEarthPayload = await fetchJson(`/space/near-earth?days=${nearDays()}`);
+    renderNearEarth();
+  } catch (error) {
+    summary.textContent = "Close-approach feed is unavailable.";
+    document.getElementById("near-earth-note").textContent = error.message;
+  }
+}
+
+document.getElementById("near-earth-days").addEventListener("change", () => {
+  refreshNearEarth().catch(reportError);
+});
+document.getElementById("near-earth-body").addEventListener("change", renderNearEarth);
+document.getElementById("near-earth-series").addEventListener("change", renderNearChart);
+
 document.getElementById("refresh-btn").addEventListener("click", () => {
   holdTrainingMessage = false;
   clearNotice();
   refreshScorecard();
+  refreshNearEarth().catch(reportError);
   Promise.all([refreshStatus(), refreshSeries()]).catch(reportError);
 });
 
@@ -1020,6 +1276,7 @@ document.getElementById("train-btn").addEventListener("click", async () => {
 });
 
 refreshScorecard();
+refreshNearEarth().catch(reportError);
 Promise.all([refreshStatus(), refreshSeries()]).catch((error) => {
   reportError(error);
   const grid = document.getElementById("status-grid");

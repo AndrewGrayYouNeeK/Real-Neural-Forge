@@ -19,8 +19,15 @@ from typing import Any
 
 import numpy as np
 
+from src.space.approaches import (
+    LOOKAHEAD_DAYS,
+    OUTLOOK_MONTHS,
+    SURVEY_GROWTH_NOTE,
+    utc_today,
+)
 from src.space.charts import write_forecast_svg
 from src.space.evaluate import extra_baseline_scores, validation_frame
+from src.space.outlook import build_outlook
 from src.training.trainer import TimeSeriesTrainer
 from src.utils.config import load_config
 from src.utils.paths import resolve_repo_path
@@ -57,6 +64,8 @@ def _finite(value: object) -> float | None:
 def _clean(value: Any) -> Any:
     if isinstance(value, dict):
         return {str(key): _clean(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_clean(item) for item in value]
     if isinstance(value, np.floating | float):
         return _finite(float(value))
     if isinstance(value, np.integer | int) and not isinstance(value, bool):
@@ -144,13 +153,19 @@ def train_configs(
             )
         if space_cfg.get("chart"):
             _chart(cfg, trace, extra, charts / f"{space_cfg.get('id', path.stem)}.svg")
+        outlook = None
+        if int(space_cfg.get("outlook_months") or 0) > 0:
+            outlook = build_outlook(cfg)
         dates = trace["dates"]
         rows = trace["rows"]
         record = {
             "id": space_cfg.get("id", path.stem),
             "config": str(path),
+            "group": space_cfg.get("group", "space"),
             "units": space_cfg.get("units", ""),
             "title": space_cfg.get("title", path.stem),
+            "survey_growth": bool(space_cfg.get("survey_growth")),
+            "control": space_cfg.get("control"),
             "rows": int(len(trace["values"])),
             "val_rows": int(len(rows)),
             "val_start": None if dates is None else str(dates[int(rows[0])]),
@@ -163,7 +178,10 @@ def train_configs(
             "trainer_baselines": trained["baselines"],
             "lags": extra["lags"],
             "drift": extra["drift"],
+            "mean": extra.get("mean"),
+            "discovery": extra.get("discovery"),
             "storms": extra["storms"],
+            "outlook": outlook,
         }
         records.append(_clean(record))
         _print_record(records[-1])
@@ -203,6 +221,17 @@ def _print_record(record: dict[str, Any]) -> None:
             "  drift MAE/RMSE "
             f"{_metric(record['drift'], 'mae')} / {_metric(record['drift'], 'rmse')}"
         )
+    if record.get("mean"):
+        print(
+            "  mean MAE/RMSE "
+            f"{_metric(record['mean'], 'mae')} / {_metric(record['mean'], 'rmse')}"
+        )
+    if record.get("discovery"):
+        print(
+            "  discovery regression MAE/RMSE "
+            f"{_metric(record['discovery'], 'mae')} / "
+            f"{_metric(record['discovery'], 'rmse')}"
+        )
     storms = record.get("storms") or {}
     for name, scores in storms.items():
         print(
@@ -226,6 +255,16 @@ def main(argv: list[str] | None = None) -> None:
         default="",
         help="Comma-separated config ids (the space.id field or the filename stem).",
     )
+    parser.add_argument(
+        "--results",
+        default="data/space/results.json",
+        help="Where to write the score JSON.",
+    )
+    parser.add_argument(
+        "--package",
+        action="store_true",
+        help="Wrap the scores as a near-Earth forecast document.",
+    )
     args = parser.parse_args(argv)
     selected = {item.strip() for item in args.only.split(",") if item.strip()}
     paths = config_paths()
@@ -238,7 +277,22 @@ def main(argv: list[str] | None = None) -> None:
         ]
         if not paths:
             raise SystemExit(f"No configs matched --only {sorted(selected)}")
-    train_configs(paths)
+    records = train_configs(paths, results_path=args.results)
+    if args.package:
+        document = {
+            "seed": 0,
+            "device": "cpu",
+            "trained_on": utc_today().strftime("%Y-%m-%d"),
+            "lookahead_days": LOOKAHEAD_DAYS,
+            "outlook_months": OUTLOOK_MONTHS,
+            "survey_growth_note": SURVEY_GROWTH_NOTE,
+            "total_train_seconds": round(
+                sum(float(row.get("train_seconds") or 0.0) for row in records), 1
+            ),
+            "series": records,
+        }
+        destination = resolve_repo_path(args.results)
+        destination.write_text(json.dumps(document, indent=2) + "\n", encoding="utf-8")
 
 
 if __name__ == "__main__":

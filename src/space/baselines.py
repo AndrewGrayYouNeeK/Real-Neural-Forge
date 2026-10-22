@@ -56,6 +56,54 @@ def drift_forecast(values: np.ndarray, target_rows: np.ndarray) -> np.ndarray:
     return series[rows - 1] + step
 
 
+def mean_forecast(values: np.ndarray, target_rows: np.ndarray) -> np.ndarray:
+    """Predict every label with the mean of observations before the holdout."""
+    series = np.asarray(values, dtype=np.float64)
+    rows = np.asarray(target_rows, dtype=np.int64)
+    if rows.size == 0:
+        raise ValueError("mean forecast needs at least one target row")
+    origin = int(rows.min())
+    if origin < 1:
+        raise ValueError("mean forecast needs history before the first target")
+    history = series[:origin]
+    if history.size == 0 or not np.isfinite(history).all():
+        raise ValueError("mean forecast history must be finite")
+    return np.full(rows.shape, float(history.mean()))
+
+
+def discovery_log_regression(
+    values: np.ndarray, covariate: np.ndarray, target_rows: np.ndarray
+) -> np.ndarray:
+    """Predict counts from log1p(catalog size), fit only before the holdout.
+
+    ``covariate`` is aligned to ``values``. For close approaches it is the
+    number of NEOs whose first observation falls before that month. The fit
+    does not see the validation labels or the covariate values on those rows.
+    """
+    series = np.asarray(values, dtype=np.float64)
+    catalog = np.asarray(covariate, dtype=np.float64)
+    rows = np.asarray(target_rows, dtype=np.int64)
+    if catalog.shape != series.shape:
+        raise ValueError("discovery covariate length does not match the series")
+    if rows.size == 0:
+        raise ValueError("discovery regression needs at least one target row")
+    origin = int(rows.min())
+    if origin < 2:
+        raise ValueError("discovery regression needs history before validation")
+    if (
+        not np.isfinite(series[:origin]).all()
+        or not np.isfinite(catalog[:origin]).all()
+    ):
+        raise ValueError("discovery regression history must be finite")
+    features = np.log1p(np.clip(catalog[:origin], 0.0, None))
+    if float(np.std(features)) == 0.0:
+        raise ValueError("discovery covariate has no variance before validation")
+    design = np.column_stack([np.ones(origin), features])
+    coef, _, _, _ = np.linalg.lstsq(design, series[:origin], rcond=None)
+    future = np.log1p(np.clip(catalog[rows], 0.0, None))
+    return np.asarray(coef[0] + coef[1] * future, dtype=np.float64)
+
+
 def pearson(preds: np.ndarray, targets: np.ndarray) -> float:
     """Pearson correlation, or NaN when either side has no variance."""
     predicted = np.asarray(preds, dtype=np.float64).reshape(-1)
