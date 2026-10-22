@@ -1187,11 +1187,311 @@ document.getElementById("near-earth-days").addEventListener("change", () => {
 document.getElementById("near-earth-body").addEventListener("change", renderNearEarth);
 document.getElementById("near-earth-series").addEventListener("change", renderNearChart);
 
+const SOLAR_COLUMNS = [
+  ["date", "Date"],
+  ["name", "Name"],
+  ["body", "Body"],
+  ["dist_au", "Distance (AU)"],
+  ["dist_ld", "Distance (LD)"],
+];
+
+let solarPayload = null;
+let solarSort = { key: "date", direction: 1 };
+
+function solarDays() {
+  const value = Number(document.getElementById("solar-system-days").value);
+  return Number.isFinite(value) ? value : 730;
+}
+
+function solarBody() {
+  return document.getElementById("solar-system-body").value;
+}
+
+function formatAu(value) {
+  const number = asNumber(value);
+  return number == null ? "—" : number.toFixed(4);
+}
+
+function elongationSide(value) {
+  if (value === "L") return "leading";
+  if (value === "T") return "trailing";
+  return value == null || value === "" ? "—" : String(value);
+}
+
+function solarPassesBody(row) {
+  const body = solarBody();
+  return body === "all" || row.body === body;
+}
+
+function compareSolar(left, right) {
+  const key = solarSort.key;
+  const direction = solarSort.direction;
+  const aNumber = asNumber(left[key]);
+  const bNumber = asNumber(right[key]);
+  if (aNumber != null || bNumber != null) {
+    if (aNumber == null) return 1;
+    if (bNumber == null) return -1;
+    return (aNumber - bNumber) * direction;
+  }
+  return String(left[key] == null ? "" : left[key]).localeCompare(
+    String(right[key] == null ? "" : right[key])
+  ) * direction;
+}
+
+function renderSolarTable() {
+  const head = document.getElementById("solar-approaches-head");
+  const body = document.getElementById("solar-approaches-rows");
+  head.replaceChildren();
+  body.replaceChildren();
+  for (const [key, label] of SOLAR_COLUMNS) {
+    const cell = document.createElement("th");
+    cell.setAttribute("scope", "col");
+    if (solarSort.key === key) {
+      cell.setAttribute("aria-sort", solarSort.direction > 0 ? "ascending" : "descending");
+    }
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "header-sort";
+    button.textContent = label;
+    button.addEventListener("click", () => {
+      solarSort = {
+        key,
+        direction: solarSort.key === key ? -solarSort.direction : 1,
+      };
+      renderSolarTable();
+    });
+    cell.append(button);
+    head.append(cell);
+  }
+  const rows = ((solarPayload && solarPayload.approaches) || [])
+    .filter(solarPassesBody)
+    .slice()
+    .sort(compareSolar);
+  if (!rows.length) {
+    const tr = document.createElement("tr");
+    const cell = document.createElement("td");
+    cell.colSpan = SOLAR_COLUMNS.length;
+    const selected = (solarPayload && solarPayload.bodies || []).find(
+      (item) => item.name === solarBody()
+    );
+    cell.textContent = selected
+      ? `No approaches within ${selected.dist_max_au} AU in this window.`
+      : "No close approaches in this window.";
+    tr.append(cell);
+    body.append(tr);
+    return;
+  }
+  for (const row of rows) {
+    const tr = document.createElement("tr");
+    for (const [key] of SOLAR_COLUMNS) {
+      const cell = document.createElement("td");
+      if (key === "dist_au") cell.textContent = formatAu(row.dist_au);
+      else if (key === "dist_ld") cell.textContent = formatLd(row.dist_ld);
+      else if (key === "date") cell.textContent = String(row.date || "—").replace("T", " ");
+      else cell.textContent = row[key] == null ? "—" : String(row[key]);
+      tr.append(cell);
+    }
+    body.append(tr);
+  }
+}
+
+function appendSolarRows(target, columns, rows, emptyText) {
+  target.replaceChildren();
+  if (!rows.length) {
+    const tr = document.createElement("tr");
+    const cell = document.createElement("td");
+    cell.colSpan = columns;
+    cell.textContent = emptyText;
+    tr.append(cell);
+    target.append(tr);
+    return;
+  }
+  for (const values of rows) {
+    const tr = document.createElement("tr");
+    for (const value of values) {
+      const cell = document.createElement("td");
+      cell.textContent = value == null || value === "" ? "—" : String(value);
+      tr.append(cell);
+    }
+    target.append(tr);
+  }
+}
+
+function renderSolarLists() {
+  const payload = solarPayload || {};
+  const perihelia = payload.perihelia || [];
+  appendSolarRows(
+    document.getElementById("solar-perihelia"),
+    4,
+    perihelia.map((row) => [
+      row.date,
+      row.name,
+      row.designation,
+      formatMaybe(row.period_days, 0),
+    ]),
+    "No comet perihelion in this window."
+  );
+  const alignments = (payload.alignments || []).filter(solarPassesBody);
+  appendSolarRows(
+    document.getElementById("solar-alignments"),
+    5,
+    alignments.map((row) => [
+      row.date,
+      row.body,
+      row.kind,
+      formatMaybe(row.elongation_deg, 1),
+      elongationSide(row.side),
+    ]),
+    "No opposition, conjunction, or greatest elongation in this window."
+  );
+  const moons = payload.moons || {};
+  const counts = (moons.by_planet || [])
+    .map((row) => `${row.planet} ${row.count}`)
+    .join(", ");
+  const moonNote = document.getElementById("solar-moons");
+  moonNote.textContent = [moons.note, counts].filter(Boolean).join(" ");
+  appendSolarRows(
+    document.getElementById("solar-moon-rows"),
+    4,
+    (moons.recent || []).map((row) => [row.year, row.planet, row.name, row.designation]),
+    moons.available
+      ? "No satellite in this table was discovered in the last ten years."
+      : "Moon discovery table is not cached yet."
+  );
+  const showers = payload.showers || {};
+  document.getElementById("solar-showers").textContent =
+    showers.note || "Meteor shower calendar is unavailable.";
+}
+
+function renderSolarChart() {
+  const host = document.getElementById("solar-system-chart");
+  const select = document.getElementById("solar-system-series");
+  const forecasts = (solarPayload && solarPayload.forecasts) || [];
+  const forecast = forecasts.find((item) => item.id === select.value) || forecasts[0];
+  if (!forecast || !forecast.outlook || !Array.isArray(forecast.outlook.months)) {
+    charts.renderLineChart(host, {
+      ariaLabel: "Solar-system monthly forecast",
+      empty: "No monthly forecast has been saved yet.",
+      labels: [],
+      series: [],
+    });
+    return;
+  }
+  const months = forecast.outlook.months;
+  const labels = months.map((month) => String(month.date).slice(0, 7));
+  const jplKey = forecast.jpl_monthly_key;
+  const jplByMonth = new Map(
+    ((solarPayload && solarPayload.monthly) || []).map((month) => [month.month, month])
+  );
+  const jpl = months.map((month) => {
+    const bucket = jplByMonth.get(month.date);
+    if (!bucket || !jplKey) return null;
+    return asNumber(bucket[jplKey]);
+  });
+  const series = [
+    {
+      name: "Model p50",
+      color: "#7cffd6",
+      markers: true,
+      values: months.map((month) => asNumber(month.p50)),
+    },
+  ];
+  if (jpl.some((value) => value != null)) {
+    series.push({
+      name: "Catalog in window",
+      color: "#ffd166",
+      markers: true,
+      values: jpl,
+    });
+  }
+  if (months.some((month) => asNumber(month.physics) != null)) {
+    series.push({
+      name: "JPL Horizons",
+      color: "#7eb6ff",
+      markers: true,
+      values: months.map((month) => asNumber(month.physics)),
+    });
+  }
+  charts.renderLineChart(host, {
+    ariaLabel: `${forecast.title || "Forecast"} over 24 months`,
+    labels,
+    series,
+    bands: [
+      {
+        name: "p10–p90",
+        color: "#7cffd6",
+        low: months.map((month) => asNumber(month.p10)),
+        high: months.map((month) => asNumber(month.p90)),
+      },
+    ],
+  });
+}
+
+function renderSolarSystem() {
+  const payload = solarPayload || {};
+  const summary = document.getElementById("solar-system-summary");
+  const note = document.getElementById("solar-system-note");
+  const approaches = (payload.approaches || []).filter(solarPassesBody);
+  const perihelia = payload.perihelia || [];
+  const alignments = (payload.alignments || []).filter(solarPassesBody);
+  summary.textContent = payload.available
+    ? `${approaches.length} approaches, ${perihelia.length} perihelia, and ${alignments.length} alignments from ${payload.window_start} through ${payload.window_end}.`
+    : "No cached solar-system file yet. Run python -m scripts.fetch_solar_system.";
+  note.textContent = payload.survey_growth_note || payload.time_scale || "";
+  const closest = approaches
+    .slice()
+    .sort((left, right) => Number(left.dist_au) - Number(right.dist_au))[0];
+  fillStatGrid(document.getElementById("solar-system-stats"), [
+    ["Window", payload.window_end ? `${payload.days} days` : "—"],
+    ["Approaches", String(approaches.length)],
+    ["Perihelia", String(perihelia.length)],
+    [
+      "Closest",
+      closest ? `${closest.name} · ${formatAu(closest.dist_au)} AU` : "—",
+    ],
+  ]);
+  const select = document.getElementById("solar-system-series");
+  const current = select.value;
+  select.replaceChildren();
+  for (const forecast of payload.forecasts || []) {
+    const option = document.createElement("option");
+    option.value = String(forecast.id);
+    const physics = forecast.physics_outlook_mae;
+    const suffix = physics == null ? "" : ` (Horizons MAE ${Number(physics).toFixed(3)})`;
+    option.textContent = `${forecast.title || forecast.id}${suffix}`;
+    select.append(option);
+  }
+  if (current && [...select.options].some((option) => option.value === current)) {
+    select.value = current;
+  }
+  renderSolarChart();
+  renderSolarTable();
+  renderSolarLists();
+}
+
+async function refreshSolar() {
+  const summary = document.getElementById("solar-system-summary");
+  try {
+    solarPayload = await fetchJson(`/space/solar-system?days=${solarDays()}`);
+    renderSolarSystem();
+  } catch (error) {
+    summary.textContent = "Solar-system feed is unavailable.";
+    document.getElementById("solar-system-note").textContent = error.message;
+  }
+}
+
+document.getElementById("solar-system-days").addEventListener("change", () => {
+  refreshSolar().catch(reportError);
+});
+document.getElementById("solar-system-body").addEventListener("change", renderSolarSystem);
+document.getElementById("solar-system-series").addEventListener("change", renderSolarChart);
+
 document.getElementById("refresh-btn").addEventListener("click", () => {
   holdTrainingMessage = false;
   clearNotice();
   refreshScorecard();
   refreshNearEarth().catch(reportError);
+  refreshSolar().catch(reportError);
   Promise.all([refreshStatus(), refreshSeries()]).catch(reportError);
 });
 
@@ -1277,6 +1577,7 @@ document.getElementById("train-btn").addEventListener("click", async () => {
 
 refreshScorecard();
 refreshNearEarth().catch(reportError);
+refreshSolar().catch(reportError);
 Promise.all([refreshStatus(), refreshSeries()]).catch((error) => {
   reportError(error);
   const grid = document.getElementById("status-grid");

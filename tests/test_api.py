@@ -13,6 +13,7 @@ from fastapi.testclient import TestClient
 
 import src.api as api_module
 import src.space.approaches as approaches
+import src.space.solar_system as solar_system
 from src import project_version
 from src.api import _state, app, load_model
 from src.models.registry import build_model
@@ -752,6 +753,9 @@ class TestForecastDashboard:
         assert 'id="near-earth-heading"' in html
         assert 'id="near-earth-summary"' in html
         assert 'id="near-earth-days"' in html
+        assert 'id="solar-system-heading"' in html
+        assert 'id="solar-system-days"' in html
+        assert 'id="solar-system-summary"' in html
         assert "/assets/chart.js" in html
         assert 'id="api-token"' in html
         for path in ("/assets/app.js", "/assets/chart.js"):
@@ -767,6 +771,7 @@ class TestForecastDashboard:
         assert "Authorization" in app_js
         assert "Bearer " in app_js
         assert "/space/near-earth" in app_js
+        assert "/space/solar-system" in app_js
 
 
 class TestPowerballScorecard:
@@ -1020,6 +1025,49 @@ class TestNearEarth:
     def test_days_query_shortens_the_window(self, client, monkeypatch, tmp_path):
         _hide_near_earth_files(monkeypatch, tmp_path)
         response = client.get("/space/near-earth", params={"days": 90})
+        assert response.status_code == 200
+        body = response.json()
+        assert body["days"] == 90
+        start = pd.Timestamp(body["window_start"])
+        end = pd.Timestamp(body["window_end"])
+        assert (end - start).days == 90
+
+
+def _hide_solar_files(monkeypatch, tmp_path: Path) -> None:
+    root = tmp_path / "solar"
+    for name in (
+        "EVENTS_PATH",
+        "COMET_CATALOG_PATH",
+        "HORIZONS_DAILY_PATH",
+        "HORIZONS_MONTHLY_PATH",
+        "MOONS_PATH",
+        "FORECAST_PATH",
+    ):
+        monkeypatch.setattr(solar_system, name, str(root / name))
+    monkeypatch.setattr(solar_system, "utc_today", lambda: pd.Timestamp("2026-10-22"))
+
+
+class TestSolarSystem:
+    def test_default_window_is_730_days(self, client, monkeypatch, tmp_path):
+        _hide_solar_files(monkeypatch, tmp_path)
+        response = client.get("/space/solar-system")
+        assert response.status_code == 200
+        body = response.json()
+        assert body["available"] is False
+        assert body["days"] == 730
+        assert body["outlook_months"] == 24
+        assert body["showers"]["available"] is False
+        start = pd.Timestamp(body["window_start"])
+        end = pd.Timestamp(body["window_end"])
+        assert (end - start).days == 730
+
+    def test_days_above_730_is_rejected(self, client):
+        response = client.get("/space/solar-system", params={"days": 731})
+        assert response.status_code == 422
+
+    def test_days_query_shortens_the_window(self, client, monkeypatch, tmp_path):
+        _hide_solar_files(monkeypatch, tmp_path)
+        response = client.get("/space/solar-system", params={"days": 90})
         assert response.status_code == 200
         body = response.json()
         assert body["days"] == 90

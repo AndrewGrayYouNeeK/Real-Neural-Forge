@@ -23,6 +23,7 @@ from src.inference.predictor import ForecastBatch, Predictor
 from src.models.registry import ModelRegistry, build_model
 from src.serving.checkpoint import checkpoint_destination, prepare_runtime_checkpoint
 from src.space.approaches import near_earth_report
+from src.space.solar_system import solar_system_report
 from src.storage.experiments import ExperimentStore, db_path_from_config
 from src.training.trainer import TimeSeriesTrainer
 from src.utils.config import load_config
@@ -345,6 +346,17 @@ def space_near_earth(days: int = Query(730, ge=1, le=730)) -> dict[str, Any]:
     list and the JPL monthly counts drawn on the dashboard.
     """
     return near_earth_report(days=days)
+
+
+@app.get("/space/solar-system", tags=["space"])
+def space_solar_system(days: int = Query(730, ge=1, le=730)) -> dict[str, Any]:
+    """Upcoming approaches, perihelia, and alignments, plus monthly forecasts.
+
+    ``days`` is the inclusive offset from today (UTC). The default, 730, is
+    about 24 months. Model outlooks stay 24 months; the window filters the
+    catalog lists and the in-window counts drawn on the dashboard.
+    """
+    return solar_system_report(days=days)
 
 
 @app.get("/powerball/scorecard", tags=["lottery"])
