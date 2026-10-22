@@ -445,6 +445,11 @@ def fetch_space(
     write_series(exoplanets, root / "exoplanets_yearly.csv")
     manifest["exoplanets"] = _summary(exoplanets)
 
+    # near_earth imports the download helpers defined in this module.
+    from src.space.near_earth import fetch_near_earth
+
+    manifest["near_earth"] = fetch_near_earth(refresh=refresh, output_dir=root)
+
     manifest_path = root / "manifest.json"
     manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
     return manifest

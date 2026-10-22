@@ -22,7 +22,9 @@ from src.evaluation.baselines import (
 from src.inference.predictor import Predictor
 from src.models.registry import build_model
 from src.space.baselines import (
+    discovery_log_regression,
     drift_forecast,
+    mean_forecast,
     pearson,
     seasonal_naive_lag,
     storm_day_scores,
@@ -45,6 +47,13 @@ def validation_frame(cfg: dict[str, Any]) -> dict[str, Any]:
     if "date" in frame.columns:
         dates = pd.to_datetime(frame["date"]).to_numpy(dtype="datetime64[D]")
     rows = temporal_validation_target_rows(len(values), seq_len, val_split)
+    space_cfg = cfg.get("space") or {}
+    columns: dict[str, np.ndarray] = {}
+    discovery = space_cfg.get("discovery_column")
+    if isinstance(discovery, str) and discovery:
+        if discovery not in frame.columns:
+            raise ValueError(f"Missing discovery column {discovery!r} in {path}")
+        columns[discovery] = frame[discovery].to_numpy(dtype=np.float64)
     inputs, targets = load_csv_timeseries(
         path,
         feature_columns=list(data_cfg.get("feature_columns", ["value"])),
@@ -67,6 +76,7 @@ def validation_frame(cfg: dict[str, Any]) -> dict[str, Any]:
         "rows": rows,
         "targets": values[rows],
         "predictions": np.asarray(predictions, dtype=np.float64),
+        "columns": columns,
     }
 
 
@@ -102,6 +112,26 @@ def extra_baseline_scores(cfg: dict[str, Any], trace: dict[str, Any]) -> dict[st
     model_scores = regression_scores(predictions, targets)
     model_scores["pearson_r"] = pearson(predictions, targets)
 
+    mean_scores: dict[str, float] | None = None
+    if space_cfg.get("mean"):
+        mean_trace = mean_forecast(values, rows)
+        mean_scores = regression_scores(mean_trace, targets)
+        mean_scores["pearson_r"] = pearson(mean_trace, targets)
+
+    discovery_scores: dict[str, float] | None = None
+    discovery_column = space_cfg.get("discovery_column")
+    cached = trace.get("columns") or {}
+    if isinstance(discovery_column, str) and discovery_column in cached:
+        try:
+            discovery_trace = discovery_log_regression(
+                values, np.asarray(cached[discovery_column]), rows
+            )
+        except ValueError:
+            discovery_trace = None
+        if discovery_trace is not None:
+            discovery_scores = regression_scores(discovery_trace, targets)
+            discovery_scores["pearson_r"] = pearson(discovery_trace, targets)
+
     threshold = space_cfg.get("storm_threshold")
     storms: dict[str, dict[str, float]] | None = None
     if threshold is not None:
@@ -118,6 +148,8 @@ def extra_baseline_scores(cfg: dict[str, Any], trace: dict[str, Any]) -> dict[st
         "lags": lags,
         "drift": drift_scores,
         "storms": storms,
+        "mean": mean_scores,
+        "discovery": discovery_scores,
         "persistence_trace": persistence,
         "lag_traces": lag_traces,
         "drift_trace": drift_trace,

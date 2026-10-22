@@ -135,6 +135,67 @@
           </div>
         </section>
 
+        <section class="panel" aria-labelledby="near-earth-heading">
+          <div class="panel-header">
+            <div>
+              <h2 id="near-earth-heading">What's coming close to Earth</h2>
+              <p class="hint">
+                JPL predicted approaches to Earth and the Moon, SATCAT decay dates,
+                and the model's 24-month outlook.
+              </p>
+            </div>
+          </div>
+          <div class="controls">
+            <label for="near-earth-days">Look-ahead (days)</label>
+            <select id="near-earth-days">
+              <option value="90">90</option>
+              <option value="180">180</option>
+              <option value="365">365</option>
+              <option value="730" selected>730</option>
+            </select>
+            <label for="near-earth-body">Body</label>
+            <select id="near-earth-body">
+              <option value="Earth" selected>Earth</option>
+              <option value="Moon">Moon</option>
+              <option value="all">Earth and Moon</option>
+            </select>
+            <label for="near-earth-series">Forecast series</label>
+            <select id="near-earth-series"></select>
+          </div>
+          <p id="near-earth-summary" class="summary">Loading close approaches.</p>
+          <p id="near-earth-note" class="hint"></p>
+          <div id="near-earth-stats" class="status-grid"></div>
+          <div id="near-earth-chart" class="chart-host"></div>
+          <div class="table-wrap table-scroll">
+            <table>
+              <caption class="visually-hidden">
+                Predicted close approaches in the selected window
+              </caption>
+              <thead>
+                <tr id="near-earth-head"></tr>
+              </thead>
+              <tbody id="near-earth-body-rows"></tbody>
+            </table>
+          </div>
+          <h3>Reentries</h3>
+          <p id="near-earth-reentry-note" class="hint"></p>
+          <div class="table-wrap">
+            <table>
+              <caption class="visually-hidden">Decay dates in the selected window</caption>
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>NORAD</th>
+                  <th>Date</th>
+                </tr>
+              </thead>
+              <tbody id="near-earth-reentries"></tbody>
+            </table>
+          </div>
+          <h3>Also in view</h3>
+          <p id="near-earth-context" class="hint"></p>
+        </section>
+
         <section class="panel" aria-labelledby="powerball-heading">
           <div class="panel-header">
             <div>

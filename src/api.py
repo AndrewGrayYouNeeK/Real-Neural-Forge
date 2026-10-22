@@ -22,6 +22,7 @@ from src.forecasting.spec import MAX_HORIZON, forecast_spec_from_config
 from src.inference.predictor import ForecastBatch, Predictor
 from src.models.registry import ModelRegistry, build_model
 from src.serving.checkpoint import checkpoint_destination, prepare_runtime_checkpoint
+from src.space.approaches import near_earth_report
 from src.storage.experiments import ExperimentStore, db_path_from_config
 from src.training.trainer import TimeSeriesTrainer
 from src.utils.config import load_config
@@ -332,6 +333,18 @@ def read_powerball_scorecard(path: str | Path | None = None) -> dict[str, Any]:
     payload = cast(dict[str, Any], loaded)
     payload["available"] = True
     return payload
+
+
+@app.get("/space/near-earth", tags=["space"])
+def space_near_earth(days: int = Query(730, ge=1, le=730)) -> dict[str, Any]:
+    """Upcoming Earth and Moon approaches, reentries, and monthly forecasts.
+
+    ``days`` is the inclusive offset from today (UTC) through which JPL
+    close-approach dates are returned. The default, 730, is about 24 months.
+    Model outlooks are always 24 months; the window only filters the catalog
+    list and the JPL monthly counts drawn on the dashboard.
+    """
+    return near_earth_report(days=days)
 
 
 @app.get("/powerball/scorecard", tags=["lottery"])

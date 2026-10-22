@@ -326,7 +326,6 @@ def test_space_configs_use_the_trainer_contract():
         assert training["patience"] > 0
         assert training["max_grad_norm"] > 0
         assert training["device"] == "cpu"
-        assert cfg["retrain"]["enabled"] is False
         assert str(data["path"]).startswith("data/space/")
         assert str(training["checkpoint_dir"]).startswith("checkpoints/space/")
         assert cfg["model"]["input_dim"] == len(data["feature_columns"])
@@ -350,6 +349,14 @@ def test_space_configs_use_the_trainer_contract():
             assert space["lags"] == [SOLAR_ROTATION_DAYS, SCHWABE_CYCLE_DAYS]
         if space["id"] == "flares_m":
             assert space["lags"] == [SCHWABE_CYCLE_MONTHS]
+        if space.get("group") == "near_earth":
+            assert cfg["retrain"]["enabled"] is True
+            assert cfg["retrain"]["baselines"] == ["persistence", "mean", "seasonal"]
+            assert data["season_length"] == 12
+            assert space["outlook_months"] == 24
+            assert "fetch_near_earth" in str(data["fetch"])
+        else:
+            assert cfg["retrain"]["enabled"] is False
     assert "f107" in seen
     assert "kp" in seen
     assert "launches" in seen
@@ -361,7 +368,9 @@ def test_recorded_forecast_covers_every_space_config():
         Path("results/space_forecast.json").read_text(encoding="utf-8")
     )
     configs = {
-        load_config(path)["space"]["id"] for path in Path("config/space").glob("*.yaml")
+        load_config(path)["space"]["id"]
+        for path in Path("config/space").glob("*.yaml")
+        if load_config(path)["space"].get("group") != "near_earth"
     }
     series = recorded["series"]
     assert {row["id"] for row in series} == configs

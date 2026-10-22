@@ -450,6 +450,14 @@ When the run's `metrics` already contain `validation_predictions`, `predictions`
 
 The dashboard charts this payload, and it also plots multi-step forecasts, p10–p90 intervals, and model-comparison results when `/predict`, `/model/info`, or a forecast/comparison route includes them. Metric keys shaped like `baseline_persistence_mae` (written when `data.report_baselines` is set) are charted against the run's own MAE. Those fields are optional; the page still renders the one-step forecast and experiment metrics without them.
 
+### `GET /space/near-earth`
+
+Upcoming objects that pass close to Earth, plus the saved monthly forecasts. `days` defaults to **730** and must be an integer from 1 to 730. The window is inclusive: UTC today through today plus `days`. Shortening `days` filters the approach list and the JPL month bars. It does not change the model path.
+
+The list is JPL CAD approaches to Earth and the Moon with `dist <= 0.05` AU, and any IAU nI interstellar approach out to 1 AU. CAD times are TDB calendar dates, not UTC. `forecasts` holds the 24-month recursive outlook for each trained series, with `p10`, `p50`, and `p90`. A missing cache or score file still returns `200` with `"available": false` and empty lists. `731` returns `422`.
+
+The dashboard panel "What's coming close to Earth" reads this route. The day menu is 90, 180, 365, or 730.
+
 ### YouNeeK Time
 
 YouNeeK Time is **100 units / 100 minutes / 100 seconds** (not App Store 10/10/10). Noon is `50:00:00`. The year is 354 days with 10-day weeks, epoch `2026-01-01`. Lunar phase uses the mean synodic month (`00:00:00` new, `50:00:00` full).
@@ -749,7 +757,7 @@ python -m scripts.train_space
 
 `python -m src.space.fetch` and `python -m src.space.train` are the same commands. `--refresh` re-downloads the raw files. `--only f107,kp` trains a subset. A later fetch moves the end dates forward and will change the holdout.
 
-Each config sets `retrain.enabled: false`. The weekly champion job trains every enabled file under `config/`. These series stay out of that job: one fetch script builds all of them, and the CSVs are not in git.
+The solar, launch, exoplanet, and catalog close-approach configs set `retrain.enabled: false`. The weekly champion job trains every enabled file under `config/`. Those series stay out of that job: one fetch script builds all of them, and the CSVs are not in git. The near-Earth group below is the exception: each of those configs is enabled and refreshes through `python -m scripts.fetch_near_earth`.
 
 Configs live in `config/space/`. Each one uses a temporal 20% holdout, z-score normalization fit on the training split only, early stopping, gradient clipping at 1.0, and `training.seed: 0`. Daily models see 27 days (one solar rotation) and may train for 20 epochs with patience 5. Monthly models see 24 months and may train for 40 epochs with patience 6. The univariate network has 67,137 parameters (d_model 64, 4 heads, 2 layers). The exoplanet model is smaller (2,273 parameters, 5-year windows, 80 epochs, patience 10) because the series has 34 points.
 
@@ -841,6 +849,80 @@ Persistence is the better storm detector. The transformer raises 61 alarms and c
 | Persistence |  | 1.0339 | 1.3987 | 236 | 85 | 0.3602 | 0.3602 | 0.3602 |
 
 Adding speed and density lowers MAE by 0.011 Kp and raises storm-day recall from 6/236 to 26/236. Both models beat persistence on MAE and RMSE. Persistence still catches more storm days (85 hits, F1 0.36 against 0.19). The wind features help a little on this split. They do not turn the regression model into a reliable storm alarm. The Kp-only model trained on the longer 1957–2026 record (the first storm table) is a different window, so its MAE of 0.8609 is not the comparison to use here.
+
+### What's coming close to Earth
+
+This group is separate from the catalog close-approach row above. That older series is one column, approaches within 0.05 AU, and it stays out of the weekly job. The files here train Earth and Moon counts, a known-at-the-time control, a per-1,000-known-NEO rate, closest-miss distance, large-object counts (`H < 22`, about 140 m), fireball counts and impact energy, and CelesTrak decay counts. The score file is `results/near_earth_forecast.json`. This run took **43.3 seconds** on CPU, seed 0, on 2026-10-22.
+
+```bash
+python -m scripts.fetch_near_earth
+python -m src.space.train --results results/near_earth_forecast.json --package \
+  --only earth_within_1ld,earth_within_0_05au,earth_closest_au,earth_large_h22,earth_known_0_05au,earth_0_05au_per_1000,moon_within_1ld,moon_within_0_05au,moon_closest_au,moon_large_h22,fireball_count,fireball_energy,reentries
+```
+
+`GET /space/near-earth?days=` defaults to **730** (today through two years, inclusive). The approach list follows `days`. Each model is still a one-step network, scored on a temporal 20% holdout against persistence, the same month a year earlier, and the mean of every observation before the first validation label. The 24-month path is that one-step model rolled forward. `p10` and `p90` are residual quantiles (nominal 0.1 and 0.9) fit on the earlier half of the validation origins that still contain that lead. Coverage in the table is the later half of that same validation split. Early stopping already used the validation loss, so the coverage is not a second untouched test. Counts, energy, and the rate are clipped at 0. Closest distance is clipped to `[0, 0.05]` AU because a month with no approach inside the search is stored as 0.05 AU with a censor flag. The flag is not a model input.
+
+Other planets, comet perihelia, and a solar-system summary are not in this change.
+
+#### Sources
+
+No API key. Raw files stay under `data/space/` and are gitignored. The fetch on 2026-10-22 used `date-max=2028-10-21`.
+
+| Series | What is counted | Source | Licence |
+| --- | --- | --- | --- |
+| Earth and Moon approaches | Monthly counts within 1 LD (384,400 km) and within 0.05 AU, closest miss, `H < 22` | JPL SBDB Close-Approach Data API, [`cad.api`](https://ssd-api.jpl.nasa.gov/cad.api), `body=Earth` and `body=Moon`, `fullname=true` | Public domain, U.S. government work. CAD times are TDB. |
+| Known-at-the-time control | Same approaches, kept only when SBDB `first_obs` is on or before the approach | JPL SBDB Query API, classes APO, AMO, ATE, IEO, plus `sb-kind=c` | Public domain, U.S. government work. |
+| Fireballs | Monthly count and summed impact energy (kt TNT). Radiated energy is stored in units of 10^10 J and is not a training target | [`fireball.api`](https://ssd-api.jpl.nasa.gov/fireball.api) | Public domain, U.S. government work. Sensor-network detections, not a complete flux. |
+| Sentry | Current impact-risk snapshot, not a trained series | [`sentry.api`](https://ssd-api.jpl.nasa.gov/sentry.api) | Public domain, U.S. government work. |
+| Interstellar flag | IAU nI objects resolved from SBDB (`1I`, `2I`, `3I`, then stop). Hyperbolic comets and asteroids without an I designation are not flagged | [`sbdb.api?sstr=`](https://ssd-api.jpl.nasa.gov/sbdb.api) | Public domain, U.S. government work. |
+| Reentries | Monthly count of SATCAT `DECAY_DATE` | CelesTrak [`satcat.csv`](https://celestrak.org/pub/satcat.csv) | Cite CelesTrak (T.S. Kelso). Decays are recorded after they happen. Space-Track TIP is not used. |
+
+The fetch wrote 1,521 months, 1900-01 through 2026-09 (the open month and every future CAD row stay out of the training CSV): **33,307** Earth approaches and **6,313** Moon approaches within 0.05 AU. Every Earth designation in that CAD pull matched an SBDB `pdes`. Since 2020, 61% of Earth approaches had `first_obs` on or before the flyby and 39% were added after the object was found. That second group is the survey backfill. Fireballs: 1,073 events, 1988-04 through 2026-09, 1,207 kt summed impact energy. Reentries: 35,652 decay months from 1957-12 through 2026-09. Sentry listed 2,223 objects; the highest cumulative Palermo was 29075 (1950 DA), −0.98. Interstellar objects on the fetch day were 1I/'Oumuamua, 2I/Borisov, and 3I/ATLAS. None of their designation aliases had a CAD approach within 1 AU inside the downloaded window.
+
+Future CAD months count objects known today. They are not the same statistic as the backfilled history, and they omit anything surveys have not found yet. On 2026-10-22 the next 730 days contained **316** Earth and **32** Moon approaches within 0.05 AU (44 in the rest of 2026, 165 in 2027, 139 in 2028). SATCAT had **no** decay date on or after that day. The prior 120 days had 444 decay rows. The panel says so instead of inventing a reentry prediction.
+
+#### Holdout scores
+
+Cells are **MAE / RMSE**. The epoch column is the best epoch and how many epochs ran. The 12-month column is the calendar seasonal naive (it matches a 12-step lag on these month-start series). Discovery regression is ordinary least squares of the count on `log1p(known NEOs before the month)`, fit only before the first validation label. It is blank when the series is already a rate or is not a close-approach count. The mean for the rate series is not a useful baseline: 1901-04 has 21 approaches and one known NEO, which is 21,000 per 1,000, and that single month pulls the pre-holdout mean to about 1,698.
+
+| Series | Validation | n | Epoch | Model | Persistence | 12-month | Mean | Discovery | Band coverage |
+| --- | --- | ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Earth within 1 LD | 2001-11 to 2026-09 | 299 | 1/7 | 4.9835 / 7.7407 | 2.7659 / 4.2493 | 2.4716 / 3.7251 | 5.0591 / 7.8181 | 5.0023 / 7.7557 | 0.27 |
+| Earth within 0.05 AU | 2001-11 to 2026-09 | 299 | 3/9 | 51.2539 / 74.9242 | 18.5217 / 28.0773 | 13.7391 / 20.3286 | 58.0272 / 80.4750 | 53.9359 / 77.0095 | 0.11 |
+| Earth closest miss (AU) | 2001-11 to 2026-09 | 299 | 9/15 | 0.0036 / 0.0039 | 0.0018 / 0.0034 | 0.0017 / 0.0034 | 0.0095 / 0.0097 | 0.0045 / 0.0047 | 1.00 |
+| Earth H < 22 | 2001-11 to 2026-09 | 299 | 4/10 | 1.2741 / 1.7253 | 1.7258 / 2.3262 | 1.8562 / 2.3963 | 1.3468 / 1.7994 | 1.3152 / 1.7658 | 0.74 |
+| Earth known at the time | 2001-11 to 2026-09 | 299 | 21/27 | 33.7492 / 48.5861 | 11.6823 / 17.8647 | 8.8729 / 12.8411 | 37.3034 / 51.2294 | 36.6263 / 50.6835 | 0.10 |
+| Earth per 1,000 known NEOs | 2001-11 to 2026-09 | 299 | 2/8 | 14.9794 / 15.0590 | 1.3120 / 1.6950 | 1.1330 / 1.5243 | 1697.9478 / 1697.9487 |  | 0.91 |
+| Moon within 1 LD | 2001-11 to 2026-09 | 299 | 4/10 | 3.5414 / 5.4937 | 2.2943 / 3.4076 | 2.0134 / 3.0028 | 3.5622 / 5.5187 | 3.5210 / 5.4662 | 0.24 |
+| Moon within 0.05 AU | 2001-11 to 2026-09 | 299 | 3/9 | 16.4485 / 24.3747 | 6.6388 / 10.1288 | 5.4615 / 8.2731 | 17.1219 / 24.9666 | 16.5822 / 24.4958 | 0.16 |
+| Moon closest miss (AU) | 2001-11 to 2026-09 | 299 | 12/18 | 0.0128 / 0.0136 | 0.0045 / 0.0127 | 0.0043 / 0.0123 | 0.0248 / 0.0248 | 0.0130 / 0.0137 | 1.00 |
+| Moon H < 22 | 2001-11 to 2026-09 | 299 | 3/9 | 0.1560 / 0.2718 | 0.1538 / 0.3922 | 0.1438 / 0.3792 | 0.1339 / 0.2722 | 0.1333 / 0.2722 | 0.79 |
+| Fireballs per month | 2019-07 to 2026-09 | 87 | 6/12 | 1.2611 / 1.6354 | 1.8621 / 2.2944 | 1.8621 / 2.3586 | 1.4225 / 1.8211 |  | 0.83 |
+| Fireball energy (kt) | 2019-07 to 2026-09 | 87 | 4/10 | 1.3176 / 2.0868 | 1.6230 / 2.7438 | 2.5374 / 6.1600 | 2.3853 / 2.6045 |  | 0.65 |
+| SATCAT reentries | 2013-06 to 2026-09 | 160 | 5/11 | 35.0027 / 58.0903 | 16.1187 / 26.0527 | 39.4188 / 64.4295 | 58.4066 / 90.0380 |  | 0.17 |
+
+The raw Earth and Moon counts lose to the 12-month lag, the same pattern as the older close-approach model. Discovery regression beats the transformer on those counts and still loses to the seasonal naive, so removing the catalog-size trend does not make the network the best count forecast. The known-at-the-time series loses the same way (seasonal MAE 8.87, model 33.75). The rate series loses to persistence and the 12-month lag; its published 24-month p50 sits on the zero clip while p90 is about 6.5 per 1,000.
+
+Earth approaches with `H < 22` are the close-approach series where the transformer has the lowest MAE of the three naive baselines (1.27 against a mean of 1.35, persistence 1.73, and the 12-month lag 1.86). Discovery regression is 1.32. The margin is small next to a series that is often a handful of objects a month. Moon `H < 22` does not repeat that result: the mean (0.134) and the discovery regression (0.133) beat the model (0.156).
+
+Fireball counts and impact energy are the other two wins against persistence, the 12-month lag, and the mean. They are observed detections. The outlook is a statistical extrapolation, and a few large events dominate the energy. Reentry counts lose to persistence (16.1 against 35.0). Last month's decay count tracks the catalog better than the network does.
+
+Band coverage near 0.10 on the growing count series means those p10–p90 ranges did not cover the later validation half. Closest-miss coverage near 1.00 means those bands are wide relative to the errors. Fireball-count coverage (0.83) is the one near the nominal 0.80. The chart draws the band anyway and overlays the JPL month counts inside the selected window, which are known objects only.
+
+The weekly job includes these 13 configs (`retrain.enabled: true`, fetch timeout 600 seconds, shared cached fetch). Promotion still requires a fresh run to beat persistence, the seasonal naive, and the mean. A count model that loses that comparison does not replace a champion. The dashboard reads the committed score file above.
+
+Closest Earth approaches in the 730-day CAD list on the fetch day, distance in lunar distances:
+
+| Object | Date (TDB) | Distance | H |
+| --- | --- | ---: | ---: |
+| (2024 QP2) | 2028-10-15 17:32 | 0.57 LD | 21.5 |
+| (2026 UA1) | 2026-10-23 17:35 | 0.58 LD | 27.8 |
+| 153814 (2001 WN5) | 2028-06-26 05:23 | 0.65 LD | 18.3 |
+| (2025 UK9) | 2026-10-31 02:35 | 0.82 LD | 29.8 |
+| (2021 EO2) | 2028-05-19 05:29 | 0.97 LD | 27.9 |
+| 137108 (1999 AN10) | 2027-08-07 07:11 | 1.01 LD | 18.1 |
+
+Closest Moon approaches in that same list: (2025 UK9) on 2026-10-30 at 0.32 LD, (2026 UA1) on 2026-10-23 at 0.35 LD, and (2024 QP2) on 2028-10-16 at 0.54 LD.
 
 ## Real-world series
 
