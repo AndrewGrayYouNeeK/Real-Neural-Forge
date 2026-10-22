@@ -87,4 +87,25 @@ jobs:
 
     - name: Test Docker image
       run: |
+        set -eu
         docker run --rm neural-forge:test python -c "import src.model; import src.api; import src.train; print('Import test passed')"
+        cleanup() { docker rm -f forge-events >/dev/null 2>&1 || true; }
+        trap cleanup EXIT
+        docker run -d --name forge-events -e NEURAL_FORGE_SPACE_REFRESH=0 neural-forge:test
+        ready=0
+        for attempt in $(seq 1 60); do
+          if docker exec forge-events python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=2)"; then
+            ready=1
+            break
+          fi
+          sleep 2
+        done
+        if [ "$ready" != 1 ]; then
+          docker logs forge-events || true
+          echo "API did not become healthy after ${attempt} attempts" >&2
+          exit 1
+        fi
+        if ! docker exec forge-events python -m scripts.check_image_events; then
+          docker logs forge-events || true
+          exit 1
+        fi

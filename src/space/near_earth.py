@@ -5,7 +5,9 @@ Run from the repository root:
     python -m scripts.fetch_near_earth
 
 Raw responses and the processed CSVs live under ``data/space/`` and are not
-committed. No API key is used.
+committed. The event files the API serves are also committed in
+``space_snapshot/`` so the image can answer before a refresh finishes. No API
+key is used.
 """
 
 from __future__ import annotations

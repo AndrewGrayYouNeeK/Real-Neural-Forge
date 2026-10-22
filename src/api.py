@@ -1,5 +1,6 @@
 """FastAPI REST endpoint for time-series inference."""
 
+import asyncio
 import json
 import logging
 import math
@@ -23,6 +24,11 @@ from src.inference.predictor import ForecastBatch, Predictor
 from src.models.registry import ModelRegistry, build_model
 from src.serving.checkpoint import checkpoint_destination, prepare_runtime_checkpoint
 from src.space.approaches import near_earth_report
+from src.space.refresh import (
+    ensure_space_snapshot,
+    space_refresh_enabled,
+    space_refresh_loop,
+)
 from src.space.solar_system import solar_system_report
 from src.storage.experiments import ExperimentStore, db_path_from_config
 from src.training.trainer import TimeSeriesTrainer
@@ -104,8 +110,22 @@ def load_model(config_path: str | Path = "config/config.yaml") -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI):  # noqa: ARG001
     load_model(os.environ.get(CONFIG_ENV, "config/config.yaml"))
-    yield
-    _state.clear()
+    ensure_space_snapshot()
+    stop = asyncio.Event()
+    task: asyncio.Task[None] | None = None
+    if space_refresh_enabled():
+        task = asyncio.create_task(space_refresh_loop(stop))
+    try:
+        yield
+    finally:
+        stop.set()
+        if task is not None:
+            task.cancel()
+            try:
+                await asyncio.wait_for(task, timeout=5)
+            except (TimeoutError, asyncio.CancelledError):
+                pass
+        _state.clear()
 
 
 app = FastAPI(

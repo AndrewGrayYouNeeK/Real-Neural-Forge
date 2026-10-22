@@ -41,6 +41,10 @@ COPY --chown=forge:forge . .
 RUN mkdir -p /app/checkpoints /app/data \
     && chown forge:forge /app/checkpoints /app/data
 
+# data/ is dockerignored. This is the committed event snapshot the space
+# endpoints read until the background refresh replaces it.
+COPY --chown=forge:forge space_snapshot/ /app/data/space/
+
 USER forge
 
 EXPOSE 8000

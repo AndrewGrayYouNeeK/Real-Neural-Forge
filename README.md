@@ -117,6 +117,10 @@ The process runs as `forge` (uid 1000). The image creates `checkpoints/` and `da
 
 The image declares a `HEALTHCHECK` against `/health`, so `docker ps` shows the container as `healthy` once the API is up. `.dockerignore` keeps the virtualenv, caches, git history, local checkpoints, and `data/` (including a local experiments database) out of the build context. The pattern is `/data`, so the `src/data` package is still copied.
 
+`GET /space/near-earth` and `GET /space/solar-system` read event files under `data/space/`. Those files are not in the build context. The image bakes the current snapshot from `space_snapshot/` into `/app/data/space/`, and the same files stay at `/app/space_snapshot/` so a `./data` bind mount can be filled on startup when those files are missing. The API then refreshes them in the background and once a day. A failed fetch leaves the previous files in place, which are the baked snapshot until a refresh succeeds. Set `NEURAL_FORGE_SPACE_REFRESH=0` to serve the snapshot only.
+
+The Powerball scorecard (`predictions/powerball/scorecard.json`), the forecast JSON under `results/` (including the near-Earth and solar-system outlooks), and the default dashboard series are already in the image. The default series is synthetic (`config/config.yaml`), so it does not need a CSV from `data/`. `GET /comparison` stays empty until a comparison experiment is stored in the runtime database. That database is created on startup and is not a published dataset.
+
 The API and dashboard will be available at <http://localhost:8000>.
 
 ### Local Development

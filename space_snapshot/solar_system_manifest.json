@@ -1,0 +1,35 @@
+{
+  "fetched_on": "2026-10-22",
+  "date_max": "2028-10-21",
+  "through": "2026-10-01",
+  "approaches": {
+    "Mercury": 4036,
+    "Venus": 6419,
+    "Mars": 3512,
+    "Jupiter": 1508,
+    "Saturn": 12,
+    "Uranus": 1,
+    "Neptune": 0,
+    "Pluto": 0
+  },
+  "discoveries": {
+    "neo": 42566,
+    "main_belt": 1470106,
+    "trojan": 16366,
+    "centaur": 1057,
+    "tno": 7109,
+    "comet": 3967
+  },
+  "discovery_dates_dropped": {
+    "neo": 1,
+    "main_belt": 4791,
+    "trojan": 45,
+    "centaur": 5,
+    "tno": 193,
+    "comet": 114
+  },
+  "perihelia": 5186,
+  "horizons_months": 1546,
+  "moons": 460,
+  "lookahead_days": 730
+}
