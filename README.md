@@ -432,7 +432,7 @@ When `NEURAL_FORGE_API_TOKEN` is set, send it as `Authorization: Bearer <token>`
 
 ### `GET /training/status`
 
-Returns the current background training state.
+Returns the current background training state. Each change is also written to `data/training_status.json` (the same `data/` directory as the experiment database; gitignored, and mounted by Compose). After a restart, a completed or failed run is restored from that file. A file left at `running` means the process stopped mid-job, so startup reports `failed` instead of a live run.
 
 ### `GET /experiments`
 
@@ -547,7 +547,7 @@ The live API is <https://real-neural-forge-api.youneekartifacts.workers.dev>.
 
 Plan: **Workers Paid** ($5 USD per month). Containers are not available on the free Workers plan. The included allowance and overages are on the [Containers pricing](https://developers.cloudflare.com/containers/platform/pricing/) page.
 
-Instance: `standard-1` (1/2 vCPU, 4 GiB RAM, 8 GB disk) with `max_instances` 1. The CPU PyTorch image does not fit `lite` (256 MiB) or reliably fit `basic` (1 GiB). The container sleeps after 10 minutes with no requests, which stops compute charges until the next request. Memory is billed from the provisioned size while the instance is awake.
+Instance: `standard-1` (1/2 vCPU, 4 GiB RAM, 8 GB disk) with `max_instances` 1. The CPU PyTorch image does not fit `lite` (256 MiB) or reliably fit `basic` (1 GiB). The container sleeps after 10 minutes with no requests, which stops compute charges until the next request. Memory is billed from the provisioned size while the instance is awake. A `POST /train` that starts a job, or returns 409 because one is already running, arms a schedule inside the container Durable Object. Every three minutes that schedule renews the activity timeout and reads `GET /training/status`. It keeps scheduling while the status is `running`, so the instance stays awake for the whole run, then the 10-minute idle timeout applies again.
 
 The Worker name is `real-neural-forge-api`. Leave the existing Workers Builds for `real-neural-forge` and `youneek-xyz` on the repository root so they keep publishing `frontend/`.
 
