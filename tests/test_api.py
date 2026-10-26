@@ -1,5 +1,6 @@
 """Tests for the FastAPI endpoints."""
 
+import json
 import os
 from pathlib import Path
 from unittest.mock import patch
@@ -21,11 +22,17 @@ from src.utils.paths import REPO_ROOT
 
 
 @pytest.fixture(scope="module")
-def client():
+def client(tmp_path_factory: pytest.TempPathFactory):
     """Create a test client with the model loaded from the default config."""
+    status_path = tmp_path_factory.mktemp("training-status") / "training_status.json"
+    previous = api_module.TRAINING_STATUS_PATH
+    api_module.TRAINING_STATUS_PATH = status_path
     load_model("config/config.yaml")
-    with TestClient(app, raise_server_exceptions=True) as c:
-        yield c
+    try:
+        with TestClient(app, raise_server_exceptions=True) as c:
+            yield c
+    finally:
+        api_module.TRAINING_STATUS_PATH = previous
 
 
 class TestHealthEndpoint:
@@ -346,6 +353,78 @@ class TestTrainConfigPath:
             Path(run.call_args.args[0])
             == (REPO_ROOT / "config" / "config.yaml").resolve()
         )
+
+    def test_accepted_train_persists_running_status(self, client):
+        with patch("src.api._run_training") as run:
+            resp = client.post("/train", json={})
+        assert resp.status_code == 200
+        run.assert_called_once()
+        saved = json.loads(api_module.TRAINING_STATUS_PATH.read_text(encoding="utf-8"))
+        assert saved == {"result": None, "status": "running"}
+
+
+class TestTrainingStatusPersistence:
+    @pytest.fixture
+    def status_path(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+        path = tmp_path / "training_status.json"
+        monkeypatch.setattr(api_module, "TRAINING_STATUS_PATH", path)
+        previous = _state.get("training")
+        yield path
+        _state["training"] = previous
+
+    def test_completed_status_round_trips(self, status_path: Path):
+        api_module._set_training(
+            "completed",
+            {"experiment_id": 7, "best_loss": 0.25, "metrics": {"mae": 0.5}},
+        )
+        _state["training"] = {"status": "idle", "result": None}
+        api_module._restore_training_status()
+        assert _state["training"]["status"] == "completed"
+        assert _state["training"]["result"]["experiment_id"] == 7
+        saved = json.loads(status_path.read_text(encoding="utf-8"))
+        assert saved["status"] == "completed"
+        assert saved["result"]["best_loss"] == 0.25
+
+    def test_running_file_is_an_interrupted_run(self, status_path: Path):
+        status_path.write_text(
+            json.dumps({"status": "running", "result": None}) + "\n",
+            encoding="utf-8",
+        )
+        api_module._restore_training_status()
+        assert _state["training"]["status"] == "failed"
+        assert "interrupted" in _state["training"]["result"]["error"]
+        saved = json.loads(status_path.read_text(encoding="utf-8"))
+        assert saved["status"] == "failed"
+
+    def test_unreadable_file_leaves_memory_status(self, status_path: Path):
+        status_path.write_text("{", encoding="utf-8")
+        _state["training"] = {"status": "idle", "result": None}
+        api_module._restore_training_status()
+        assert _state["training"] == {"status": "idle", "result": None}
+
+    def test_failed_run_is_persisted(
+        self, status_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        class BrokenTrainer:
+            def train(self) -> dict:
+                raise RuntimeError("boom")
+
+        monkeypatch.setattr(
+            api_module, "TimeSeriesTrainer", lambda *_a, **_k: BrokenTrainer()
+        )
+        api_module._run_training("config/config.yaml")
+        assert _state["training"]["status"] == "failed"
+        assert _state["training"]["result"] == {"error": "boom"}
+        saved = json.loads(status_path.read_text(encoding="utf-8"))
+        assert saved["status"] == "failed"
+        assert saved["result"]["error"] == "boom"
+
+    def test_non_finite_metric_does_not_drop_the_status(self, status_path: Path):
+        api_module._set_training("completed", {"best_loss": float("nan")})
+        assert _state["training"]["status"] == "completed"
+        saved = json.loads(status_path.read_text(encoding="utf-8"))
+        assert saved["status"] == "completed"
+        assert saved["result"]["best_loss"] is None
 
 
 def _write_cfg(path: Path, cfg: dict) -> None:

@@ -45,7 +45,9 @@ _state: dict[str, Any] = {}
 _store: ExperimentStore | None = None
 FRONTEND_DIR = REPO_ROOT / "frontend"
 CONFIG_DIR = REPO_ROOT / "config"
+TRAINING_STATUS_PATH = REPO_ROOT / "data" / "training_status.json"
 _CONFIG_SUFFIXES = {".yaml", ".yml"}
+_FINISHED_TRAINING = {"completed", "failed"}
 
 
 def _checkpoint_file(cfg: dict[str, Any]) -> Path:
@@ -107,9 +109,86 @@ def load_model(config_path: str | Path = "config/config.yaml") -> None:
     _store = ExperimentStore(db_path_from_config(cfg))
 
 
+def _json_ready(value: Any) -> Any:
+    """Convert a training payload into plain JSON values."""
+    if isinstance(value, dict):
+        return {str(key): _json_ready(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_json_ready(item) for item in value]
+    if value is None or isinstance(value, (bool, str, int)):
+        return value
+    if isinstance(value, float):
+        return value if math.isfinite(value) else None
+    if isinstance(value, Path):
+        return str(value)
+    item = getattr(value, "item", None)
+    if callable(item):
+        try:
+            converted = item()
+        except (TypeError, ValueError):
+            converted = None
+        else:
+            if isinstance(converted, (bool, int, float, str)) or converted is None:
+                return _json_ready(converted)
+    raise TypeError(f"Training status is not JSON serializable: {type(value)!r}")
+
+
+def _persist_training(payload: dict[str, Any]) -> None:
+    try:
+        encoded = json.dumps(_json_ready(payload), allow_nan=False, sort_keys=True)
+    except (TypeError, ValueError):
+        logger.exception("Could not serialize training status")
+        return
+    path = TRAINING_STATUS_PATH
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        temporary = path.with_suffix(".json.tmp")
+        temporary.write_text(encoded + "\n", encoding="utf-8")
+        temporary.replace(path)
+    except OSError:
+        logger.exception("Could not persist training status to %s", path)
+
+
+def _set_training(status: str, result: Any) -> None:
+    payload = {"status": status, "result": result}
+    _state["training"] = payload
+    _persist_training(payload)
+
+
+def _restore_training_status() -> None:
+    """Reload the last finished run from disk.
+
+    A ``running`` file means this process did not finish that job. Report it
+    as failed so a restart does not claim a live run that no longer exists.
+    """
+    path = TRAINING_STATUS_PATH
+    try:
+        raw = path.read_text(encoding="utf-8")
+    except OSError:
+        return
+    try:
+        payload = json.loads(raw)
+    except json.JSONDecodeError:
+        logger.warning("Ignoring unreadable training status at %s", path)
+        return
+    if not isinstance(payload, dict):
+        return
+    status = payload.get("status")
+    result = payload.get("result")
+    if status == "running":
+        _set_training(
+            "failed",
+            {"error": "Training was interrupted before it finished."},
+        )
+        return
+    if status in _FINISHED_TRAINING and (result is None or isinstance(result, dict)):
+        _state["training"] = {"status": status, "result": result}
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):  # noqa: ARG001
     load_model(os.environ.get(CONFIG_ENV, "config/config.yaml"))
+    _restore_training_status()
     ensure_space_snapshot()
     stop = asyncio.Event()
     task: asyncio.Task[None] | None = None
@@ -262,14 +341,17 @@ def resolve_train_config(config_path: str) -> Path:
 
 
 def _run_training(config_path: str) -> None:
-    _state["training"] = {"status": "running", "result": None}
+    _set_training("running", None)
     try:
         result = TimeSeriesTrainer(config_path).train()
+        # Persist before reloading the model. load_model resets the in-memory
+        # status, and a crash during reload should still keep the finished run.
+        _set_training("completed", result)
         load_model(config_path)
         _state["training"] = {"status": "completed", "result": result}
     except Exception as exc:  # noqa: BLE001
         logger.exception("Training failed")
-        _state["training"] = {"status": "failed", "result": {"error": str(exc)}}
+        _set_training("failed", {"error": str(exc)})
 
 
 @app.get("/", include_in_schema=False)
@@ -534,7 +616,7 @@ def start_training(
         raise HTTPException(status_code=409, detail="Training already in progress.")
 
     background_tasks.add_task(_run_training, str(config_path))
-    _state["training"] = {"status": "running", "result": None}
+    _set_training("running", None)
     return TrainResponse(status="running", message="Training started in background.")
 
 

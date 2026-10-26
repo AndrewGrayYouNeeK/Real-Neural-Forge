@@ -47,6 +47,13 @@ def test_container_worker_is_not_a_dashboard_worker():
     assert "NEURAL_FORGE_API_TOKEN" in worker
     assert "localhost/health" in worker
     assert "defaultPort = 8000" in worker
+    assert 'sleepAfter = "10m"' in worker
+    assert "renewActivityTimeout" in worker
+    assert 'TRAINING_WATCH_CALLBACK = "watchTraining"' in worker
+    assert "TRAINING_POLL_SECONDS = 3 * 60" in worker
+    assert "http://localhost/training/status" in worker
+    assert "override async alarm" not in worker
+    assert "async alarm(" not in worker
 
 
 def test_fly_and_render_use_the_published_image_and_no_baked_secrets():
