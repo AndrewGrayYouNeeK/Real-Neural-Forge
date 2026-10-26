@@ -3,7 +3,7 @@
 [![CI](https://github.com/AndrewGrayYouNeeK/Real-Neural-Forge/actions/workflows/ci.yml/badge.svg)](https://github.com/AndrewGrayYouNeeK/Real-Neural-Forge/actions/workflows/ci.yml)
 [![Publish image](https://github.com/AndrewGrayYouNeeK/Real-Neural-Forge/actions/workflows/publish.yml/badge.svg)](https://github.com/AndrewGrayYouNeeK/Real-Neural-Forge/actions/workflows/publish.yml)
 
-A production-ready transformer pipeline for time-series prediction, built with PyTorch, CUDA, and FastAPI. Source of truth is this GitHub repository — no Base44 SDK, no Vercel, no vendor-hosted backend.
+A production-ready transformer pipeline for time-series prediction, built with PyTorch, CUDA, and FastAPI. Source of truth is this GitHub repository — no Vercel, no vendor-hosted backend.
 
 **GitHub:** <https://github.com/AndrewGrayYouNeeK/Real-Neural-Forge>  
 **Image:** `ghcr.io/andrewgrayyouneek/real-neural-forge`
@@ -14,7 +14,7 @@ A production-ready transformer pipeline for time-series prediction, built with P
 - **GPU-accelerated training & inference** – CUDA support via PyTorch; automatically falls back to CPU when no GPU is available
 - **FastAPI REST API** – prediction, training, experiment tracking, and model metadata
 - **Forecast dashboard** – recent history, the next forecast (with a p10–p90 band when the API provides one), past predictions against actuals, and experiment metrics, served at `/`
-- **SQLite experiment store** – replaces Base44 entity persistence for runs and metrics
+- **SQLite experiment store** – local persistence for training runs and metrics
 - **Modular Python package** – models, data, training, evaluation, inference, and storage layers
 - **Docker & GitHub Container Registry** – `docker compose up --build` locally, or pull `ghcr.io/andrewgrayyouneek/real-neural-forge`
 - **Configurable via YAML** – all hyper-parameters in `config/config.yaml`

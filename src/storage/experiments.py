@@ -1,4 +1,4 @@
-"""Native experiment storage (replaces Base44 entity persistence)."""
+"""SQLite persistence for training runs and metrics."""
 
 from __future__ import annotations
 
