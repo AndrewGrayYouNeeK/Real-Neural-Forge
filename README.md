@@ -428,7 +428,7 @@ Starts a background training job. Optional JSON body:
 
 `config_path` is resolved from the repository root and must be an existing `.yaml` or `.yml` file inside `config/`. Paths outside that directory (absolute paths, `..` traversal, symlinks that leave `config/`) are rejected before a job starts. The file must be a mapping with `model` and `training` sections.
 
-When `NEURAL_FORGE_API_TOKEN` is set, send it as `Authorization: Bearer <token>`. A missing or wrong token returns `401` and does not start a job. When `api.training_enabled` is `false`, the endpoint returns `403` even if the token is valid. With the variable unset and training enabled, the endpoint behaves as before.
+When `NEURAL_FORGE_API_TOKEN` is set, that secret is the owner account. Send it as `Authorization: Bearer <token>`, or exchange it for a session with `POST /auth/owner`. A missing or wrong token returns `401` and does not start a job. Visitors sign up with `POST /auth/signup` (`email`, `password`) and then use the session cookie. Their `POST /train` is queued on their own copy of a config and does not write the owner's checkpoint. When `api.training_enabled` is `false`, the endpoint returns `403` even if the token is valid. With the variable unset and training enabled, the endpoint behaves as before: the process is the local owner and `POST /train` stays open.
 
 ### `GET /training/status`
 
@@ -588,14 +588,70 @@ npx wrangler secret put NEURAL_FORGE_CHECKPOINT_TOKEN
 
 | Secret or variable | Required | Purpose |
 | --- | --- | --- |
-| `NEURAL_FORGE_API_TOKEN` | Yes on a public URL | Bearer token for `POST /train`. Use a long random string. If it is unset, that endpoint is open. |
+| `NEURAL_FORGE_API_TOKEN` | Yes on a public URL | Owner account. Bearer token for the owner's `POST /train` and for `POST /auth/owner`. Visitors use email and password instead. If it is unset, the process is the local owner and `POST /train` stays open. |
+| `NEURAL_FORGE_STORAGE_SECRET` | Yes when `NEURAL_FORGE_STORAGE` is `cloudflare` | Shared secret for the container to call the Worker's D1/R2 proxy at `/_bindings/*`. Use a long random string. It is not a visitor password. |
+| `NEURAL_FORGE_STORAGE` | Set in `wrangler.jsonc` `vars` | `cloudflare` in production. The container then refuses to keep visitor workspaces only on its disk. Unset or `local` uses SQLite for development. |
+| `NEURAL_FORGE_BINDINGS_URL` | Set in `wrangler.jsonc` `vars` | Worker origin the container calls for D1 and R2. The shipped value is `https://real-neural-forge-api.youneekartifacts.workers.dev`. |
+| `NEURAL_FORGE_OWNER_EMAIL` | No | Email reserved for the owner row. Default `andrew@youneek.xyz`. |
 | `NEURAL_FORGE_CHECKPOINT_TOKEN` | Only when the champions release is private | GitHub fine-grained PAT with contents read. Sent only to `github.com`, `api.github.com`, and `uploads.github.com`. Omit it for a public release. |
 | `NEURAL_FORGE_CHECKPOINT_URL` | Before the first real deploy | Set in `wrangler.jsonc` `vars`, not as a secret. Startup fails when this is set and the download fails, so run **Retrain champions** once before the first deploy (or clear the URL to boot an untrained model). |
 | `NEURAL_FORGE_CONFIG` | No | Config path inside the image. Default `config/config.yaml`. |
 | `NEURAL_FORGE_CHECKPOINT_PATH` | No | Where the file is saved. Default is `inference.checkpoint_path`. |
 | `NEURAL_FORGE_CHECKPOINT_MAX_BYTES` | No | Download cap. Default 256 MiB. |
 
-The container needs outbound internet so it can download the champion.
+The container needs outbound internet so it can download the champion and, on Cloudflare, so it can call the Worker binding proxy.
+
+Sessions use a host-only cookie named `nf_session` (`HttpOnly`, `SameSite=Lax`, `Secure` on HTTPS, no `Domain` attribute). A sign-in on `forge.youneek.xyz` is not sent to `forge.youneek.dev` or to the workers.dev host. The Worker sets `X-Forwarded-Proto` and `X-Forwarded-Host` from the public URL and strips any client-supplied `X-Neural-Forge-Watch` header before the request reaches the container.
+
+### Accounts, isolation, and starter kits
+
+Visitor rows (users, sessions, datasets, configs, models, jobs, predictions) live in D1 database `neural-forge-workspaces`. Dataset and checkpoint bytes live in R2 bucket `neural-forge-workspaces`. The Worker's `/_bindings/sql` and `/_bindings/object` routes are the only way the container reaches those bindings, and they require `NEURAL_FORGE_STORAGE_SECRET`. They are not forwarded into the container.
+
+The owner's existing experiment database, champion checkpoints, and public forecast stay where they are. The API token authenticates as that owner. New accounts do not read or write those files.
+
+Each new account is seeded with six starter kits (Central Park temperature, AAPL returns, Bitcoin returns, a Powerball sample, near-Earth approach counts, and moon illumination). The bytes are one shared object per kit under `bases/starters/` in R2, published from `starters/` in the image the first time a base is missing. The account stores a reference. Replacing a dataset or editing a template writes a private copy. Training saves a new private checkpoint. The shared base and the owner's files are not modified. The dashboard's Getting started panel calls `POST /workspace/starters/{id}/predict` and `POST /workspace/starters/{id}/train`.
+
+Public read-only routes stay open without a session: `/series/recent`, `/predict` and `/forecast` on the loaded champion, `/space/near-earth`, `/space/solar-system`, `/lunar`, `/lottery/lunar-analysis`, `/powerball/scorecard`, and the YouNeeK routes. `GET /experiments`, `GET /training/status`, and `POST /train` return only the caller's own work when the owner token is set.
+
+Fair-use caps live in `config/config.yaml` under `limits` and can be overridden without a code change by the environment variables below. A visitor can have one queued or running job. The container runs one job at a time from that queue. Defaults are aimed at the Workers Paid plan: 2 MB datasets, 5 epochs, 90 seconds, 8 jobs waiting globally.
+
+| Variable | Default |
+| --- | --- |
+| `NEURAL_FORGE_MAX_DATASET_BYTES` | `2000000` |
+| `NEURAL_FORGE_MAX_DATASETS` | `12` |
+| `NEURAL_FORGE_MAX_CONFIG_BYTES` | `64000` |
+| `NEURAL_FORGE_MAX_EPOCHS` | `5` |
+| `NEURAL_FORGE_MAX_RUN_SECONDS` | `90` |
+| `NEURAL_FORGE_MAX_SAMPLES` | `512` |
+| `NEURAL_FORGE_MAX_SEQ_LEN` | `32` |
+| `NEURAL_FORGE_GLOBAL_QUEUE_LIMIT` | `8` |
+| `NEURAL_FORGE_MAX_PREDICTIONS` | `30` |
+| `NEURAL_FORGE_MAX_PREDICTION_POINTS` | `512` |
+| `NEURAL_FORGE_MAX_CHECKPOINT_BYTES` | `32000000` |
+| `NEURAL_FORGE_MAX_ACTIVE_JOBS` | `1` |
+| `NEURAL_FORGE_MAX_BATCH_SIZE` | `32` |
+
+To change a cap on Cloudflare, set the variable in `wrangler.jsonc` `vars` (or `npx wrangler secret put` for a value you do not want in git) and redeploy. `deploy/cloudflare/src/index.ts` forwards these names into the container.
+
+### One-time Cloudflare resources
+
+Run these from `deploy/cloudflare` after `npm install` and `npx wrangler login`. They are not part of CI. Do them once, before the image deploy below. Replace `REPLACE_WITH_D1_DATABASE_ID` in `wrangler.jsonc` with the `database_id` printed by the create command. Leave the Durable Object migration tag `v1` as it is. The D1 file `migrations/0001_workspaces.sql` is separate from that tag.
+
+```bash
+cd deploy/cloudflare
+npm install
+npx wrangler login
+npx wrangler d1 create neural-forge-workspaces
+# paste database_id into wrangler.jsonc d1_databases[0].database_id
+npx wrangler r2 bucket create neural-forge-workspaces
+npx wrangler d1 migrations apply neural-forge-workspaces --remote
+openssl rand -hex 32
+npx wrangler secret put NEURAL_FORGE_STORAGE_SECRET
+npx wrangler secret put NEURAL_FORGE_API_TOKEN
+npx wrangler secret put NEURAL_FORGE_CHECKPOINT_TOKEN
+```
+
+`NEURAL_FORGE_CHECKPOINT_TOKEN` is only required when the champions release is private. Omit that `secret put` for a public release. `npx wrangler deploy` (after the image pin is updated) attaches the custom hostnames `forge.youneek.xyz` and `forge.youneek.dev` and keeps `https://real-neural-forge-api.youneekartifacts.workers.dev`.
 
 ### Fly.io (one command after the token is filled in)
 

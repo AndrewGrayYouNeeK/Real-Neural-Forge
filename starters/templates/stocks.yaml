@@ -1,0 +1,44 @@
+dataset:
+  enabled: false
+  id: starter-stocks
+retrain:
+  enabled: false
+model:
+  name: time_series_transformer
+  input_dim: 1
+  output_dim: 1
+  d_model: 16
+  nhead: 2
+  num_encoder_layers: 1
+  dim_feedforward: 32
+  dropout: 0.0
+  max_seq_len: 64
+data:
+  source: csv
+  path: starters/data/stocks.csv
+  feature_columns:
+  - value
+  target_column: value
+  seq_len: 16
+  val_split: 0.2
+  split_mode: temporal
+  normalize: true
+  seed: 0
+training:
+  experiment_name: starter-stocks
+  batch_size: 32
+  learning_rate: 0.001
+  epochs: 4
+  patience: 2
+  device: cpu
+  checkpoint_dir: starters/models/stocks
+  log_interval: 1
+  seed: 0
+inference:
+  device: cpu
+  checkpoint_path: starters/models/stocks.pt
+forecast:
+  horizon: 1
+  strategy: direct
+storage:
+  db_path: starters/models/stocks-experiments.db

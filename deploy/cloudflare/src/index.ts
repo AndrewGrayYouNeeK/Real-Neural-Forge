@@ -1,13 +1,85 @@
 import { Container, getContainer, type State } from "@cloudflare/containers";
 
 // Hand-written to match wrangler.jsonc. `npx wrangler types` can replace it.
+interface D1Prepared {
+  bind(...values: unknown[]): D1Prepared;
+  all(): Promise<{ results?: Record<string, unknown>[]; meta?: { changes?: number } }>;
+}
+
+interface D1Database {
+  prepare(sql: string): D1Prepared;
+  batch(
+    statements: D1Prepared[],
+  ): Promise<Array<{ results?: Record<string, unknown>[]; meta?: { changes?: number } }>>;
+}
+
+interface R2ObjectBody {
+  body: ReadableStream;
+  size: number;
+}
+
+interface R2Bucket {
+  put(key: string, value: ArrayBuffer | ArrayBufferView): Promise<unknown>;
+  get(key: string): Promise<R2ObjectBody | null>;
+  delete(key: string): Promise<void>;
+}
+
 interface Env {
   NEURAL_FORGE: Parameters<typeof getContainer>[0];
+  WORKSPACES_DB: D1Database;
+  WORKSPACES: R2Bucket;
   NEURAL_FORGE_CONFIG?: string;
   NEURAL_FORGE_CHECKPOINT_URL?: string;
   NEURAL_FORGE_CHECKPOINT_TOKEN?: string;
   NEURAL_FORGE_API_TOKEN?: string;
+  NEURAL_FORGE_STORAGE?: string;
+  NEURAL_FORGE_BINDINGS_URL?: string;
+  NEURAL_FORGE_STORAGE_SECRET?: string;
+  NEURAL_FORGE_OWNER_EMAIL?: string;
+  NEURAL_FORGE_MAX_DATASET_BYTES?: string;
+  NEURAL_FORGE_MAX_DATASETS?: string;
+  NEURAL_FORGE_MAX_CONFIG_BYTES?: string;
+  NEURAL_FORGE_MAX_EPOCHS?: string;
+  NEURAL_FORGE_MAX_RUN_SECONDS?: string;
+  NEURAL_FORGE_MAX_SAMPLES?: string;
+  NEURAL_FORGE_MAX_SEQ_LEN?: string;
+  NEURAL_FORGE_GLOBAL_QUEUE_LIMIT?: string;
+  NEURAL_FORGE_MAX_PREDICTIONS?: string;
+  NEURAL_FORGE_MAX_PREDICTION_POINTS?: string;
+  NEURAL_FORGE_MAX_CHECKPOINT_BYTES?: string;
+  NEURAL_FORGE_MAX_ACTIVE_JOBS?: string;
+  NEURAL_FORGE_MAX_BATCH_SIZE?: string;
+  NEURAL_FORGE_QUEUE_RUNNER?: string;
 }
+
+const CONTAINER_ENV_KEYS = [
+  "NEURAL_FORGE_CONFIG",
+  "NEURAL_FORGE_CHECKPOINT_URL",
+  "NEURAL_FORGE_CHECKPOINT_TOKEN",
+  "NEURAL_FORGE_API_TOKEN",
+  "NEURAL_FORGE_STORAGE",
+  "NEURAL_FORGE_BINDINGS_URL",
+  "NEURAL_FORGE_STORAGE_SECRET",
+  "NEURAL_FORGE_OWNER_EMAIL",
+  "NEURAL_FORGE_MAX_DATASET_BYTES",
+  "NEURAL_FORGE_MAX_DATASETS",
+  "NEURAL_FORGE_MAX_CONFIG_BYTES",
+  "NEURAL_FORGE_MAX_EPOCHS",
+  "NEURAL_FORGE_MAX_RUN_SECONDS",
+  "NEURAL_FORGE_MAX_SAMPLES",
+  "NEURAL_FORGE_MAX_SEQ_LEN",
+  "NEURAL_FORGE_GLOBAL_QUEUE_LIMIT",
+  "NEURAL_FORGE_MAX_PREDICTIONS",
+  "NEURAL_FORGE_MAX_PREDICTION_POINTS",
+  "NEURAL_FORGE_MAX_CHECKPOINT_BYTES",
+  "NEURAL_FORGE_MAX_ACTIVE_JOBS",
+  "NEURAL_FORGE_MAX_BATCH_SIZE",
+  "NEURAL_FORGE_QUEUE_RUNNER",
+] as const;
+
+// Binding uploads stop here even if a limit env var is set higher.
+const BINDING_OBJECT_BYTES = 64 * 1024 * 1024;
+const OBJECT_KEY = /^((bases\/starters\/[a-z0-9-]+\/(dataset\.csv|model\.pt))|(users\/[A-Za-z0-9_]+\/(datasets|models)\/[A-Za-z0-9_.-]+))$/;
 
 // Idle sleep stays at 10 minutes. Poll well inside that window so a training
 // run with no client traffic still counts as activity.
@@ -22,15 +94,11 @@ type TrainingWatchPayload = {
 type ContainerStatus = State["status"];
 
 function containerEnv(env: Env): Record<string, string> {
-  const source: Record<string, string | undefined> = {
-    NEURAL_FORGE_CONFIG: env.NEURAL_FORGE_CONFIG,
-    NEURAL_FORGE_CHECKPOINT_URL: env.NEURAL_FORGE_CHECKPOINT_URL,
-    NEURAL_FORGE_CHECKPOINT_TOKEN: env.NEURAL_FORGE_CHECKPOINT_TOKEN,
-    NEURAL_FORGE_API_TOKEN: env.NEURAL_FORGE_API_TOKEN,
-  };
+  const source = env as unknown as Record<string, string | undefined>;
   return Object.fromEntries(
-    Object.entries(source).filter((entry): entry is [string, string] => {
-      return typeof entry[1] === "string" && entry[1].length > 0;
+    CONTAINER_ENV_KEYS.flatMap((key) => {
+      const value = source[key];
+      return typeof value === "string" && value.length > 0 ? [[key, value]] : [];
     }),
   );
 }
@@ -81,9 +149,13 @@ export class NeuralForgeContainer extends Container<Env> {
     }
 
     try {
+      const headers = new Headers();
+      if (this.env.NEURAL_FORGE_API_TOKEN) {
+        headers.set("X-Neural-Forge-Watch", this.env.NEURAL_FORGE_API_TOKEN);
+      }
       const response = await this.containerFetch(
         "http://localhost/training/status",
-        { method: "GET" },
+        { method: "GET", headers },
       );
       if (!response.ok) {
         await response.body?.cancel();
@@ -189,13 +261,139 @@ function containerAcceptsRequests(status: ContainerStatus): boolean {
   }
 }
 
+async function digest(value: string): Promise<Uint8Array> {
+  const hashed = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
+  return new Uint8Array(hashed);
+}
+
+async function authorized(request: Request, secret: string | undefined): Promise<boolean> {
+  if (!secret) {
+    return false;
+  }
+  const header = request.headers.get("Authorization") ?? "";
+  const match = /^Bearer\s+(\S+)$/i.exec(header);
+  if (!match) {
+    return false;
+  }
+  const [left, right] = await Promise.all([digest(match[1]), digest(secret)]);
+  let mismatch = 0;
+  for (let index = 0; index < left.length; index += 1) {
+    mismatch |= left[index] ^ right[index];
+  }
+  return mismatch === 0;
+}
+
+function objectKey(request: Request): string | null {
+  const key = request.headers.get("X-Object-Key") ?? "";
+  if (!OBJECT_KEY.test(key) || key.includes("..") || key.includes("\\")) {
+    return null;
+  }
+  return key;
+}
+
+async function handleBindings(request: Request, env: Env): Promise<Response> {
+  if (!(await authorized(request, env.NEURAL_FORGE_STORAGE_SECRET))) {
+    return Response.json({ error: "Unauthorized." }, { status: 401 });
+  }
+  const url = new URL(request.url);
+  if (url.pathname === "/_bindings/sql") {
+    if (request.method !== "POST") {
+      return Response.json({ error: "Method not allowed." }, { status: 405 });
+    }
+    return handleSql(request, env);
+  }
+  if (url.pathname === "/_bindings/object") {
+    return handleObject(request, env);
+  }
+  return Response.json({ error: "Not found." }, { status: 404 });
+}
+
+async function handleSql(request: Request, env: Env): Promise<Response> {
+  let payload: { statements?: Array<{ sql?: unknown; params?: unknown }> };
+  try {
+    payload = (await request.json()) as { statements?: Array<{ sql?: unknown; params?: unknown }> };
+  } catch {
+    return Response.json({ error: "Expected JSON." }, { status: 400 });
+  }
+  const statements = payload.statements;
+  if (!Array.isArray(statements) || statements.length === 0 || statements.length > 40) {
+    return Response.json({ error: "Expected statements." }, { status: 400 });
+  }
+  try {
+    const prepared = statements.map((statement) => {
+      if (typeof statement.sql !== "string" || statement.sql.trim().length === 0) {
+        throw new Error("Missing SQL.");
+      }
+      const query = env.WORKSPACES_DB.prepare(statement.sql);
+      const params = Array.isArray(statement.params) ? statement.params : [];
+      return params.length > 0 ? query.bind(...params) : query;
+    });
+    const results = await env.WORKSPACES_DB.batch(prepared);
+    return Response.json({
+      results: results.map((item) => ({
+        rows: item.results ?? [],
+        changes: item.meta?.changes ?? 0,
+      })),
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return Response.json({ error: message.slice(0, 500) }, { status: 400 });
+  }
+}
+
+async function handleObject(request: Request, env: Env): Promise<Response> {
+  const key = objectKey(request);
+  if (key === null) {
+    return Response.json({ error: "Invalid object key." }, { status: 400 });
+  }
+  if (request.method === "GET") {
+    const object = await env.WORKSPACES.get(key);
+    if (object === null) {
+      return new Response("Not found.", { status: 404 });
+    }
+    return new Response(object.body, {
+      headers: { "Content-Type": "application/octet-stream" },
+    });
+  }
+  if (request.method === "PUT") {
+    const body = await request.arrayBuffer();
+    if (body.byteLength > BINDING_OBJECT_BYTES) {
+      return Response.json({ error: "Object is too large." }, { status: 413 });
+    }
+    await env.WORKSPACES.put(key, body);
+    return new Response(null, { status: 204 });
+  }
+  if (request.method === "DELETE") {
+    if (key.startsWith("bases/")) {
+      return Response.json({ error: "Shared starter objects stay in place." }, { status: 403 });
+    }
+    await env.WORKSPACES.delete(key);
+    return new Response(null, { status: 204 });
+  }
+  return Response.json({ error: "Method not allowed." }, { status: 405 });
+}
+
+function forwardedRequest(request: Request): Request {
+  const url = new URL(request.url);
+  const headers = new Headers(request.headers);
+  headers.set("X-Forwarded-Proto", url.protocol.replace(/:$/, ""));
+  headers.set("X-Forwarded-Host", url.host);
+  // The training watch header is added only by the container Durable Object.
+  headers.delete("X-Neural-Forge-Watch");
+  return new Request(request, { headers });
+}
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
+    const url = new URL(request.url);
+    if (url.pathname === "/_bindings/sql" || url.pathname === "/_bindings/object") {
+      return handleBindings(request, env);
+    }
     const container = getContainer(env.NEURAL_FORGE, "primary");
     await container.startAndWaitForPorts({
       ports: 8000,
       startOptions: { envVars: containerEnv(env) },
     });
-    return container.fetch(request);
+    return container.fetch(forwardedRequest(request));
   },
 };
