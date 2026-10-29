@@ -969,11 +969,19 @@ def build_report(
     }
     report["summary"] = _summary(games, pooled)
     model_family = report["model_vs_chance"]
-    model_kept = 0 if not isinstance(model_family, dict) else int(model_family["n_bh_rejects"])
-    model_raw = 0 if not isinstance(model_family, dict) else int(model_family["n_raw_below_alpha"])
+    model_kept = (
+        0 if not isinstance(model_family, dict) else int(model_family["n_bh_rejects"])
+    )
+    model_raw = (
+        0
+        if not isinstance(model_family, dict)
+        else int(model_family["n_raw_below_alpha"])
+    )
     if pooled["n_bh_rejects"] == 0 and model_kept == 0:
         if model_raw == 0:
-            raw_clause = "None of the lunar-model scores beat a random ticket at p = 0.05."
+            raw_clause = (
+                "None of the lunar-model scores beat a random ticket at p = 0.05."
+            )
         elif model_raw == 1:
             raw_clause = (
                 "One lunar-model score beat a random ticket before correction, "

@@ -268,7 +268,9 @@ def test_model_comparison_scores_holdout_against_chance():
 
 def test_published_report_finds_no_corrected_lunar_edge():
     report = json.loads(
-        (REPO_ROOT / "results" / "lunar_lottery_analysis.json").read_text(encoding="utf-8")
+        (REPO_ROOT / "results" / "lunar_lottery_analysis.json").read_text(
+            encoding="utf-8"
+        )
     )
     assert report["correction"]["n_tests"] == 10
     assert report["correction"]["n_raw_below_alpha"] == 0
