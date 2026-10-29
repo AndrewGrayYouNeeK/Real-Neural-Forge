@@ -14,6 +14,7 @@ coverage.json
 checkpoints
 *.pt
 *.pth
+!starters/models/*.pt
 /data
 *.db
 *.sqlite

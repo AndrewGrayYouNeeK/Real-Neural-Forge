@@ -50,21 +50,27 @@ function errorMessage(response, data, text) {
 }
 
 async function fetchJson(url, options = {}) {
-  const response = await fetch(url, options);
+  const response = await fetch(url, { credentials: "same-origin", ...options });
   const text = await response.text();
   let data = null;
   if (text) {
     try {
       data = JSON.parse(text);
     } catch {
-      throw new Error(
+      const error = new Error(
         response.ok
           ? `Expected JSON but received a non-JSON response (${response.status})`
           : text.trim() || response.statusText || `Request failed (${response.status})`
       );
+      error.status = response.status;
+      throw error;
     }
   }
-  if (!response.ok) throw new Error(errorMessage(response, data, text));
+  if (!response.ok) {
+    const error = new Error(errorMessage(response, data, text));
+    error.status = response.status;
+    throw error;
+  }
   return data;
 }
 
@@ -821,18 +827,161 @@ async function refreshSeries() {
   renderAccuracy();
 }
 
+function showAccount(account) {
+  state.account = account;
+  const signedIn = document.getElementById("account-signed-in");
+  const signedOut = document.getElementById("account-signed-out");
+  const label = document.getElementById("account-label");
+  if (!account) {
+    signedIn.hidden = true;
+    signedOut.hidden = false;
+    label.textContent = "";
+    return;
+  }
+  signedIn.hidden = false;
+  signedOut.hidden = account.role === "member";
+  const auth = account.auth === "local" ? "local owner" : account.role;
+  label.textContent = `${account.email} (${auth})`;
+}
+
+function appendTextItem(list, text) {
+  const item = document.createElement("li");
+  item.textContent = text;
+  list.append(item);
+}
+
+function renderWorkspace(payload) {
+  const starters = (payload && payload.starters) || [];
+  const host = document.getElementById("starter-list");
+  host.replaceChildren();
+  const note = document.getElementById("getting-started-note");
+  if (!starters.length) {
+    note.textContent = state.account && state.account.role === "owner"
+      ? "Starter samples are added to new visitor accounts. This owner workspace keeps its existing runs."
+      : "Sign in to load the sample datasets and starter models.";
+    return;
+  }
+  note.textContent = "Each sample is yours. Predict uses the shared starter weights. Train on this sample saves a private model and leaves the original in place.";
+  for (const starter of starters) {
+    const card = document.createElement("article");
+    card.className = "starter-card";
+    const title = document.createElement("h3");
+    title.textContent = starter.name;
+    const summary = document.createElement("p");
+    summary.className = "hint";
+    summary.textContent = starter.summary;
+    const output = document.createElement("pre");
+    output.className = "output";
+    const predict = document.createElement("button");
+    predict.type = "button";
+    predict.className = "btn secondary";
+    predict.textContent = "Predict";
+    predict.addEventListener("click", () => {
+      runStarter(starter.id, "predict", output);
+    });
+    const train = document.createElement("button");
+    train.type = "button";
+    train.className = "btn primary";
+    train.textContent = "Train on this sample";
+    train.addEventListener("click", () => {
+      runStarter(starter.id, "train", output);
+    });
+    card.append(title, summary, predict, train, output);
+    host.append(card);
+  }
+}
+
+async function runStarter(starterId, action, output) {
+  try {
+    const result = await fetchJson(`/workspace/starters/${starterId}/${action}`, { method: "POST" });
+    output.textContent = JSON.stringify(result, null, 2);
+    clearNotice();
+    if (action === "train") refreshWorkspace().catch(reportError);
+  } catch (error) {
+    output.textContent = error.message;
+  }
+}
+
+function renderWorkspaceLists(datasets, models, predictions) {
+  const datasetList = document.getElementById("dataset-list");
+  const modelList = document.getElementById("model-list");
+  const predictionList = document.getElementById("prediction-list");
+  datasetList.replaceChildren();
+  modelList.replaceChildren();
+  predictionList.replaceChildren();
+  for (const dataset of datasets) {
+    const shared = dataset.shared ? "shared starter" : "private copy";
+    appendTextItem(datasetList, `${dataset.name} · ${shared} · ${dataset.bytes} bytes`);
+  }
+  if (!datasets.length) appendTextItem(datasetList, "No datasets yet.");
+  for (const model of models) {
+    const shared = model.shared ? "starter weights" : "your checkpoint";
+    appendTextItem(modelList, `${model.name} · ${shared}`);
+  }
+  if (!models.length) appendTextItem(modelList, "No models yet.");
+  for (const prediction of predictions) {
+    const value = prediction.result && prediction.result.prediction
+      ? JSON.stringify(prediction.result.prediction)
+      : "";
+    appendTextItem(predictionList, `${prediction.starter_id || prediction.model_id} ${value}`);
+  }
+  if (!predictions.length) appendTextItem(predictionList, "No saved predictions yet.");
+}
+
+async function refreshWorkspace() {
+  const [starters, datasets, models, predictions] = await Promise.all([
+    fetchJson("/workspace/starters"),
+    fetchJson("/workspace/datasets"),
+    fetchJson("/workspace/models"),
+    fetchJson("/workspace/predictions"),
+  ]);
+  renderWorkspace(starters);
+  renderWorkspaceLists(
+    datasets.datasets || [],
+    models.models || [],
+    predictions.predictions || []
+  );
+}
+
+async function refreshAccountAndWorkspace() {
+  try {
+    const me = await fetchJson("/auth/me");
+    showAccount(me);
+    const [training, experiments] = await Promise.all([
+      fetchJson("/training/status"),
+      fetchJson("/experiments?limit=50"),
+    ]);
+    state.training = training;
+    state.experiments = experiments.experiments || [];
+    try {
+      await refreshWorkspace();
+    } catch (workspaceError) {
+      if (workspaceError.status === 401) throw workspaceError;
+      renderWorkspace({ starters: [] });
+      renderWorkspaceLists([], [], []);
+    }
+  } catch (error) {
+    if (error.status === 401) {
+      showAccount(null);
+      state.training = { status: "idle", result: null };
+      state.experiments = [];
+      renderWorkspace({ starters: [] });
+      renderWorkspaceLists([], [], []);
+      return;
+    }
+    throw error;
+  }
+}
+
 async function refreshStatus() {
-  const [health, modelInfo, training, experiments, youneek] = await Promise.all([
+  const [health, modelInfo, youneek] = await Promise.all([
     fetchJson("/health"),
     fetchJson("/model/info"),
-    fetchJson("/training/status"),
-    fetchJson("/experiments?limit=50"),
     fetchJson("/youneek/now"),
   ]);
   state.health = health;
   state.modelInfo = modelInfo;
-  state.training = training;
-  state.experiments = experiments.experiments || [];
+  await refreshAccountAndWorkspace();
   const paths = await openapiPaths();
   state.comparisonRows = await fetchComparison(paths);
   renderStatus();
@@ -856,6 +1005,7 @@ async function refreshStatus() {
     state.selectedStamp = selected.updated_at;
     loadExperimentDetail(selected.id);
   }
+  const training = state.training || { status: "idle", result: null };
   if (!holdTrainingMessage) {
     document.getElementById("training-output").textContent = JSON.stringify(training, null, 2);
   }
@@ -1609,6 +1759,7 @@ document.getElementById("train-btn").addEventListener("click", async () => {
   try {
     const response = await fetch("/train", {
       method: "POST",
+      credentials: "same-origin",
       headers: trainingHeaders(),
       body: JSON.stringify({ config_path: "config/config.yaml" }),
     });
@@ -1643,6 +1794,107 @@ document.getElementById("train-btn").addEventListener("click", async () => {
     }, 1500);
   } catch (error) {
     output.textContent = error.message;
+  }
+});
+
+document.getElementById("sign-in-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  try {
+    await fetchJson("/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        email: form.email.value,
+        password: form.password.value,
+      }),
+    });
+    form.reset();
+    clearNotice();
+    await refreshStatus();
+  } catch (error) {
+    reportError(error);
+  }
+});
+
+document.getElementById("sign-up-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  try {
+    await fetchJson("/auth/signup", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        email: form.email.value,
+        password: form.password.value,
+      }),
+    });
+    form.reset();
+    clearNotice();
+    await refreshStatus();
+  } catch (error) {
+    reportError(error);
+  }
+});
+
+document.getElementById("sign-out-btn").addEventListener("click", async () => {
+  try {
+    await fetchJson("/auth/logout", { method: "POST" });
+    await refreshStatus();
+  } catch (error) {
+    reportError(error);
+  }
+});
+
+document.getElementById("dataset-upload-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const input = document.getElementById("dataset-file");
+  const file = input.files && input.files[0];
+  if (!file) {
+    reportError(new Error("Choose a CSV file first."));
+    return;
+  }
+  try {
+    const response = await fetch(
+      `/workspace/datasets?name=${encodeURIComponent(file.name || "dataset.csv")}`,
+      {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "text/csv" },
+        body: file,
+      }
+    );
+    const text = await response.text();
+    const data = text ? JSON.parse(text) : {};
+    if (!response.ok) {
+      const error = new Error(errorMessage(response, data, text));
+      error.status = response.status;
+      throw error;
+    }
+    input.value = "";
+    clearNotice();
+    await refreshWorkspace();
+  } catch (error) {
+    reportError(error);
+  }
+});
+
+document.getElementById("owner-sign-in-btn").addEventListener("click", async () => {
+  try {
+    const response = await fetch("/auth/owner", {
+      method: "POST",
+      credentials: "same-origin",
+      headers: trainingHeaders(),
+    });
+    const text = await response.text();
+    const data = text ? JSON.parse(text) : {};
+    if (!response.ok) {
+      throw new Error(errorMessage(response, data, text));
+    }
+    clearNotice();
+    await refreshStatus();
+  } catch (error) {
+    reportError(error);
   }
 });
 

@@ -29,6 +29,43 @@
       </header>
 
       <p id="notice" class="notice" role="alert"></p>
+      <section class="panel" id="account" aria-labelledby="account-heading">
+        <h2 id="account-heading">Account</h2>
+        <p id="account-summary" class="hint">
+          Sign in to open a private workspace. Shared forecasts, the lunar calendar,
+          and the near-Earth panels stay available either way.
+        </p>
+        <div id="account-signed-in" hidden>
+          <p id="account-label"></p>
+          <button id="sign-out-btn" class="btn secondary" type="button">Sign out</button>
+        </div>
+        <div id="account-signed-out" class="account-grid">
+          <form id="sign-in-form">
+            <h3>Sign in</h3>
+            <label for="sign-in-email">Email</label>
+            <input id="sign-in-email" name="email" type="email" autocomplete="username" required />
+            <label for="sign-in-password">Password</label>
+            <input id="sign-in-password" name="password" type="password" autocomplete="current-password" required />
+            <button class="btn primary" type="submit">Sign in</button>
+          </form>
+          <form id="sign-up-form">
+            <h3>Create an account</h3>
+            <label for="sign-up-email">Email</label>
+            <input id="sign-up-email" name="email" type="email" autocomplete="username" required />
+            <label for="sign-up-password">Password</label>
+            <input
+              id="sign-up-password"
+              name="password"
+              type="password"
+              autocomplete="new-password"
+              minlength="10"
+              required
+            />
+            <p class="hint">At least 10 characters. A new account gets its own sample datasets and models.</p>
+            <button class="btn primary" type="submit">Create account</button>
+          </form>
+        </div>
+      </section>
       <noscript>
         <p class="notice">The forecast dashboard needs JavaScript to load charts.</p>
       </noscript>
@@ -66,6 +103,39 @@
             </p>
             <div id="backtest-chart" class="chart-host"></div>
           </section>
+        </section>
+
+        <section class="panel" id="workspace" aria-labelledby="workspace-heading">
+          <h2 id="workspace-heading">My workspace</h2>
+          <p class="hint">
+            Datasets, templates, and models here belong to this account. Training
+            writes a private checkpoint. Shared starter files stay read-only.
+          </p>
+          <div id="getting-started">
+            <h3>Getting started</h3>
+            <p id="getting-started-note" class="hint">
+              Each sample is already loaded. Predict with the starter model, or train
+              on this sample to save your own.
+            </p>
+            <div id="starter-list" class="starter-list"></div>
+          </div>
+          <div class="split">
+            <div>
+              <h3>My datasets</h3>
+              <form id="dataset-upload-form">
+                <label for="dataset-file">Upload a CSV with a numeric value column</label>
+                <input id="dataset-file" type="file" accept=".csv,text/csv" />
+                <button class="btn secondary" type="submit">Upload</button>
+              </form>
+              <ul id="dataset-list"></ul>
+            </div>
+            <div>
+              <h3>My models</h3>
+              <ul id="model-list"></ul>
+              <h3>My predictions</h3>
+              <ul id="prediction-list"></ul>
+            </div>
+          </div>
         </section>
 
         <section class="panel" aria-labelledby="experiments-heading">
@@ -128,8 +198,12 @@
               placeholder="Only required when the server sets a token"
             />
             <p id="token-hint" class="hint">
-              Saved in this browser and sent with training requests.
+              Saved in this browser and sent with training requests. On a public server this
+              token is the owner account. Visitors use the account forms above.
             </p>
+            <button id="owner-sign-in-btn" class="btn secondary" type="button">
+              Sign in as owner with API token
+            </button>
             <button id="train-btn" class="btn primary" type="button">Start Training</button>
             <pre id="training-output" class="output"></pre>
           </div>

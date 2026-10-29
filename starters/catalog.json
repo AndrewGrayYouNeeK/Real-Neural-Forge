@@ -1,0 +1,58 @@
+{
+  "starters": [
+    {
+      "id": "weather",
+      "name": "Central Park temperature",
+      "summary": "A short NOAA sample of daily maximum temperature. Predict the next day, or train your own copy.",
+      "source": "Daily maximum temperature in \u00b0C at Central Park, NOAA GHCNd USW00094728, 2024-01-01 through 2024-06-30. Public-domain U.S. government work.",
+      "dataset": "starters/data/weather.csv",
+      "template": "starters/templates/weather.yaml",
+      "model": "starters/models/weather.pt"
+    },
+    {
+      "id": "stocks",
+      "name": "AAPL daily return",
+      "summary": "Recent AAPL daily log returns. The starter model forecasts the next return on this sample.",
+      "source": "Daily log return of AAPL from the public Yahoo Finance chart API. The sample is the latest 180 sessions in that download.",
+      "dataset": "starters/data/stocks.csv",
+      "template": "starters/templates/stocks.yaml",
+      "model": "starters/models/stocks.pt"
+    },
+    {
+      "id": "crypto",
+      "name": "Bitcoin daily return",
+      "summary": "Recent BTCUSDT daily log returns. The starter model forecasts the next return on this sample.",
+      "source": "Daily log return of BTCUSDT from the public Binance vision kline API. The sample is the latest 180 completed daily closes.",
+      "dataset": "starters/data/crypto.csv",
+      "template": "starters/templates/crypto.yaml",
+      "model": "starters/models/crypto.pt"
+    },
+    {
+      "id": "lottery",
+      "name": "Powerball sample",
+      "summary": "Recent Powerball numbers. This is a demo that the draw is close to chance, not a picker.",
+      "source": "Powerball number (1-26) from the NY Open Data resource d6yy-54nr. The sample is the latest 180 draws. It is not a way to pick numbers.",
+      "dataset": "starters/data/lottery.csv",
+      "template": "starters/templates/lottery.yaml",
+      "model": "starters/models/lottery.pt"
+    },
+    {
+      "id": "near-earth",
+      "name": "Near-Earth approaches",
+      "summary": "How many catalogued objects pass within 0.05 AU of Earth each day in the saved snapshot.",
+      "source": "Daily count of catalogued Earth approaches within 0.05 AU, taken from the committed JPL snapshot in space_snapshot/near_earth_events.csv.",
+      "dataset": "starters/data/near-earth.csv",
+      "template": "starters/templates/near-earth.yaml",
+      "model": "starters/models/near-earth.pt"
+    },
+    {
+      "id": "lunar",
+      "name": "Moon illumination",
+      "summary": "Computed moon illumination for 180 days. Predict the next fraction from the sample.",
+      "source": "Moon illumination fraction at 12:00 UTC, computed by src.data.lunar for the 180 days ending 2026-10-01.",
+      "dataset": "starters/data/lunar.csv",
+      "template": "starters/templates/lunar.yaml",
+      "model": "starters/models/lunar.pt"
+    }
+  ]
+}

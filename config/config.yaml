@@ -56,3 +56,20 @@ storage:
 forecast:
   horizon: 1
   strategy: direct
+
+# Caps for visitor accounts on the shared container. Environment variables
+# listed in the README override these numbers.
+limits:
+  max_dataset_bytes: 2000000
+  max_datasets_per_user: 12
+  max_config_bytes: 64000
+  max_epochs: 5
+  max_run_seconds: 90
+  max_samples: 512
+  max_seq_len: 32
+  global_queue_limit: 8
+  max_predictions_stored: 30
+  max_prediction_points: 512
+  max_checkpoint_bytes: 32000000
+  max_active_jobs_per_user: 1
+  max_batch_size: 32

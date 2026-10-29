@@ -5,7 +5,6 @@ import json
 import logging
 import math
 import os
-import secrets
 from contextlib import asynccontextmanager
 from datetime import date
 from pathlib import Path
@@ -13,7 +12,7 @@ from typing import Any, cast
 
 import torch
 import yaml
-from fastapi import BackgroundTasks, FastAPI, Header, HTTPException, Query
+from fastapi import BackgroundTasks, FastAPI, Header, HTTPException, Query, Request
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -37,6 +36,20 @@ from src.storage.experiments import ExperimentStore, db_path_from_config
 from src.training.trainer import TimeSeriesTrainer
 from src.utils.config import load_config
 from src.utils.paths import REPO_ROOT, resolve_repo_path
+from src.workspace.errors import WorkspaceError
+from src.workspace.routes import router as workspace_router
+from src.workspace.runtime import runtime
+from src.workspace.service import (
+    enqueue_member_config,
+    member_experiment_detail,
+    member_experiments,
+    member_training_view,
+    prepare_workspace,
+    resolve_actor,
+    run_queue,
+    training_active,
+    watch_authorized,
+)
 from src.youneek import parse_moment, snapshot
 
 logger = logging.getLogger("uvicorn.error")
@@ -110,6 +123,7 @@ def load_model(config_path: str | Path = "config/config.yaml") -> None:
     _state["config"] = cfg
     _state["training"] = {"status": "idle", "result": None}
     _store = ExperimentStore(db_path_from_config(cfg))
+    runtime.config = cfg
 
 
 def _json_ready(value: Any) -> Any:
@@ -188,25 +202,58 @@ def _restore_training_status() -> None:
         _state["training"] = {"status": status, "result": result}
 
 
+def _owner_training_busy() -> bool:
+    training = _state.get("training")
+    return isinstance(training, dict) and training.get("status") == "running"
+
+
+def _actor_or_http(request: Request, authorization: str | None):
+    try:
+        return resolve_actor(request, authorization)
+    except WorkspaceError as exc:
+        headers = {"WWW-Authenticate": "Bearer"} if exc.status == 401 else None
+        raise HTTPException(
+            status_code=exc.status, detail=exc.detail, headers=headers
+        ) from exc
+
+
+def _workspace_http(exc: WorkspaceError) -> HTTPException:
+    headers = {"WWW-Authenticate": "Bearer"} if exc.status == 401 else None
+    return HTTPException(status_code=exc.status, detail=exc.detail, headers=headers)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):  # noqa: ARG001
     load_model(os.environ.get(CONFIG_ENV, "config/config.yaml"))
     _restore_training_status()
+    prepare_workspace(
+        _state.get("config") if isinstance(_state.get("config"), dict) else None
+    )
+    runtime.owner_busy = _owner_training_busy
     ensure_space_snapshot()
     stop = asyncio.Event()
+    queue_stop = asyncio.Event()
     task: asyncio.Task[None] | None = None
+    queue_task: asyncio.Task[None] | None = None
     if space_refresh_enabled():
         task = asyncio.create_task(space_refresh_loop(stop))
+    if os.environ.get("NEURAL_FORGE_QUEUE_RUNNER", "1").strip() != "0":
+        queue_task = asyncio.create_task(run_queue(queue_stop))
     try:
         yield
     finally:
         stop.set()
-        if task is not None:
-            task.cancel()
+        queue_stop.set()
+        for background in (task, queue_task):
+            if background is None:
+                continue
+            background.cancel()
             try:
-                await asyncio.wait_for(task, timeout=5)
+                await asyncio.wait_for(background, timeout=5)
             except (TimeoutError, asyncio.CancelledError):
                 pass
+        runtime.store = None
+        runtime.member_job_id = None
         _state.clear()
 
 
@@ -219,6 +266,8 @@ app = FastAPI(
 
 if FRONTEND_DIR.exists():
     app.mount("/assets", StaticFiles(directory=FRONTEND_DIR), name="assets")
+
+app.include_router(workspace_router)
 
 
 class PredictRequest(BaseModel):
@@ -416,8 +465,15 @@ def _require_store() -> ExperimentStore:
 
 
 @app.get("/experiments", tags=["experiments"])
-def list_experiments(limit: int = Query(20, ge=1, le=500)) -> dict[str, Any]:
-    return {"experiments": _require_store().list_experiments(limit=limit)}
+def list_experiments(
+    request: Request,
+    limit: int = Query(20, ge=1, le=500),
+    authorization: str | None = Header(default=None),
+) -> dict[str, Any]:
+    actor = _actor_or_http(request, authorization)
+    if actor.is_owner:
+        return {"experiments": _require_store().list_experiments(limit=limit)}
+    return {"experiments": member_experiments(actor, limit)}
 
 
 POWERBALL_SCORECARD = "predictions/powerball/scorecard.json"
@@ -528,14 +584,35 @@ def series_recent(points: int = Query(96, ge=8, le=400)) -> dict[str, Any]:
 
 @app.get("/experiments/{experiment_id}/predictions", tags=["experiments"])
 def experiment_predictions(
-    experiment_id: int,
+    experiment_id: str,
+    request: Request,
     limit: int = Query(200, ge=1, le=2000),
+    authorization: str | None = Header(default=None),
 ) -> dict[str, Any]:
-    """Stored validation predictions, or a replay from the run's checkpoint."""
-    payload = validation_predictions(_require_store(), experiment_id, limit=limit)
-    if payload is None:
+    """Stored validation predictions, or a replay from the run's checkpoint.
+
+    Integer ids are the owner's legacy runs. A visitor asking for one of those
+    ids gets 404, the same as an unknown id.
+    """
+    actor = _actor_or_http(request, authorization)
+    if experiment_id.isdigit():
+        if not actor.is_owner:
+            raise HTTPException(status_code=404, detail="Experiment not found.")
+        payload = validation_predictions(
+            _require_store(), int(experiment_id), limit=limit
+        )
+        if payload is None:
+            raise HTTPException(status_code=404, detail="Experiment not found.")
+        return payload
+    detail = member_experiment_detail(actor, experiment_id)
+    if detail is None:
         raise HTTPException(status_code=404, detail="Experiment not found.")
-    return payload
+    return {
+        "available": False,
+        "note": "Workspace runs store metrics on the job.",
+        "points": [],
+        "experiment_id": experiment_id,
+    }
 
 
 def _comparison_models(metrics: dict[str, Any]) -> list[dict[str, Any]]:
@@ -556,12 +633,14 @@ def _comparison_models(metrics: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 @app.get("/comparison", tags=["evaluation"])
-def latest_comparison() -> dict[str, Any]:
-    """Latest ``python -m src.compare`` result already stored for this config.
-
-    This does not fit a new model. The dashboard reads ``models`` as rows with
-    ``name`` and ``mae`` / ``rmse`` / ``mse``.
-    """
+def latest_comparison(
+    request: Request,
+    authorization: str | None = Header(default=None),
+) -> dict[str, Any]:
+    """Latest stored comparison for the owner. Visitors get an empty list."""
+    actor = _actor_or_http(request, authorization)
+    if not actor.is_owner:
+        return {"models": []}
     experiments = _require_store().list_experiments(limit=200)
     for experiment in experiments:
         if experiment.get("model_name") != "comparison":
@@ -585,39 +664,45 @@ def latest_comparison() -> dict[str, Any]:
 
 
 @app.get("/experiments/{experiment_id}", tags=["experiments"])
-def get_experiment(experiment_id: int) -> dict[str, Any]:
-    store = _require_store()
-    experiment = store.get_experiment(experiment_id)
-    if experiment is None:
+def get_experiment(
+    experiment_id: str,
+    request: Request,
+    authorization: str | None = Header(default=None),
+) -> dict[str, Any]:
+    actor = _actor_or_http(request, authorization)
+    if experiment_id.isdigit():
+        if not actor.is_owner:
+            raise HTTPException(status_code=404, detail="Experiment not found.")
+        store = _require_store()
+        numeric_id = int(experiment_id)
+        experiment = store.get_experiment(numeric_id)
+        if experiment is None:
+            raise HTTPException(status_code=404, detail="Experiment not found.")
+        experiment["metric_history"] = store.get_metrics(numeric_id)
+        return experiment
+    detail = member_experiment_detail(actor, experiment_id)
+    if detail is None:
         raise HTTPException(status_code=404, detail="Experiment not found.")
-    experiment["metric_history"] = store.get_metrics(experiment_id)
-    return experiment
+    return detail
 
 
 @app.get("/training/status", tags=["training"])
-def training_status() -> dict[str, Any]:
-    default: dict[str, Any] = {"status": "idle", "result": None}
-    training = _state.get("training")
-    return training if training is not None else default
-
-
-def _configured_api_token() -> str | None:
-    raw = os.environ.get(API_TOKEN_ENV, "").strip()
-    return raw or None
-
-
-def _authorize_training(authorization: str | None) -> None:
-    expected = _configured_api_token()
-    if expected is None:
-        return
-    scheme, _, provided = (authorization or "").partition(" ")
-    token = provided.strip()
-    if scheme.lower() != "bearer" or not secrets.compare_digest(token, expected):
-        raise HTTPException(
-            status_code=401,
-            detail="Invalid or missing API token.",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
+def training_status(
+    request: Request,
+    authorization: str | None = Header(default=None),
+    x_neural_forge_watch: str | None = Header(default=None),
+) -> dict[str, Any]:
+    # The container Durable Object polls this URL on localhost to stay awake.
+    # The public Worker strips the watch header, so visitors cannot use it.
+    if watch_authorized(request.headers.get("host", ""), x_neural_forge_watch):
+        status = "running" if training_active() else "idle"
+        return {"status": status, "result": None}
+    actor = _actor_or_http(request, authorization)
+    if actor.is_owner:
+        default: dict[str, Any] = {"status": "idle", "result": None}
+        training = _state.get("training")
+        return training if training is not None else default
+    return member_training_view(actor)
 
 
 def _training_enabled() -> bool:
@@ -637,16 +722,38 @@ def _training_enabled() -> bool:
 def start_training(
     body: TrainRequest,
     background_tasks: BackgroundTasks,
+    request: Request,
     authorization: str | None = Header(default=None),
 ) -> TrainResponse:
-    _authorize_training(authorization)
+    actor = _actor_or_http(request, authorization)
     if not _training_enabled():
         raise HTTPException(
             status_code=403,
             detail="Training is disabled. Set api.training_enabled to true to allow it.",
         )
     config_path = resolve_train_config(body.config_path)
-    if _state.get("training", {}).get("status") == "running":
+    if not actor.is_owner:
+        # Visitors never enter the owner's checkpoint path. The queue writes a
+        # private checkpoint and leaves checkpoints/best_model.pt alone.
+        try:
+            queued = enqueue_member_config(
+                actor,
+                base_config=str(config_path),
+                config=_state.get("config")
+                if isinstance(_state.get("config"), dict)
+                else None,
+            )
+        except WorkspaceError as exc:
+            raise _workspace_http(exc) from exc
+        return TrainResponse(
+            status=str(queued.get("status", "queued")),
+            message="Training queued for this account.",
+        )
+    if _owner_training_busy() or (
+        runtime.store is not None and runtime.store.has_pending_jobs()
+    ):
+        raise HTTPException(status_code=409, detail="Training already in progress.")
+    if runtime.member_job_id:
         raise HTTPException(status_code=409, detail="Training already in progress.")
 
     background_tasks.add_task(_run_training, str(config_path))

@@ -43,8 +43,32 @@ def test_container_worker_is_not_a_dashboard_worker():
     assert config["vars"]["NEURAL_FORGE_CHECKPOINT_URL"].endswith(
         "/champion-default.pt"
     )
+    assert config["workers_dev"] is True
+    assert config["vars"]["NEURAL_FORGE_STORAGE"] == "cloudflare"
+    assert config["d1_databases"][0]["binding"] == "WORKSPACES_DB"
+    assert config["d1_databases"][0]["database_name"] == "neural-forge-workspaces"
+    assert config["d1_databases"][0]["migrations_dir"] == "migrations"
+    assert config["r2_buckets"][0]["binding"] == "WORKSPACES"
+    assert config["r2_buckets"][0]["bucket_name"] == "neural-forge-workspaces"
+    hostnames = {route["pattern"]: route for route in config["routes"]}
+    assert hostnames["forge.youneek.xyz"]["custom_domain"] is True
+    assert hostnames["forge.youneek.xyz"]["zone_name"] == "youneek.xyz"
+    assert hostnames["forge.youneek.dev"]["custom_domain"] is True
+    assert hostnames["forge.youneek.dev"]["zone_name"] == "youneek.dev"
     worker = (ROOT / "deploy" / "cloudflare" / "src" / "index.ts").read_text()
     assert "NEURAL_FORGE_API_TOKEN" in worker
+    assert "X-Forwarded-Host" in worker
+    assert "X-Forwarded-Proto" in worker
+    assert 'headers.delete("X-Neural-Forge-Watch")' in worker
+    assert "/_bindings/sql" in worker
+    assert "/_bindings/object" in worker
+    assert "WORKSPACES_DB" in worker
+    assert "Set-Cookie" not in worker
+    schema = (ROOT / "src" / "workspace" / "schema.sql").read_text(encoding="utf-8")
+    migration = (
+        ROOT / "deploy" / "cloudflare" / "migrations" / "0001_workspaces.sql"
+    ).read_text(encoding="utf-8")
+    assert schema == migration
     assert "localhost/health" in worker
     assert "defaultPort = 8000" in worker
     assert 'sleepAfter = "10m"' in worker

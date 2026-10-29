@@ -30,8 +30,39 @@
   "migrations": [
     { "tag": "v1", "new_sqlite_classes": ["NeuralForgeContainer"] }
   ],
+  // workers.dev stays on. Custom hostnames are additional routes.
+  "workers_dev": true,
+  "routes": [
+    {
+      "pattern": "forge.youneek.xyz",
+      "zone_name": "youneek.xyz",
+      "custom_domain": true
+    },
+    {
+      "pattern": "forge.youneek.dev",
+      "zone_name": "youneek.dev",
+      "custom_domain": true
+    }
+  ],
+  "d1_databases": [
+    {
+      "binding": "WORKSPACES_DB",
+      "database_name": "neural-forge-workspaces",
+      "database_id": "REPLACE_WITH_D1_DATABASE_ID",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "WORKSPACES",
+      "bucket_name": "neural-forge-workspaces"
+    }
+  ],
   "vars": {
     "NEURAL_FORGE_CONFIG": "config/config.yaml",
-    "NEURAL_FORGE_CHECKPOINT_URL": "https://github.com/AndrewGrayYouNeeK/Real-Neural-Forge/releases/download/champions/champion-default.pt"
+    "NEURAL_FORGE_CHECKPOINT_URL": "https://github.com/AndrewGrayYouNeeK/Real-Neural-Forge/releases/download/champions/champion-default.pt",
+    "NEURAL_FORGE_STORAGE": "cloudflare",
+    "NEURAL_FORGE_BINDINGS_URL": "https://real-neural-forge-api.youneekartifacts.workers.dev",
+    "NEURAL_FORGE_OWNER_EMAIL": "andrew@youneek.xyz"
   }
 }
