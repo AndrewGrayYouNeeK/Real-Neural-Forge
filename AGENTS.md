@@ -40,9 +40,12 @@ Standard commands are documented in `README.md`; run them via the venv:
   first when it is set. If `checkpoints/best_model.pt` is missing and that variable is
   unset, the server uses an **untrained** model (predictions are effectively random) and
   `/model/info` reports `checkpoint_loaded: false`.
-- `deploy/cloudflare/` is the Containers Worker `real-neural-forge-api`. Do not add a
-  root `wrangler.jsonc`; `workers_ci` writes that file only when
-  `WRANGLER_CI_OVERRIDE_NAME` is set, for the `real-neural-forge` and `youneek-xyz`
-  dashboard builds.
+- `deploy/cloudflare/` is the Containers Worker `real-neural-forge-api`. It is
+  the only Worker that may route `forge.youneek.xyz` and `forge.youneek.dev`.
+  Do not add a root `wrangler.jsonc`; `workers_ci` writes that file only when
+  `WRANGLER_CI_OVERRIDE_NAME` is set. A value of `youneek-xyz` is rewritten to
+  `real-neural-forge-frontend` and must not gain routes for `youneek.xyz`,
+  `www.youneek.xyz`, `forge.youneek.xyz`, or `forge.youneek.dev`. Never deploy
+  this repo as the Worker `youneek-xyz`.
 - The dashboard is served by the same FastAPI process at `/`; static assets are mounted at
   `/assets`. No separate frontend build/server is needed.

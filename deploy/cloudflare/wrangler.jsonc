@@ -1,7 +1,9 @@
 {
   // Separate Worker from the dashboard Workers `real-neural-forge` and
-  // `youneek-xyz`. Keep this file in deploy/cloudflare/. A wrangler config at
-  // the repository root would change those Workers Builds.
+  // `real-neural-forge-frontend`. This file is the only place that may route
+  // forge.youneek.xyz and forge.youneek.dev. Keep it in deploy/cloudflare/.
+  // A wrangler config at the repository root would change the dashboard builds.
+  // Never name a Worker in this repo youneek-xyz.
   "$schema": "./node_modules/wrangler/config-schema.json",
   "name": "real-neural-forge-api",
   "main": "src/index.ts",
@@ -48,7 +50,7 @@
     {
       "binding": "WORKSPACES_DB",
       "database_name": "neural-forge-workspaces",
-      "database_id": "REPLACE_WITH_D1_DATABASE_ID",
+      "database_id": "13f8ec26-e2a0-41a6-b49d-a4ba4623082a",
       "migrations_dir": "migrations"
     }
   ],
@@ -62,7 +64,7 @@
     "NEURAL_FORGE_CONFIG": "config/config.yaml",
     "NEURAL_FORGE_CHECKPOINT_URL": "https://github.com/AndrewGrayYouNeeK/Real-Neural-Forge/releases/download/champions/champion-default.pt",
     "NEURAL_FORGE_STORAGE": "cloudflare",
-    "NEURAL_FORGE_BINDINGS_URL": "https://real-neural-forge-api.youneekartifacts.workers.dev",
+    "NEURAL_FORGE_BINDINGS_URL": "http://bindings.neuralforge",
     "NEURAL_FORGE_OWNER_EMAIL": "andrew@youneek.xyz"
   }
 }

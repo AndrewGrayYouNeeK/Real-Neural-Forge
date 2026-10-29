@@ -1,8 +1,11 @@
 """HTTP client for the Worker D1 and R2 binding proxy.
 
-The container cannot hold D1 or R2 bindings itself. It calls back to the
-Worker at ``NEURAL_FORGE_BINDINGS_URL``. Those routes never forward into the
-container, so a storage call cannot deadlock the request that triggered it.
+The container cannot hold D1 or R2 bindings itself. Production calls
+``http://bindings.neuralforge``, which the Worker intercepts with
+``outboundByHost`` and answers from the bindings. That request does not travel
+over the public workers.dev URL. A public fallback still sends
+``User-Agent: NeuralForge-Container/1.0`` because Cloudflare error 1010 bans
+the default Python-urllib agent.
 """
 
 from __future__ import annotations
@@ -18,6 +21,15 @@ from src.workspace.keys import valid_object_key
 
 class StorageError(Exception):
     """The binding proxy rejected a storage call."""
+
+
+# Cloudflare error 1010 blocks the default Python-urllib user agent on
+# workers.dev. Every binding call sends this name instead.
+USER_AGENT = "NeuralForge-Container/1.0"
+# Virtual hostname. The container Worker intercepts it with outboundByHost
+# and serves D1/R2 directly, so the request never touches the public URL.
+BINDINGS_HOST = "bindings.neuralforge"
+BINDINGS_URL = f"http://{BINDINGS_HOST}"
 
 
 class BindingTransport:
@@ -41,6 +53,8 @@ class BindingTransport:
         }
         if headers:
             request_headers.update(headers)
+        # Set this last so a caller cannot put the banned default agent back.
+        request_headers["User-Agent"] = USER_AGENT
         request = urllib.request.Request(
             self.base_url + path,
             data=data,

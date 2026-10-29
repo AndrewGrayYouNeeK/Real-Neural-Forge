@@ -1,7 +1,9 @@
 # Cloudflare Containers front door
 
 This directory is a Worker named `real-neural-forge-api`. It is not the
-dashboard Worker `real-neural-forge` or `youneek-xyz`.
+dashboard Worker `real-neural-forge` or `real-neural-forge-frontend`.
+Do not deploy this repository as `youneek-xyz`. `forge.youneek.xyz` and
+`forge.youneek.dev` are routes only in this directory.
 
 The live API is https://real-neural-forge-api.youneekartifacts.workers.dev.
 `wrangler.jsonc` pins `main-<sha>` in the Cloudflare registry. It does not
