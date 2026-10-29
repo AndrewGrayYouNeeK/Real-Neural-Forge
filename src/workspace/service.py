@@ -895,16 +895,23 @@ def member_experiment_detail(actor: Actor, experiment_id: str) -> dict[str, Any]
 
 
 async def run_queue(stop: asyncio.Event) -> None:
-    """Pull the global queue one job at a time."""
+    """Pull the global queue one job at a time.
+
+    The pause is ``asyncio.sleep``, not ``asyncio.wait_for``. On Python 3.10,
+    cancelling ``wait_for`` raises ``asyncio.TimeoutError`` instead of
+    ``CancelledError``, which keeps this task alive through shutdown.
+    """
     while not stop.is_set():
         try:
             await _queue_tick()
+        except asyncio.CancelledError:
+            raise
         except Exception:
             logger.exception("Workspace queue tick failed")
-        try:
-            await asyncio.wait_for(stop.wait(), timeout=1.0)
-        except TimeoutError:
-            continue
+        for _ in range(10):
+            if stop.is_set():
+                return
+            await asyncio.sleep(0.1)
 
 
 async def _queue_tick() -> None:

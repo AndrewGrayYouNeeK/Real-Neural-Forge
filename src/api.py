@@ -250,7 +250,7 @@ async def lifespan(app: FastAPI):  # noqa: ARG001
             background.cancel()
             try:
                 await asyncio.wait_for(background, timeout=5)
-            except (TimeoutError, asyncio.CancelledError):
+            except (TimeoutError, asyncio.TimeoutError, asyncio.CancelledError):
                 pass
         runtime.store = None
         runtime.member_job_id = None
