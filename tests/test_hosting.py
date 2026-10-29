@@ -5,7 +5,7 @@ import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-DASHBOARD_WORKERS = {"real-neural-forge", "youneek-xyz"}
+DASHBOARD_WORKERS = {"real-neural-forge", "real-neural-forge-frontend"}
 
 
 def _load_jsonc(path: Path) -> dict:
@@ -47,6 +47,10 @@ def test_container_worker_is_not_a_dashboard_worker():
     assert config["vars"]["NEURAL_FORGE_STORAGE"] == "cloudflare"
     assert config["d1_databases"][0]["binding"] == "WORKSPACES_DB"
     assert config["d1_databases"][0]["database_name"] == "neural-forge-workspaces"
+    assert config["d1_databases"][0]["database_id"] == (
+        "13f8ec26-e2a0-41a6-b49d-a4ba4623082a"
+    )
+    assert config["vars"]["NEURAL_FORGE_BINDINGS_URL"] == "http://bindings.neuralforge"
     assert config["d1_databases"][0]["migrations_dir"] == "migrations"
     assert config["r2_buckets"][0]["binding"] == "WORKSPACES"
     assert config["r2_buckets"][0]["bucket_name"] == "neural-forge-workspaces"
@@ -62,6 +66,10 @@ def test_container_worker_is_not_a_dashboard_worker():
     assert 'headers.delete("X-Neural-Forge-Watch")' in worker
     assert "/_bindings/sql" in worker
     assert "/_bindings/object" in worker
+    assert "bindings.neuralforge" in worker
+    assert "outboundByHost" in worker
+    assert "ContainerProxy" in worker
+    assert "youneek-xyz" not in worker
     assert "WORKSPACES_DB" in worker
     assert "Set-Cookie" not in worker
     schema = (ROOT / "src" / "workspace" / "schema.sql").read_text(encoding="utf-8")

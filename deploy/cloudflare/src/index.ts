@@ -1,4 +1,10 @@
-import { Container, getContainer, type State } from "@cloudflare/containers";
+import { Container, ContainerProxy, getContainer, type State } from "@cloudflare/containers";
+
+export { ContainerProxy };
+
+// The container calls http://bindings.neuralforge/_bindings/... . That host
+// never leaves the Worker: outboundByHost runs here with the D1 and R2
+// bindings, so signup does not depend on a public workers.dev round trip.
 
 // Hand-written to match wrangler.jsonc. `npx wrangler types` can replace it.
 interface D1Prepared {
@@ -78,6 +84,7 @@ const CONTAINER_ENV_KEYS = [
 ] as const;
 
 // Binding uploads stop here even if a limit env var is set higher.
+const BINDINGS_HOST = "bindings.neuralforge";
 const BINDING_OBJECT_BYTES = 64 * 1024 * 1024;
 const OBJECT_KEY = /^((bases\/starters\/[a-z0-9-]+\/(dataset\.csv|model\.pt))|(users\/[A-Za-z0-9_]+\/(datasets|models)\/[A-Za-z0-9_.-]+))$/;
 
@@ -95,12 +102,16 @@ type ContainerStatus = State["status"];
 
 function containerEnv(env: Env): Record<string, string> {
   const source = env as unknown as Record<string, string | undefined>;
-  return Object.fromEntries(
+  const vars = Object.fromEntries(
     CONTAINER_ENV_KEYS.flatMap((key) => {
       const value = source[key];
       return typeof value === "string" && value.length > 0 ? [[key, value]] : [];
     }),
   );
+  if (!vars.NEURAL_FORGE_BINDINGS_URL) {
+    vars.NEURAL_FORGE_BINDINGS_URL = `http://${BINDINGS_HOST}`;
+  }
+  return vars;
 }
 
 export class NeuralForgeContainer extends Container<Env> {
@@ -372,6 +383,12 @@ async function handleObject(request: Request, env: Env): Promise<Response> {
   }
   return Response.json({ error: "Method not allowed." }, { status: 405 });
 }
+
+// Intercept the container's binding calls before they can reach the public
+// internet. ContainerProxy must be exported for this to run.
+NeuralForgeContainer.outboundByHost = {
+  [BINDINGS_HOST]: (request: Request, env: Env) => handleBindings(request, env),
+};
 
 function forwardedRequest(request: Request): Request {
   const url = new URL(request.url);

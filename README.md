@@ -490,11 +490,11 @@ GitHub is the home for this project:
 | CI (test, lint, typecheck, Docker build) | [GitHub Actions CI](https://github.com/AndrewGrayYouNeeK/Real-Neural-Forge/actions/workflows/ci.yml) |
 | Published image | `ghcr.io/andrewgrayyouneek/real-neural-forge` |
 | Run the published image | `docker compose -f docker-compose.ghcr.yml up` |
-| Cloudflare Workers | `real-neural-forge` and `youneek-xyz` |
+| Cloudflare Workers | `real-neural-forge` and `real-neural-forge-frontend` |
 
 Tagged releases (`vX.Y.Z`) publish matching image tags after CI passes on that tag. Run the container on any host with Docker.
 
-Cloudflare Workers builds this repository for `real-neural-forge` and `youneek-xyz`. Each build sets `WRANGLER_CI_OVERRIDE_NAME`. Installing the locked dependencies runs the editable `workers_ci` hook, which writes `wrangler.jsonc` for that Worker and points assets at `frontend/`. Installs that do not set the variable, including the Docker image build, leave the tree unchanged. Do not commit a `wrangler.jsonc` at the repository root, and do not point those two Workers Builds at `deploy/cloudflare/`. That directory is a different Worker, `real-neural-forge-api`, described below.
+Cloudflare Workers builds this repository for `real-neural-forge` and, if a build still sets `WRANGLER_CI_OVERRIDE_NAME=youneek-xyz`, for `real-neural-forge-frontend`. The hook never writes a Worker named `youneek-xyz`, and the generated config has no routes, so a push cannot deploy Andrew's portfolio or claim `youneek.xyz`, `www.youneek.xyz`, `forge.youneek.xyz`, or `forge.youneek.dev`. Installing the locked dependencies runs the editable `workers_ci` hook, which writes `wrangler.jsonc` for that Worker and points assets at `frontend/`. Installs that do not set the variable, including the Docker image build, leave the tree unchanged. Do not commit a `wrangler.jsonc` at the repository root, and do not point those Workers Builds at `deploy/cloudflare/`. That directory is a different Worker, `real-neural-forge-api`, described below. `forge.youneek.xyz` and `forge.youneek.dev` are routes only on `real-neural-forge-api`.
 
 `vercel.json` stays so a leftover Vercel GitHub app cannot auto-deploy this repository. The running app is the container image above.
 
@@ -549,7 +549,7 @@ Plan: **Workers Paid** ($5 USD per month). Containers are not available on the f
 
 Instance: `standard-1` (1/2 vCPU, 4 GiB RAM, 8 GB disk) with `max_instances` 1. The CPU PyTorch image does not fit `lite` (256 MiB) or reliably fit `basic` (1 GiB). The container sleeps after 10 minutes with no requests, which stops compute charges until the next request. Memory is billed from the provisioned size while the instance is awake. A `POST /train` that starts a job, or returns 409 because one is already running, arms a schedule inside the container Durable Object. Every three minutes that schedule renews the activity timeout and reads `GET /training/status`. It keeps scheduling while the status is `running`, so the instance stays awake for the whole run, then the 10-minute idle timeout applies again.
 
-The Worker name is `real-neural-forge-api`. Leave the existing Workers Builds for `real-neural-forge` and `youneek-xyz` on the repository root so they keep publishing `frontend/`.
+The Worker name is `real-neural-forge-api`. Leave the Workers Build for `real-neural-forge` on the repository root so it keeps publishing `frontend/`. Do not connect a build that deploys `youneek-xyz`. If that build is still connected, the hook renames it to `real-neural-forge-frontend` and gives it no custom domains.
 
 GHCR is not a registry Containers pulls from directly. The Worker config pins one image tag. It does not follow `:latest`. The pin in `deploy/cloudflare/wrangler.jsonc` is `registry.cloudflare.com/d74b0de637f4d9d9eb3efb9e13142784/real-neural-forge:main-6ce3b6f`. Account id `d74b0de637f4d9d9eb3efb9e13142784` is the Cloudflare account that owns the Worker. The `migrations` entry `v1` created the SQLite Durable Object class `NeuralForgeContainer`. Leave that entry in the file. Add a new tag only when that class's storage changes. Do not add a Durable Object `exports` entry beside it. Current Wrangler rejects `migrations` and `exports` together. The class is still exported from `deploy/cloudflare/src/index.ts`, and the container binds it by `class_name`.
 
@@ -591,7 +591,7 @@ npx wrangler secret put NEURAL_FORGE_CHECKPOINT_TOKEN
 | `NEURAL_FORGE_API_TOKEN` | Yes on a public URL | Owner account. Bearer token for the owner's `POST /train` and for `POST /auth/owner`. Visitors use email and password instead. If it is unset, the process is the local owner and `POST /train` stays open. |
 | `NEURAL_FORGE_STORAGE_SECRET` | Yes when `NEURAL_FORGE_STORAGE` is `cloudflare` | Shared secret for the container to call the Worker's D1/R2 proxy at `/_bindings/*`. Use a long random string. It is not a visitor password. |
 | `NEURAL_FORGE_STORAGE` | Set in `wrangler.jsonc` `vars` | `cloudflare` in production. The container then refuses to keep visitor workspaces only on its disk. Unset or `local` uses SQLite for development. |
-| `NEURAL_FORGE_BINDINGS_URL` | Set in `wrangler.jsonc` `vars` | Worker origin the container calls for D1 and R2. The shipped value is `https://real-neural-forge-api.youneekartifacts.workers.dev`. |
+| `NEURAL_FORGE_BINDINGS_URL` | Set in `wrangler.jsonc` `vars` | Where the container calls for D1 and R2. The shipped value is `http://bindings.neuralforge`. The Worker intercepts that host with `outboundByHost` and uses the D1 and R2 bindings directly. It is not a public URL. |
 | `NEURAL_FORGE_OWNER_EMAIL` | No | Email reserved for the owner row. Default `andrew@youneek.xyz`. |
 | `NEURAL_FORGE_CHECKPOINT_TOKEN` | Only when the champions release is private | GitHub fine-grained PAT with contents read. Sent only to `github.com`, `api.github.com`, and `uploads.github.com`. Omit it for a public release. |
 | `NEURAL_FORGE_CHECKPOINT_URL` | Before the first real deploy | Set in `wrangler.jsonc` `vars`, not as a secret. Startup fails when this is set and the download fails, so run **Retrain champions** once before the first deploy (or clear the URL to boot an untrained model). |
@@ -599,13 +599,13 @@ npx wrangler secret put NEURAL_FORGE_CHECKPOINT_TOKEN
 | `NEURAL_FORGE_CHECKPOINT_PATH` | No | Where the file is saved. Default is `inference.checkpoint_path`. |
 | `NEURAL_FORGE_CHECKPOINT_MAX_BYTES` | No | Download cap. Default 256 MiB. |
 
-The container needs outbound internet so it can download the champion and, on Cloudflare, so it can call the Worker binding proxy.
+The container needs outbound internet so it can download the champion. D1 and R2 calls stay inside the Worker: the container requests `http://bindings.neuralforge`, and `outboundByHost` serves those paths with the bindings.
 
 Sessions use a host-only cookie named `nf_session` (`HttpOnly`, `SameSite=Lax`, `Secure` on HTTPS, no `Domain` attribute). A sign-in on `forge.youneek.xyz` is not sent to `forge.youneek.dev` or to the workers.dev host. The Worker sets `X-Forwarded-Proto` and `X-Forwarded-Host` from the public URL and strips any client-supplied `X-Neural-Forge-Watch` header before the request reaches the container.
 
 ### Accounts, isolation, and starter kits
 
-Visitor rows (users, sessions, datasets, configs, models, jobs, predictions) live in D1 database `neural-forge-workspaces`. Dataset and checkpoint bytes live in R2 bucket `neural-forge-workspaces`. The Worker's `/_bindings/sql` and `/_bindings/object` routes are the only way the container reaches those bindings, and they require `NEURAL_FORGE_STORAGE_SECRET`. They are not forwarded into the container.
+Visitor rows (users, sessions, datasets, configs, models, jobs, predictions) live in D1 database `neural-forge-workspaces` (`13f8ec26-e2a0-41a6-b49d-a4ba4623082a`). Dataset and checkpoint bytes live in R2 bucket `neural-forge-workspaces`. The container reaches them by calling `http://bindings.neuralforge/_bindings/sql` and `/_bindings/object`. The Worker intercepts that hostname and uses the D1 and R2 bindings. Those calls require `NEURAL_FORGE_STORAGE_SECRET` and send `User-Agent: NeuralForge-Container/1.0`. They are not forwarded into the container, and they do not go out to workers.dev.
 
 The owner's existing experiment database, champion checkpoints, and public forecast stay where they are. The API token authenticates as that owner. New accounts do not read or write those files.
 
