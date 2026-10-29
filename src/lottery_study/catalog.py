@@ -19,6 +19,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from src.data.lunar import LUNAR_MODEL_COLUMNS
+
 
 @dataclass(frozen=True)
 class DatasetCandidate:
@@ -65,6 +67,20 @@ def dataset_catalog() -> tuple[DatasetCandidate, ...]:
             value_columns=("temperature_c", "doy_sin", "doy_cos"),
             fetcher="src.data.weather:fetch_weather",
             display_name="Weather",
+        ),
+        DatasetCandidate(
+            dataset_id="lunar",
+            group="environment",
+            description=(
+                "Moon phase, illumination, Chinese lunar month, perigee, and "
+                "geometric eclipse flags at 12:00 UTC. Computed offline. The "
+                "phase of a draw date is known before the 22:59 ET draw."
+            ),
+            modules=("src.data.lunar",),
+            csv_candidates=(),
+            availability="same_day_before_draw",
+            value_columns=LUNAR_MODEL_COLUMNS,
+            display_name="Lunar calendar",
         ),
         # Markets. Same-calendar-day rows are usable when the series is a
         # daily close: the US cash session ends at 16:00 ET, before the draw.

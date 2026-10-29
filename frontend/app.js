@@ -901,6 +901,76 @@ function formatChance(value) {
   return number == null ? "—" : number.toFixed(2);
 }
 
+function formatP(value) {
+  const number = asNumber(value);
+  if (number == null) return "—";
+  if (number < 0.001) return number.toExponential(2);
+  return number.toFixed(3);
+}
+
+function formatEffect(test) {
+  const number = asNumber(test.effect);
+  if (number == null) return "—";
+  const name = test.effect_name === "cramers_v" ? "V" : "η²";
+  return `${name} ${number.toFixed(4)}`;
+}
+
+async function refreshLunar() {
+  const summary = document.getElementById("lunar-summary");
+  const today = document.getElementById("lunar-today");
+  const body = document.getElementById("lunar-body");
+  const models = document.getElementById("lunar-models");
+  try {
+    const moon = await fetchJson("/lunar");
+    const eclipse = moon.eclipse ? moon.eclipse.kind : "none";
+    fillStatGrid(today, [
+      ["Phase", moon.named_phase],
+      ["Illumination", `${moon.illumination_percent}%`],
+      ["Days since new", moon.days_since_new],
+      ["Chinese date", moon.chinese_date],
+      ["Full moon", moon.is_full_moon ? "yes" : "no"],
+      ["New moon", moon.is_new_moon ? "yes" : "no"],
+      ["Supermoon", moon.is_supermoon ? "yes" : "no"],
+      ["Near perigee", moon.near_perigee ? "yes" : "no"],
+      ["Eclipse", eclipse],
+      ["Distance km", moon.distance_km],
+    ]);
+  } catch (error) {
+    fillStatGrid(today, [["Moon", "unavailable"]]);
+    summary.textContent = error.message;
+  }
+  try {
+    const report = await fetchJson("/lottery/lunar-analysis");
+    summary.textContent = report.summary || "No lunar lottery analysis has been published.";
+    body.replaceChildren();
+    const games = report.games || [];
+    for (const game of games) {
+      for (const test of game.tests || []) {
+        const row = document.createElement("tr");
+        for (const value of [
+          game.game,
+          test.label,
+          formatEffect(test),
+          formatP(test.p_permutation),
+          formatP(test.p_bh),
+          test.survives_bh ? "yes" : "no",
+        ]) {
+          row.append(scorecardCell(value));
+        }
+        body.append(row);
+      }
+    }
+    const notes = [];
+    if (report.answer_in_brief) notes.push(report.answer_in_brief);
+    if (report.caveat) notes.push(report.caveat);
+    models.textContent = notes.join(" ");
+  } catch {
+    summary.textContent = "Lunar analysis is unavailable.";
+    body.replaceChildren();
+    models.textContent = "";
+  }
+}
+
 async function refreshScorecard() {
   const summary = document.getElementById("powerball-summary");
   const body = document.getElementById("powerball-body");
@@ -1489,6 +1559,7 @@ document.getElementById("solar-system-series").addEventListener("change", render
 document.getElementById("refresh-btn").addEventListener("click", () => {
   holdTrainingMessage = false;
   clearNotice();
+  refreshLunar();
   refreshScorecard();
   refreshNearEarth().catch(reportError);
   refreshSolar().catch(reportError);
@@ -1575,6 +1646,7 @@ document.getElementById("train-btn").addEventListener("click", async () => {
   }
 });
 
+refreshLunar();
 refreshScorecard();
 refreshNearEarth().catch(reportError);
 refreshSolar().catch(reportError);

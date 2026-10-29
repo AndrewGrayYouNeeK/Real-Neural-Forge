@@ -16,6 +16,7 @@ import pandas as pd
 import torch
 
 from src.data.calendar import calendar_feature_names, calendar_features
+from src.data.lunar import lunar_feature_frame, lunar_feature_names
 from src.data.splits import fraction_window_indices, split_by_label_dates
 from src.data.timeseries import load_csv_timeseries
 from src.utils.paths import resolve_repo_path
@@ -48,12 +49,17 @@ def prepare_csv_series(
     date_column = data_cfg.get("date_column") or None
     calendar = list(data_cfg.get("calendar_features") or [])
     future_calendar = list(data_cfg.get("future_calendar") or [])
+    lunar = bool(data_cfg.get("lunar_features", False))
+    future_lunar = bool(data_cfg.get("future_lunar", False))
+    lunar_tz = str(data_cfg.get("lunar_timezone", "UTC"))
+    lunar_at = str(data_cfg.get("lunar_at", "12:00"))
     missing_indicators = bool(data_cfg.get("missing_indicators", False))
 
     dates = _date_array(frame, date_column) if date_column else None
-    if (calendar or future_calendar) and dates is None:
+    if (calendar or future_calendar or lunar or future_lunar) and dates is None:
         raise ValueError(
-            "calendar_features and future_calendar require data.date_column."
+            "calendar_features, future_calendar, lunar_features, and "
+            "future_lunar require data.date_column."
         )
 
     train_index, val_index, test_index = _split_indexes(
@@ -65,7 +71,9 @@ def prepare_csv_series(
     held_out = val_index if len(val_index) else test_index
     fit_row_end = int(held_out[0]) + seq_len if len(held_out) else len(frame)
 
-    use_extensions = bool(calendar or future_calendar or missing_indicators)
+    use_extensions = bool(
+        calendar or future_calendar or missing_indicators or lunar or future_lunar
+    )
     if use_extensions:
         inputs, targets, names = _extended_windows(
             frame,
@@ -75,6 +83,10 @@ def prepare_csv_series(
             dates=dates,
             calendar=calendar,
             future_calendar=future_calendar,
+            lunar=lunar,
+            future_lunar=future_lunar,
+            lunar_tz=lunar_tz,
+            lunar_at=lunar_at,
             missing_indicators=missing_indicators,
             fit_row_end=fit_row_end,
         )
@@ -153,6 +165,10 @@ def _extended_windows(
     dates: np.ndarray | None,
     calendar: list[str],
     future_calendar: list[str],
+    lunar: bool,
+    future_lunar: bool,
+    lunar_tz: str,
+    lunar_at: str,
     missing_indicators: bool,
     fit_row_end: int,
 ) -> tuple[torch.Tensor, torch.Tensor, list[str]]:
@@ -194,6 +210,18 @@ def _extended_windows(
         names.extend(generated.columns.tolist())
         matrix = np.column_stack([matrix, generated.to_numpy(dtype=np.float64)])
 
+    if lunar:
+        if dates is None:
+            raise ValueError("lunar_features requires dates.")
+        generated = lunar_feature_frame(pd.Series(dates), tz=lunar_tz, at=lunar_at)
+        overlap = [name for name in generated.columns if name in names]
+        if overlap:
+            raise ValueError(
+                f"Lunar features {overlap} are already in feature_columns."
+            )
+        names.extend(generated.columns.tolist())
+        matrix = np.column_stack([matrix, generated.to_numpy(dtype=np.float64)])
+
     n_windows = len(frame) - seq_len
     inputs = np.empty((n_windows, seq_len, matrix.shape[1]), dtype=np.float64)
     for start in range(n_windows):
@@ -209,6 +237,21 @@ def _extended_windows(
         future = calendar_features(pd.Series(dates), future_calendar).to_numpy(
             dtype=np.float64
         )
+        label_future = future[seq_len:]
+        tiled = np.repeat(label_future[:, None, :], seq_len, axis=1)
+        inputs = np.concatenate([inputs, tiled], axis=-1)
+        names.extend(future_names)
+
+    if future_lunar:
+        if dates is None:
+            raise ValueError("future_lunar requires dates.")
+        future_names = lunar_feature_names(future=True)
+        overlap = [name for name in future_names if name in names]
+        if overlap:
+            raise ValueError(f"Future lunar features collide with {overlap}.")
+        future = lunar_feature_frame(
+            pd.Series(dates), tz=lunar_tz, at=lunar_at
+        ).to_numpy(dtype=np.float64)
         label_future = future[seq_len:]
         tiled = np.repeat(label_future[:, None, :], seq_len, axis=1)
         inputs = np.concatenate([inputs, tiled], axis=-1)

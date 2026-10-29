@@ -7,6 +7,7 @@ import math
 import os
 import secrets
 from contextlib import asynccontextmanager
+from datetime import date
 from pathlib import Path
 from typing import Any, cast
 
@@ -19,6 +20,8 @@ from pydantic import BaseModel, Field
 
 from src import __version__
 from src.dashboard_data import recent_series, validation_predictions
+from src.data.lunar import lunar_now, lunar_on
+from src.evaluation.lunar_lottery import read_lunar_analysis
 from src.forecasting.spec import MAX_HORIZON, forecast_spec_from_config
 from src.inference.predictor import ForecastBatch, Predictor
 from src.models.registry import ModelRegistry, build_model
@@ -465,6 +468,37 @@ def space_solar_system(days: int = Query(730, ge=1, le=730)) -> dict[str, Any]:
 def powerball_scorecard() -> dict[str, Any]:
     """Logged tickets scored against published draws. A missing file is not an error."""
     return read_powerball_scorecard()
+
+
+@app.get("/lunar", tags=["lunar"])
+def lunar_calendar(when: str | None = Query(None, alias="date")) -> dict[str, Any]:
+    """Moon phase and the Chinese lunisolar date.
+
+    With no ``date``, the instant is the current UTC time. With ``date``
+    (``YYYY-MM-DD``), the instant is 12:00 UTC on that civil date. Full, new,
+    supermoon, and eclipse flags use the UTC date of the event. The series is
+    computed offline.
+    """
+    try:
+        if when is None or not when.strip():
+            return lunar_now().as_dict()
+        day = date.fromisoformat(when.strip()[:10])
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=f"Invalid date: {exc}") from exc
+    return lunar_on(day).as_dict()
+
+
+@app.get("/lottery/lunar-analysis", tags=["lottery"])
+def lottery_lunar_analysis() -> dict[str, Any]:
+    """Published check of lunar features against lottery draws.
+
+    A missing file is not an error. The report is the output of
+    ``python -m src.evaluation.lunar_lottery``.
+    """
+    try:
+        return read_lunar_analysis()
+    except ValueError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
 @app.get("/series/recent", tags=["dashboard"])

@@ -835,6 +835,10 @@ class TestForecastDashboard:
         assert 'id="solar-system-heading"' in html
         assert 'id="solar-system-days"' in html
         assert 'id="solar-system-summary"' in html
+        assert 'id="lunar-heading"' in html
+        assert 'id="lunar-today"' in html
+        assert 'id="lunar-summary"' in html
+        assert 'id="lunar-body"' in html
         assert "/assets/chart.js" in html
         assert 'id="api-token"' in html
         for path in ("/assets/app.js", "/assets/chart.js"):
@@ -851,6 +855,8 @@ class TestForecastDashboard:
         assert "Bearer " in app_js
         assert "/space/near-earth" in app_js
         assert "/space/solar-system" in app_js
+        assert "/lunar" in app_js
+        assert "/lottery/lunar-analysis" in app_js
 
 
 class TestPowerballScorecard:
@@ -873,6 +879,37 @@ class TestPowerballScorecard:
         body = response.json()
         assert body["available"] is True
         assert body["summary"] == "Scored 1 draws."
+
+
+class TestLunarEndpoints:
+    def test_lunar_date_is_the_april_2024_eclipse(self, client):
+        response = client.get("/lunar", params={"date": "2024-04-08"})
+        assert response.status_code == 200
+        body = response.json()
+        assert body["date"] == "2024-04-08"
+        assert body["is_new_moon"] is True
+        assert body["eclipse"]["kind"] == "solar"
+        assert body["chinese_year"] == 2024
+        assert body["zodiac"] == "Dragon"
+        assert 0.0 <= body["moon_phase"] < 1.0
+        assert 0.0 <= body["illumination"] <= 1.0
+
+    def test_lunar_rejects_a_bad_date(self, client):
+        response = client.get("/lunar", params={"date": "not-a-date"})
+        assert response.status_code == 422
+
+    def test_missing_lunar_analysis_is_available_false(
+        self, client, monkeypatch, tmp_path
+    ):
+        monkeypatch.setattr(
+            "src.evaluation.lunar_lottery.PUBLISHED_REPORT",
+            str(tmp_path / "missing.json"),
+        )
+        response = client.get("/lottery/lunar-analysis")
+        assert response.status_code == 200
+        body = response.json()
+        assert body["available"] is False
+        assert "summary" in body
 
 
 class TestAppVersion:
