@@ -145,6 +145,8 @@ class TimeSeriesTrainer:
                 or data_cfg.get("missing_indicators")
                 or data_cfg.get("calendar_features")
                 or data_cfg.get("future_calendar")
+                or data_cfg.get("lunar_features")
+                or data_cfg.get("future_lunar")
                 or float(data_cfg.get("test_split", 0) or 0) > 0
             )
         )
