@@ -25,43 +25,85 @@
               "white_matches": 1,
               "powerball_hit": false,
               "tier": "none",
-              "base_prize_usd": 0
+              "base_prize_usd": 0,
+              "within_1": 1,
+              "within_2": 1,
+              "near_miss_1": 0,
+              "near_miss_2": 0,
+              "white_sum_abs_error": 27,
+              "powerball_abs_error": 1
             },
             "model_weather": {
               "white_matches": 0,
               "powerball_hit": true,
               "tier": "match_pb",
-              "base_prize_usd": 4
+              "base_prize_usd": 4,
+              "within_1": 1,
+              "within_2": 1,
+              "near_miss_1": 1,
+              "near_miss_2": 0,
+              "white_sum_abs_error": 26,
+              "powerball_abs_error": 0
             },
             "most_hit": {
               "white_matches": 0,
               "powerball_hit": true,
               "tier": "match_pb",
-              "base_prize_usd": 4
+              "base_prize_usd": 4,
+              "within_1": 0,
+              "within_2": 1,
+              "near_miss_1": 0,
+              "near_miss_2": 1,
+              "white_sum_abs_error": 7,
+              "powerball_abs_error": 0
             },
             "hot_pairs": {
               "white_matches": 0,
               "powerball_hit": true,
               "tier": "match_pb",
-              "base_prize_usd": 4
+              "base_prize_usd": 4,
+              "within_1": 1,
+              "within_2": 1,
+              "near_miss_1": 1,
+              "near_miss_2": 0,
+              "white_sum_abs_error": 95,
+              "powerball_abs_error": 0
             },
             "neighbors": {
               "white_matches": 0,
               "powerball_hit": false,
               "tier": "none",
-              "base_prize_usd": 0
+              "base_prize_usd": 0,
+              "within_1": 2,
+              "within_2": 2,
+              "near_miss_1": 2,
+              "near_miss_2": 0,
+              "white_sum_abs_error": 89,
+              "powerball_abs_error": 1
             },
             "overdue": {
               "white_matches": 0,
               "powerball_hit": false,
               "tier": "none",
-              "base_prize_usd": 0
+              "base_prize_usd": 0,
+              "within_1": 1,
+              "within_2": 1,
+              "near_miss_1": 1,
+              "near_miss_2": 0,
+              "white_sum_abs_error": 53,
+              "powerball_abs_error": 5
             },
             "random": {
               "white_matches": 1,
               "powerball_hit": false,
               "tier": "none",
-              "base_prize_usd": 0
+              "base_prize_usd": 0,
+              "within_1": 1,
+              "within_2": 2,
+              "near_miss_1": 0,
+              "near_miss_2": 1,
+              "white_sum_abs_error": 19,
+              "powerball_abs_error": 8
             }
           }
         },
@@ -82,43 +124,85 @@
               "white_matches": 1,
               "powerball_hit": false,
               "tier": "none",
-              "base_prize_usd": 0
+              "base_prize_usd": 0,
+              "within_1": 2,
+              "within_2": 2,
+              "near_miss_1": 1,
+              "near_miss_2": 0,
+              "white_sum_abs_error": 16,
+              "powerball_abs_error": 4
             },
             "model_weather": {
               "white_matches": 1,
               "powerball_hit": false,
               "tier": "none",
-              "base_prize_usd": 0
+              "base_prize_usd": 0,
+              "within_1": 2,
+              "within_2": 2,
+              "near_miss_1": 1,
+              "near_miss_2": 0,
+              "white_sum_abs_error": 17,
+              "powerball_abs_error": 5
             },
             "most_hit": {
               "white_matches": 1,
               "powerball_hit": false,
               "tier": "none",
-              "base_prize_usd": 0
+              "base_prize_usd": 0,
+              "within_1": 1,
+              "within_2": 2,
+              "near_miss_1": 0,
+              "near_miss_2": 1,
+              "white_sum_abs_error": 36,
+              "powerball_abs_error": 5
             },
             "hot_pairs": {
               "white_matches": 2,
               "powerball_hit": false,
               "tier": "none",
-              "base_prize_usd": 0
+              "base_prize_usd": 0,
+              "within_1": 3,
+              "within_2": 4,
+              "near_miss_1": 1,
+              "near_miss_2": 1,
+              "white_sum_abs_error": 52,
+              "powerball_abs_error": 5
             },
             "neighbors": {
               "white_matches": 0,
               "powerball_hit": false,
               "tier": "none",
-              "base_prize_usd": 0
+              "base_prize_usd": 0,
+              "within_1": 1,
+              "within_2": 2,
+              "near_miss_1": 1,
+              "near_miss_2": 1,
+              "white_sum_abs_error": 46,
+              "powerball_abs_error": 4
             },
             "overdue": {
               "white_matches": 0,
               "powerball_hit": false,
               "tier": "none",
-              "base_prize_usd": 0
+              "base_prize_usd": 0,
+              "within_1": 1,
+              "within_2": 2,
+              "near_miss_1": 1,
+              "near_miss_2": 1,
+              "white_sum_abs_error": 10,
+              "powerball_abs_error": 10
             },
             "random": {
               "white_matches": 1,
               "powerball_hit": false,
               "tier": "none",
-              "base_prize_usd": 0
+              "base_prize_usd": 0,
+              "within_1": 2,
+              "within_2": 3,
+              "near_miss_1": 1,
+              "near_miss_2": 1,
+              "white_sum_abs_error": 55,
+              "powerball_abs_error": 3
             }
           }
         },
@@ -139,43 +223,85 @@
               "white_matches": 0,
               "powerball_hit": false,
               "tier": "none",
-              "base_prize_usd": 0
+              "base_prize_usd": 0,
+              "within_1": 1,
+              "within_2": 2,
+              "near_miss_1": 1,
+              "near_miss_2": 1,
+              "white_sum_abs_error": 53,
+              "powerball_abs_error": 6
             },
             "model_weather": {
               "white_matches": 0,
               "powerball_hit": false,
               "tier": "none",
-              "base_prize_usd": 0
+              "base_prize_usd": 0,
+              "within_1": 1,
+              "within_2": 2,
+              "near_miss_1": 1,
+              "near_miss_2": 1,
+              "white_sum_abs_error": 54,
+              "powerball_abs_error": 5
             },
             "most_hit": {
               "white_matches": 1,
               "powerball_hit": false,
               "tier": "none",
-              "base_prize_usd": 0
+              "base_prize_usd": 0,
+              "within_1": 2,
+              "within_2": 3,
+              "near_miss_1": 1,
+              "near_miss_2": 1,
+              "white_sum_abs_error": 73,
+              "powerball_abs_error": 5
             },
             "hot_pairs": {
               "white_matches": 1,
               "powerball_hit": false,
               "tier": "none",
-              "base_prize_usd": 0
+              "base_prize_usd": 0,
+              "within_1": 1,
+              "within_2": 2,
+              "near_miss_1": 0,
+              "near_miss_2": 1,
+              "white_sum_abs_error": 15,
+              "powerball_abs_error": 5
             },
             "neighbors": {
               "white_matches": 0,
               "powerball_hit": false,
               "tier": "none",
-              "base_prize_usd": 0
+              "base_prize_usd": 0,
+              "within_1": 0,
+              "within_2": 0,
+              "near_miss_1": 0,
+              "near_miss_2": 0,
+              "white_sum_abs_error": 9,
+              "powerball_abs_error": 6
             },
             "overdue": {
               "white_matches": 0,
               "powerball_hit": true,
               "tier": "match_pb",
-              "base_prize_usd": 4
+              "base_prize_usd": 4,
+              "within_1": 1,
+              "within_2": 1,
+              "near_miss_1": 1,
+              "near_miss_2": 0,
+              "white_sum_abs_error": 27,
+              "powerball_abs_error": 0
             },
             "random": {
               "white_matches": 0,
               "powerball_hit": false,
               "tier": "none",
-              "base_prize_usd": 0
+              "base_prize_usd": 0,
+              "within_1": 0,
+              "within_2": 1,
+              "near_miss_1": 0,
+              "near_miss_2": 1,
+              "white_sum_abs_error": 46,
+              "powerball_abs_error": 2
             }
           }
         },
@@ -196,43 +322,85 @@
               "white_matches": 0,
               "powerball_hit": false,
               "tier": "none",
-              "base_prize_usd": 0
+              "base_prize_usd": 0,
+              "within_1": 0,
+              "within_2": 1,
+              "near_miss_1": 0,
+              "near_miss_2": 1,
+              "white_sum_abs_error": 69,
+              "powerball_abs_error": 2
             },
             "model_weather": {
               "white_matches": 0,
               "powerball_hit": false,
               "tier": "none",
-              "base_prize_usd": 0
+              "base_prize_usd": 0,
+              "within_1": 0,
+              "within_2": 1,
+              "near_miss_1": 0,
+              "near_miss_2": 1,
+              "white_sum_abs_error": 70,
+              "powerball_abs_error": 1
             },
             "most_hit": {
               "white_matches": 0,
               "powerball_hit": false,
               "tier": "none",
-              "base_prize_usd": 0
+              "base_prize_usd": 0,
+              "within_1": 0,
+              "within_2": 1,
+              "near_miss_1": 0,
+              "near_miss_2": 1,
+              "white_sum_abs_error": 89,
+              "powerball_abs_error": 1
             },
             "hot_pairs": {
               "white_matches": 0,
               "powerball_hit": false,
               "tier": "none",
-              "base_prize_usd": 0
+              "base_prize_usd": 0,
+              "within_1": 2,
+              "within_2": 3,
+              "near_miss_1": 2,
+              "near_miss_2": 1,
+              "white_sum_abs_error": 1,
+              "powerball_abs_error": 1
             },
             "neighbors": {
               "white_matches": 0,
               "powerball_hit": false,
               "tier": "none",
-              "base_prize_usd": 0
+              "base_prize_usd": 0,
+              "within_1": 2,
+              "within_2": 2,
+              "near_miss_1": 2,
+              "near_miss_2": 0,
+              "white_sum_abs_error": 7,
+              "powerball_abs_error": 2
             },
             "overdue": {
               "white_matches": 2,
               "powerball_hit": false,
               "tier": "none",
-              "base_prize_usd": 0
+              "base_prize_usd": 0,
+              "within_1": 3,
+              "within_2": 3,
+              "near_miss_1": 1,
+              "near_miss_2": 0,
+              "white_sum_abs_error": 43,
+              "powerball_abs_error": 4
             },
             "random": {
               "white_matches": 2,
               "powerball_hit": false,
               "tier": "none",
-              "base_prize_usd": 0
+              "base_prize_usd": 0,
+              "within_1": 2,
+              "within_2": 3,
+              "near_miss_1": 0,
+              "near_miss_2": 1,
+              "white_sum_abs_error": 96,
+              "powerball_abs_error": 9
             }
           }
         },
@@ -253,43 +421,85 @@
               "white_matches": 0,
               "powerball_hit": false,
               "tier": "none",
-              "base_prize_usd": 0
+              "base_prize_usd": 0,
+              "within_1": 1,
+              "within_2": 1,
+              "near_miss_1": 1,
+              "near_miss_2": 0,
+              "white_sum_abs_error": 31,
+              "powerball_abs_error": 4
             },
             "model_weather": {
               "white_matches": 0,
               "powerball_hit": false,
               "tier": "none",
-              "base_prize_usd": 0
+              "base_prize_usd": 0,
+              "within_1": 1,
+              "within_2": 1,
+              "near_miss_1": 1,
+              "near_miss_2": 0,
+              "white_sum_abs_error": 30,
+              "powerball_abs_error": 5
             },
             "most_hit": {
               "white_matches": 1,
               "powerball_hit": false,
               "tier": "none",
-              "base_prize_usd": 0
+              "base_prize_usd": 0,
+              "within_1": 3,
+              "within_2": 3,
+              "near_miss_1": 2,
+              "near_miss_2": 0,
+              "white_sum_abs_error": 11,
+              "powerball_abs_error": 5
             },
             "hot_pairs": {
               "white_matches": 0,
               "powerball_hit": false,
               "tier": "none",
-              "base_prize_usd": 0
+              "base_prize_usd": 0,
+              "within_1": 2,
+              "within_2": 2,
+              "near_miss_1": 2,
+              "near_miss_2": 0,
+              "white_sum_abs_error": 99,
+              "powerball_abs_error": 5
             },
             "neighbors": {
               "white_matches": 0,
               "powerball_hit": false,
               "tier": "none",
-              "base_prize_usd": 0
+              "base_prize_usd": 0,
+              "within_1": 0,
+              "within_2": 1,
+              "near_miss_1": 0,
+              "near_miss_2": 1,
+              "white_sum_abs_error": 93,
+              "powerball_abs_error": 4
             },
             "overdue": {
               "white_matches": 2,
               "powerball_hit": false,
               "tier": "none",
-              "base_prize_usd": 0
+              "base_prize_usd": 0,
+              "within_1": 2,
+              "within_2": 2,
+              "near_miss_1": 0,
+              "near_miss_2": 0,
+              "white_sum_abs_error": 57,
+              "powerball_abs_error": 10
             },
             "random": {
               "white_matches": 0,
               "powerball_hit": false,
               "tier": "none",
-              "base_prize_usd": 0
+              "base_prize_usd": 0,
+              "within_1": 1,
+              "within_2": 2,
+              "near_miss_1": 1,
+              "near_miss_2": 1,
+              "white_sum_abs_error": 7,
+              "powerball_abs_error": 1
             }
           }
         },
@@ -310,43 +520,85 @@
               "white_matches": 0,
               "powerball_hit": false,
               "tier": "none",
-              "base_prize_usd": 0
+              "base_prize_usd": 0,
+              "within_1": 1,
+              "within_2": 2,
+              "near_miss_1": 1,
+              "near_miss_2": 1,
+              "white_sum_abs_error": 15,
+              "powerball_abs_error": 7
             },
             "model_weather": {
               "white_matches": 0,
               "powerball_hit": false,
               "tier": "none",
-              "base_prize_usd": 0
+              "base_prize_usd": 0,
+              "within_1": 1,
+              "within_2": 2,
+              "near_miss_1": 1,
+              "near_miss_2": 1,
+              "white_sum_abs_error": 16,
+              "powerball_abs_error": 6
             },
             "most_hit": {
               "white_matches": 0,
               "powerball_hit": false,
               "tier": "none",
-              "base_prize_usd": 0
+              "base_prize_usd": 0,
+              "within_1": 0,
+              "within_2": 0,
+              "near_miss_1": 0,
+              "near_miss_2": 0,
+              "white_sum_abs_error": 35,
+              "powerball_abs_error": 6
             },
             "hot_pairs": {
               "white_matches": 2,
               "powerball_hit": false,
               "tier": "none",
-              "base_prize_usd": 0
+              "base_prize_usd": 0,
+              "within_1": 2,
+              "within_2": 3,
+              "near_miss_1": 0,
+              "near_miss_2": 1,
+              "white_sum_abs_error": 53,
+              "powerball_abs_error": 6
             },
             "neighbors": {
               "white_matches": 1,
               "powerball_hit": false,
               "tier": "none",
-              "base_prize_usd": 0
+              "base_prize_usd": 0,
+              "within_1": 2,
+              "within_2": 3,
+              "near_miss_1": 1,
+              "near_miss_2": 1,
+              "white_sum_abs_error": 47,
+              "powerball_abs_error": 7
             },
             "overdue": {
               "white_matches": 1,
               "powerball_hit": false,
               "tier": "none",
-              "base_prize_usd": 0
+              "base_prize_usd": 0,
+              "within_1": 2,
+              "within_2": 3,
+              "near_miss_1": 1,
+              "near_miss_2": 1,
+              "white_sum_abs_error": 11,
+              "powerball_abs_error": 1
             },
             "random": {
               "white_matches": 1,
               "powerball_hit": false,
               "tier": "none",
-              "base_prize_usd": 0
+              "base_prize_usd": 0,
+              "within_1": 1,
+              "within_2": 1,
+              "near_miss_1": 0,
+              "near_miss_2": 0,
+              "white_sum_abs_error": 0,
+              "powerball_abs_error": 6
             }
           }
         },
@@ -367,43 +619,85 @@
               "white_matches": 2,
               "powerball_hit": false,
               "tier": "none",
-              "base_prize_usd": 0
+              "base_prize_usd": 0,
+              "within_1": 3,
+              "within_2": 3,
+              "near_miss_1": 1,
+              "near_miss_2": 0,
+              "white_sum_abs_error": 61,
+              "powerball_abs_error": 2
             },
             "model_weather": {
               "white_matches": 2,
               "powerball_hit": false,
               "tier": "none",
-              "base_prize_usd": 0
+              "base_prize_usd": 0,
+              "within_1": 3,
+              "within_2": 3,
+              "near_miss_1": 1,
+              "near_miss_2": 0,
+              "white_sum_abs_error": 62,
+              "powerball_abs_error": 3
             },
             "most_hit": {
               "white_matches": 0,
               "powerball_hit": false,
               "tier": "none",
-              "base_prize_usd": 0
+              "base_prize_usd": 0,
+              "within_1": 1,
+              "within_2": 1,
+              "near_miss_1": 1,
+              "near_miss_2": 0,
+              "white_sum_abs_error": 81,
+              "powerball_abs_error": 3
             },
             "hot_pairs": {
               "white_matches": 1,
               "powerball_hit": false,
               "tier": "none",
-              "base_prize_usd": 0
+              "base_prize_usd": 0,
+              "within_1": 1,
+              "within_2": 2,
+              "near_miss_1": 0,
+              "near_miss_2": 1,
+              "white_sum_abs_error": 7,
+              "powerball_abs_error": 3
             },
             "neighbors": {
               "white_matches": 1,
               "powerball_hit": false,
               "tier": "none",
-              "base_prize_usd": 0
+              "base_prize_usd": 0,
+              "within_1": 2,
+              "within_2": 2,
+              "near_miss_1": 1,
+              "near_miss_2": 0,
+              "white_sum_abs_error": 1,
+              "powerball_abs_error": 2
             },
             "overdue": {
               "white_matches": 0,
               "powerball_hit": false,
               "tier": "none",
-              "base_prize_usd": 0
+              "base_prize_usd": 0,
+              "within_1": 1,
+              "within_2": 2,
+              "near_miss_1": 1,
+              "near_miss_2": 1,
+              "white_sum_abs_error": 35,
+              "powerball_abs_error": 8
             },
             "random": {
               "white_matches": 0,
               "powerball_hit": false,
               "tier": "none",
-              "base_prize_usd": 0
+              "base_prize_usd": 0,
+              "within_1": 0,
+              "within_2": 0,
+              "near_miss_1": 0,
+              "near_miss_2": 0,
+              "white_sum_abs_error": 116,
+              "powerball_abs_error": 13
             }
           }
         },
@@ -424,163 +718,774 @@
               "white_matches": 1,
               "powerball_hit": false,
               "tier": "none",
-              "base_prize_usd": 0
+              "base_prize_usd": 0,
+              "within_1": 1,
+              "within_2": 1,
+              "near_miss_1": 0,
+              "near_miss_2": 0,
+              "white_sum_abs_error": 16,
+              "powerball_abs_error": 10
             },
             "model_weather": {
               "white_matches": 1,
               "powerball_hit": false,
               "tier": "none",
-              "base_prize_usd": 0
+              "base_prize_usd": 0,
+              "within_1": 1,
+              "within_2": 1,
+              "near_miss_1": 0,
+              "near_miss_2": 0,
+              "white_sum_abs_error": 17,
+              "powerball_abs_error": 9
             },
             "most_hit": {
               "white_matches": 0,
               "powerball_hit": false,
               "tier": "none",
-              "base_prize_usd": 0
+              "base_prize_usd": 0,
+              "within_1": 0,
+              "within_2": 0,
+              "near_miss_1": 0,
+              "near_miss_2": 0,
+              "white_sum_abs_error": 36,
+              "powerball_abs_error": 9
             },
             "hot_pairs": {
               "white_matches": 1,
               "powerball_hit": false,
               "tier": "none",
-              "base_prize_usd": 0
+              "base_prize_usd": 0,
+              "within_1": 1,
+              "within_2": 1,
+              "near_miss_1": 0,
+              "near_miss_2": 0,
+              "white_sum_abs_error": 52,
+              "powerball_abs_error": 9
             },
             "neighbors": {
               "white_matches": 0,
               "powerball_hit": false,
               "tier": "none",
-              "base_prize_usd": 0
+              "base_prize_usd": 0,
+              "within_1": 1,
+              "within_2": 2,
+              "near_miss_1": 1,
+              "near_miss_2": 1,
+              "white_sum_abs_error": 46,
+              "powerball_abs_error": 10
             },
             "overdue": {
               "white_matches": 0,
               "powerball_hit": false,
               "tier": "none",
-              "base_prize_usd": 0
+              "base_prize_usd": 0,
+              "within_1": 1,
+              "within_2": 2,
+              "near_miss_1": 1,
+              "near_miss_2": 1,
+              "white_sum_abs_error": 10,
+              "powerball_abs_error": 4
             },
             "random": {
               "white_matches": 0,
               "powerball_hit": false,
               "tier": "none",
-              "base_prize_usd": 0
+              "base_prize_usd": 0,
+              "within_1": 1,
+              "within_2": 1,
+              "near_miss_1": 1,
+              "near_miss_2": 0,
+              "white_sum_abs_error": 11,
+              "powerball_abs_error": 1
+            }
+          }
+        },
+        {
+          "draw_date": "2026-10-21",
+          "actual": {
+            "whites": [
+              1,
+              21,
+              44,
+              50,
+              57
+            ],
+            "powerball": 5
+          },
+          "scores": {
+            "model": {
+              "white_matches": 0,
+              "powerball_hit": false,
+              "tier": "none",
+              "base_prize_usd": 0,
+              "within_1": 0,
+              "within_2": 3,
+              "near_miss_1": 0,
+              "near_miss_2": 3,
+              "white_sum_abs_error": 4,
+              "powerball_abs_error": 8
+            },
+            "model_weather": {
+              "white_matches": 0,
+              "powerball_hit": false,
+              "tier": "none",
+              "base_prize_usd": 0,
+              "within_1": 0,
+              "within_2": 2,
+              "near_miss_1": 0,
+              "near_miss_2": 2,
+              "white_sum_abs_error": 5,
+              "powerball_abs_error": 9
+            },
+            "most_hit": {
+              "white_matches": 1,
+              "powerball_hit": false,
+              "tier": "none",
+              "base_prize_usd": 0,
+              "within_1": 1,
+              "within_2": 2,
+              "near_miss_1": 0,
+              "near_miss_2": 1,
+              "white_sum_abs_error": 24,
+              "powerball_abs_error": 9
+            },
+            "hot_pairs": {
+              "white_matches": 1,
+              "powerball_hit": false,
+              "tier": "none",
+              "base_prize_usd": 0,
+              "within_1": 1,
+              "within_2": 2,
+              "near_miss_1": 0,
+              "near_miss_2": 1,
+              "white_sum_abs_error": 64,
+              "powerball_abs_error": 9
+            },
+            "neighbors": {
+              "white_matches": 0,
+              "powerball_hit": false,
+              "tier": "none",
+              "base_prize_usd": 0,
+              "within_1": 1,
+              "within_2": 1,
+              "near_miss_1": 1,
+              "near_miss_2": 0,
+              "white_sum_abs_error": 58,
+              "powerball_abs_error": 8
+            },
+            "overdue": {
+              "white_matches": 1,
+              "powerball_hit": false,
+              "tier": "none",
+              "base_prize_usd": 0,
+              "within_1": 4,
+              "within_2": 4,
+              "near_miss_1": 3,
+              "near_miss_2": 0,
+              "white_sum_abs_error": 22,
+              "powerball_abs_error": 14
+            },
+            "random": {
+              "white_matches": 0,
+              "powerball_hit": false,
+              "tier": "none",
+              "base_prize_usd": 0,
+              "within_1": 1,
+              "within_2": 2,
+              "near_miss_1": 1,
+              "near_miss_2": 1,
+              "white_sum_abs_error": 27,
+              "powerball_abs_error": 19
+            }
+          }
+        },
+        {
+          "draw_date": "2026-10-24",
+          "actual": {
+            "whites": [
+              4,
+              5,
+              15,
+              19,
+              55
+            ],
+            "powerball": 19
+          },
+          "scores": {
+            "model": {
+              "white_matches": 0,
+              "powerball_hit": false,
+              "tier": "none",
+              "base_prize_usd": 0,
+              "within_1": 0,
+              "within_2": 0,
+              "near_miss_1": 0,
+              "near_miss_2": 0,
+              "white_sum_abs_error": 79,
+              "powerball_abs_error": 6
+            },
+            "model_weather": {
+              "white_matches": 0,
+              "powerball_hit": false,
+              "tier": "none",
+              "base_prize_usd": 0,
+              "within_1": 0,
+              "within_2": 0,
+              "near_miss_1": 0,
+              "near_miss_2": 0,
+              "white_sum_abs_error": 80,
+              "powerball_abs_error": 5
+            },
+            "most_hit": {
+              "white_matches": 0,
+              "powerball_hit": false,
+              "tier": "none",
+              "base_prize_usd": 0,
+              "within_1": 0,
+              "within_2": 1,
+              "near_miss_1": 0,
+              "near_miss_2": 1,
+              "white_sum_abs_error": 99,
+              "powerball_abs_error": 5
+            },
+            "hot_pairs": {
+              "white_matches": 0,
+              "powerball_hit": false,
+              "tier": "none",
+              "base_prize_usd": 0,
+              "within_1": 2,
+              "within_2": 3,
+              "near_miss_1": 2,
+              "near_miss_2": 1,
+              "white_sum_abs_error": 11,
+              "powerball_abs_error": 5
+            },
+            "neighbors": {
+              "white_matches": 1,
+              "powerball_hit": false,
+              "tier": "none",
+              "base_prize_usd": 0,
+              "within_1": 1,
+              "within_2": 2,
+              "near_miss_1": 0,
+              "near_miss_2": 1,
+              "white_sum_abs_error": 17,
+              "powerball_abs_error": 6
+            },
+            "overdue": {
+              "white_matches": 0,
+              "powerball_hit": true,
+              "tier": "match_pb",
+              "base_prize_usd": 4,
+              "within_1": 0,
+              "within_2": 0,
+              "near_miss_1": 0,
+              "near_miss_2": 0,
+              "white_sum_abs_error": 53,
+              "powerball_abs_error": 0
+            },
+            "random": {
+              "white_matches": 0,
+              "powerball_hit": false,
+              "tier": "none",
+              "base_prize_usd": 0,
+              "within_1": 1,
+              "within_2": 1,
+              "near_miss_1": 1,
+              "near_miss_2": 0,
+              "white_sum_abs_error": 87,
+              "powerball_abs_error": 17
+            }
+          }
+        },
+        {
+          "draw_date": "2026-10-26",
+          "actual": {
+            "whites": [
+              18,
+              26,
+              49,
+              50,
+              54
+            ],
+            "powerball": 1
+          },
+          "scores": {
+            "model": {
+              "white_matches": 0,
+              "powerball_hit": false,
+              "tier": "none",
+              "base_prize_usd": 0,
+              "within_1": 1,
+              "within_2": 1,
+              "near_miss_1": 1,
+              "near_miss_2": 0,
+              "white_sum_abs_error": 20,
+              "powerball_abs_error": 12
+            },
+            "model_weather": {
+              "white_matches": 0,
+              "powerball_hit": false,
+              "tier": "none",
+              "base_prize_usd": 0,
+              "within_1": 1,
+              "within_2": 1,
+              "near_miss_1": 1,
+              "near_miss_2": 0,
+              "white_sum_abs_error": 19,
+              "powerball_abs_error": 13
+            },
+            "most_hit": {
+              "white_matches": 0,
+              "powerball_hit": false,
+              "tier": "none",
+              "base_prize_usd": 0,
+              "within_1": 0,
+              "within_2": 1,
+              "near_miss_1": 0,
+              "near_miss_2": 1,
+              "white_sum_abs_error": 0,
+              "powerball_abs_error": 13
+            },
+            "hot_pairs": {
+              "white_matches": 0,
+              "powerball_hit": false,
+              "tier": "none",
+              "base_prize_usd": 0,
+              "within_1": 0,
+              "within_2": 1,
+              "near_miss_1": 0,
+              "near_miss_2": 1,
+              "white_sum_abs_error": 88,
+              "powerball_abs_error": 13
+            },
+            "neighbors": {
+              "white_matches": 0,
+              "powerball_hit": false,
+              "tier": "none",
+              "base_prize_usd": 0,
+              "within_1": 0,
+              "within_2": 1,
+              "near_miss_1": 0,
+              "near_miss_2": 1,
+              "white_sum_abs_error": 82,
+              "powerball_abs_error": 12
+            },
+            "overdue": {
+              "white_matches": 0,
+              "powerball_hit": false,
+              "tier": "none",
+              "base_prize_usd": 0,
+              "within_1": 1,
+              "within_2": 1,
+              "near_miss_1": 1,
+              "near_miss_2": 0,
+              "white_sum_abs_error": 46,
+              "powerball_abs_error": 18
+            },
+            "random": {
+              "white_matches": 0,
+              "powerball_hit": false,
+              "tier": "none",
+              "base_prize_usd": 0,
+              "within_1": 0,
+              "within_2": 0,
+              "near_miss_1": 0,
+              "near_miss_2": 0,
+              "white_sum_abs_error": 76,
+              "powerball_abs_error": 18
+            }
+          }
+        },
+        {
+          "draw_date": "2026-10-28",
+          "actual": {
+            "whites": [
+              11,
+              13,
+              16,
+              47,
+              60
+            ],
+            "powerball": 13
+          },
+          "scores": {
+            "model": {
+              "white_matches": 0,
+              "powerball_hit": true,
+              "tier": "match_pb",
+              "base_prize_usd": 4,
+              "within_1": 3,
+              "within_2": 3,
+              "near_miss_1": 3,
+              "near_miss_2": 0,
+              "white_sum_abs_error": 30,
+              "powerball_abs_error": 0
+            },
+            "model_weather": {
+              "white_matches": 1,
+              "powerball_hit": false,
+              "tier": "none",
+              "base_prize_usd": 0,
+              "within_1": 3,
+              "within_2": 3,
+              "near_miss_1": 2,
+              "near_miss_2": 0,
+              "white_sum_abs_error": 31,
+              "powerball_abs_error": 1
+            },
+            "most_hit": {
+              "white_matches": 0,
+              "powerball_hit": false,
+              "tier": "none",
+              "base_prize_usd": 0,
+              "within_1": 1,
+              "within_2": 1,
+              "near_miss_1": 1,
+              "near_miss_2": 0,
+              "white_sum_abs_error": 50,
+              "powerball_abs_error": 1
+            },
+            "hot_pairs": {
+              "white_matches": 1,
+              "powerball_hit": false,
+              "tier": "none",
+              "base_prize_usd": 0,
+              "within_1": 1,
+              "within_2": 1,
+              "near_miss_1": 0,
+              "near_miss_2": 0,
+              "white_sum_abs_error": 38,
+              "powerball_abs_error": 1
+            },
+            "neighbors": {
+              "white_matches": 0,
+              "powerball_hit": true,
+              "tier": "match_pb",
+              "base_prize_usd": 4,
+              "within_1": 0,
+              "within_2": 1,
+              "near_miss_1": 0,
+              "near_miss_2": 1,
+              "white_sum_abs_error": 32,
+              "powerball_abs_error": 0
+            },
+            "overdue": {
+              "white_matches": 0,
+              "powerball_hit": false,
+              "tier": "none",
+              "base_prize_usd": 0,
+              "within_1": 0,
+              "within_2": 0,
+              "near_miss_1": 0,
+              "near_miss_2": 0,
+              "white_sum_abs_error": 4,
+              "powerball_abs_error": 6
+            },
+            "random": {
+              "white_matches": 1,
+              "powerball_hit": false,
+              "tier": "none",
+              "base_prize_usd": 0,
+              "within_1": 1,
+              "within_2": 2,
+              "near_miss_1": 0,
+              "near_miss_2": 1,
+              "white_sum_abs_error": 13,
+              "powerball_abs_error": 8
+            }
+          }
+        },
+        {
+          "draw_date": "2026-10-31",
+          "actual": {
+            "whites": [
+              2,
+              4,
+              18,
+              50,
+              56
+            ],
+            "powerball": 20
+          },
+          "scores": {
+            "model": {
+              "white_matches": 0,
+              "powerball_hit": false,
+              "tier": "none",
+              "base_prize_usd": 0,
+              "within_1": 0,
+              "within_2": 1,
+              "near_miss_1": 0,
+              "near_miss_2": 1,
+              "white_sum_abs_error": 47,
+              "powerball_abs_error": 7
+            },
+            "model_weather": {
+              "white_matches": 0,
+              "powerball_hit": false,
+              "tier": "none",
+              "base_prize_usd": 0,
+              "within_1": 0,
+              "within_2": 1,
+              "near_miss_1": 0,
+              "near_miss_2": 1,
+              "white_sum_abs_error": 48,
+              "powerball_abs_error": 6
+            },
+            "most_hit": {
+              "white_matches": 0,
+              "powerball_hit": false,
+              "tier": "none",
+              "base_prize_usd": 0,
+              "within_1": 0,
+              "within_2": 0,
+              "near_miss_1": 0,
+              "near_miss_2": 0,
+              "white_sum_abs_error": 67,
+              "powerball_abs_error": 6
+            },
+            "hot_pairs": {
+              "white_matches": 0,
+              "powerball_hit": false,
+              "tier": "none",
+              "base_prize_usd": 0,
+              "within_1": 1,
+              "within_2": 2,
+              "near_miss_1": 1,
+              "near_miss_2": 1,
+              "white_sum_abs_error": 21,
+              "powerball_abs_error": 6
+            },
+            "neighbors": {
+              "white_matches": 0,
+              "powerball_hit": false,
+              "tier": "none",
+              "base_prize_usd": 0,
+              "within_1": 1,
+              "within_2": 1,
+              "near_miss_1": 1,
+              "near_miss_2": 0,
+              "white_sum_abs_error": 15,
+              "powerball_abs_error": 7
+            },
+            "overdue": {
+              "white_matches": 0,
+              "powerball_hit": false,
+              "tier": "none",
+              "base_prize_usd": 0,
+              "within_1": 2,
+              "within_2": 2,
+              "near_miss_1": 2,
+              "near_miss_2": 0,
+              "white_sum_abs_error": 21,
+              "powerball_abs_error": 1
+            },
+            "random": {
+              "white_matches": 0,
+              "powerball_hit": true,
+              "tier": "match_pb",
+              "base_prize_usd": 4,
+              "within_1": 0,
+              "within_2": 1,
+              "near_miss_1": 0,
+              "near_miss_2": 1,
+              "white_sum_abs_error": 48,
+              "powerball_abs_error": 0
             }
           }
         }
       ],
-      "unscored_dates": [
-        "2026-10-21",
-        "2026-10-24",
-        "2026-10-26",
-        "2026-10-28",
-        "2026-10-31"
-      ],
+      "unscored_dates": [],
       "strategies": {
         "model": {
           "tickets": 13,
-          "scored": 8,
+          "scored": 13,
           "white_matches": 5,
-          "powerball_hits": 0,
-          "prize_tickets": 0,
+          "powerball_hits": 1,
+          "prize_tickets": 1,
+          "within_1": 14,
+          "within_2": 21,
+          "near_miss_1": 9,
+          "near_miss_2": 7,
+          "white_sum_abs_error": 468,
+          "powerball_abs_error": 69,
           "tiers": {
-            "none": 8
+            "none": 12,
+            "match_pb": 1
           },
-          "mean_white_matches": 0.625,
-          "expected_white_matches": 2.898550724637681,
-          "expected_powerball_hits": 0.3076923076923077,
-          "white_matches_minus_chance": 2.101449275362319,
-          "powerball_hits_minus_chance": -0.3076923076923077
+          "mean_white_matches": 0.38461538461538464,
+          "expected_white_matches": 4.7101449275362315,
+          "expected_powerball_hits": 0.5,
+          "white_matches_minus_chance": 0.2898550724637685,
+          "powerball_hits_minus_chance": 0.5,
+          "mean_within_1": 1.0769230769230769,
+          "mean_within_2": 1.6153846153846154,
+          "mean_near_miss_1": 0.6923076923076923,
+          "mean_near_miss_2": 0.5384615384615384,
+          "mean_white_sum_abs_error": 36.0
         },
         "model_weather": {
           "tickets": 13,
-          "scored": 8,
-          "white_matches": 4,
+          "scored": 13,
+          "white_matches": 5,
           "powerball_hits": 1,
           "prize_tickets": 1,
+          "within_1": 14,
+          "within_2": 20,
+          "near_miss_1": 9,
+          "near_miss_2": 6,
+          "white_sum_abs_error": 475,
+          "powerball_abs_error": 68,
           "tiers": {
             "match_pb": 1,
-            "none": 7
+            "none": 12
           },
-          "mean_white_matches": 0.5,
-          "expected_white_matches": 2.898550724637681,
-          "expected_powerball_hits": 0.3076923076923077,
-          "white_matches_minus_chance": 1.1014492753623188,
-          "powerball_hits_minus_chance": 0.6923076923076923
+          "mean_white_matches": 0.38461538461538464,
+          "expected_white_matches": 4.7101449275362315,
+          "expected_powerball_hits": 0.5,
+          "white_matches_minus_chance": 0.2898550724637685,
+          "powerball_hits_minus_chance": 0.5,
+          "mean_within_1": 1.0769230769230769,
+          "mean_within_2": 1.5384615384615385,
+          "mean_near_miss_1": 0.6923076923076923,
+          "mean_near_miss_2": 0.46153846153846156,
+          "mean_white_sum_abs_error": 36.53846153846154
         },
         "most_hit": {
           "tickets": 13,
-          "scored": 8,
-          "white_matches": 3,
+          "scored": 13,
+          "white_matches": 4,
           "powerball_hits": 1,
           "prize_tickets": 1,
+          "within_1": 9,
+          "within_2": 16,
+          "near_miss_1": 5,
+          "near_miss_2": 7,
+          "white_sum_abs_error": 608,
+          "powerball_abs_error": 68,
           "tiers": {
             "match_pb": 1,
-            "none": 7
+            "none": 12
           },
-          "mean_white_matches": 0.375,
-          "expected_white_matches": 2.898550724637681,
-          "expected_powerball_hits": 0.3076923076923077,
-          "white_matches_minus_chance": 0.10144927536231885,
-          "powerball_hits_minus_chance": 0.6923076923076923
+          "mean_white_matches": 0.3076923076923077,
+          "expected_white_matches": 4.7101449275362315,
+          "expected_powerball_hits": 0.5,
+          "white_matches_minus_chance": -0.7101449275362315,
+          "powerball_hits_minus_chance": 0.5,
+          "mean_within_1": 0.6923076923076923,
+          "mean_within_2": 1.2307692307692308,
+          "mean_near_miss_1": 0.38461538461538464,
+          "mean_near_miss_2": 0.5384615384615384,
+          "mean_white_sum_abs_error": 46.76923076923077
         },
         "hot_pairs": {
           "tickets": 13,
-          "scored": 8,
-          "white_matches": 7,
+          "scored": 13,
+          "white_matches": 9,
           "powerball_hits": 1,
           "prize_tickets": 1,
+          "within_1": 18,
+          "within_2": 27,
+          "near_miss_1": 9,
+          "near_miss_2": 9,
+          "white_sum_abs_error": 596,
+          "powerball_abs_error": 68,
           "tiers": {
             "match_pb": 1,
-            "none": 7
+            "none": 12
           },
-          "mean_white_matches": 0.875,
-          "expected_white_matches": 2.898550724637681,
-          "expected_powerball_hits": 0.3076923076923077,
-          "white_matches_minus_chance": 4.101449275362318,
-          "powerball_hits_minus_chance": 0.6923076923076923
+          "mean_white_matches": 0.6923076923076923,
+          "expected_white_matches": 4.7101449275362315,
+          "expected_powerball_hits": 0.5,
+          "white_matches_minus_chance": 4.2898550724637685,
+          "powerball_hits_minus_chance": 0.5,
+          "mean_within_1": 1.3846153846153846,
+          "mean_within_2": 2.076923076923077,
+          "mean_near_miss_1": 0.6923076923076923,
+          "mean_near_miss_2": 0.6923076923076923,
+          "mean_white_sum_abs_error": 45.84615384615385
         },
         "neighbors": {
           "tickets": 13,
-          "scored": 8,
-          "white_matches": 2,
-          "powerball_hits": 0,
-          "prize_tickets": 0,
+          "scored": 13,
+          "white_matches": 3,
+          "powerball_hits": 1,
+          "prize_tickets": 1,
+          "within_1": 13,
+          "within_2": 20,
+          "near_miss_1": 10,
+          "near_miss_2": 7,
+          "white_sum_abs_error": 542,
+          "powerball_abs_error": 69,
           "tiers": {
-            "none": 8
+            "none": 12,
+            "match_pb": 1
           },
-          "mean_white_matches": 0.25,
-          "expected_white_matches": 2.898550724637681,
-          "expected_powerball_hits": 0.3076923076923077,
-          "white_matches_minus_chance": -0.8985507246376812,
-          "powerball_hits_minus_chance": -0.3076923076923077
+          "mean_white_matches": 0.23076923076923078,
+          "expected_white_matches": 4.7101449275362315,
+          "expected_powerball_hits": 0.5,
+          "white_matches_minus_chance": -1.7101449275362315,
+          "powerball_hits_minus_chance": 0.5,
+          "mean_within_1": 1.0,
+          "mean_within_2": 1.5384615384615385,
+          "mean_near_miss_1": 0.7692307692307693,
+          "mean_near_miss_2": 0.5384615384615384,
+          "mean_white_sum_abs_error": 41.69230769230769
         },
         "overdue": {
           "tickets": 13,
-          "scored": 8,
-          "white_matches": 5,
-          "powerball_hits": 1,
-          "prize_tickets": 1,
+          "scored": 13,
+          "white_matches": 6,
+          "powerball_hits": 2,
+          "prize_tickets": 2,
+          "within_1": 19,
+          "within_2": 23,
+          "near_miss_1": 13,
+          "near_miss_2": 4,
+          "white_sum_abs_error": 392,
+          "powerball_abs_error": 81,
           "tiers": {
-            "none": 7,
-            "match_pb": 1
+            "none": 11,
+            "match_pb": 2
           },
-          "mean_white_matches": 0.625,
-          "expected_white_matches": 2.898550724637681,
-          "expected_powerball_hits": 0.3076923076923077,
-          "white_matches_minus_chance": 2.101449275362319,
-          "powerball_hits_minus_chance": 0.6923076923076923
+          "mean_white_matches": 0.46153846153846156,
+          "expected_white_matches": 4.7101449275362315,
+          "expected_powerball_hits": 0.5,
+          "white_matches_minus_chance": 1.2898550724637685,
+          "powerball_hits_minus_chance": 1.5,
+          "mean_within_1": 1.4615384615384615,
+          "mean_within_2": 1.7692307692307692,
+          "mean_near_miss_1": 1.0,
+          "mean_near_miss_2": 0.3076923076923077,
+          "mean_white_sum_abs_error": 30.153846153846153
         },
         "random": {
           "tickets": 13,
-          "scored": 8,
-          "white_matches": 5,
-          "powerball_hits": 0,
-          "prize_tickets": 0,
+          "scored": 13,
+          "white_matches": 6,
+          "powerball_hits": 1,
+          "prize_tickets": 1,
+          "within_1": 11,
+          "within_2": 19,
+          "near_miss_1": 5,
+          "near_miss_2": 8,
+          "white_sum_abs_error": 601,
+          "powerball_abs_error": 105,
           "tiers": {
-            "none": 8
+            "none": 12,
+            "match_pb": 1
           },
-          "mean_white_matches": 0.625,
-          "expected_white_matches": 2.898550724637681,
-          "expected_powerball_hits": 0.3076923076923077,
-          "white_matches_minus_chance": 2.101449275362319,
-          "powerball_hits_minus_chance": -0.3076923076923077
+          "mean_white_matches": 0.46153846153846156,
+          "expected_white_matches": 4.7101449275362315,
+          "expected_powerball_hits": 0.5,
+          "white_matches_minus_chance": 1.2898550724637685,
+          "powerball_hits_minus_chance": 0.5,
+          "mean_within_1": 0.8461538461538461,
+          "mean_within_2": 1.4615384615384615,
+          "mean_near_miss_1": 0.38461538461538464,
+          "mean_near_miss_2": 0.6153846153846154,
+          "mean_white_sum_abs_error": 46.23076923076923
         }
       }
     },
@@ -610,12 +1515,23 @@
           "white_matches": 0,
           "powerball_hits": 0,
           "prize_tickets": 0,
+          "within_1": 0,
+          "within_2": 0,
+          "near_miss_1": 0,
+          "near_miss_2": 0,
+          "white_sum_abs_error": 0,
+          "powerball_abs_error": 0,
           "tiers": {},
           "mean_white_matches": null,
           "expected_white_matches": 0.0,
           "expected_powerball_hits": 0.0,
           "white_matches_minus_chance": 0.0,
-          "powerball_hits_minus_chance": 0.0
+          "powerball_hits_minus_chance": 0.0,
+          "mean_within_1": null,
+          "mean_within_2": null,
+          "mean_near_miss_1": null,
+          "mean_near_miss_2": null,
+          "mean_white_sum_abs_error": null
         },
         "model_weather": {
           "tickets": 13,
@@ -623,12 +1539,23 @@
           "white_matches": 0,
           "powerball_hits": 0,
           "prize_tickets": 0,
+          "within_1": 0,
+          "within_2": 0,
+          "near_miss_1": 0,
+          "near_miss_2": 0,
+          "white_sum_abs_error": 0,
+          "powerball_abs_error": 0,
           "tiers": {},
           "mean_white_matches": null,
           "expected_white_matches": 0.0,
           "expected_powerball_hits": 0.0,
           "white_matches_minus_chance": 0.0,
-          "powerball_hits_minus_chance": 0.0
+          "powerball_hits_minus_chance": 0.0,
+          "mean_within_1": null,
+          "mean_within_2": null,
+          "mean_near_miss_1": null,
+          "mean_near_miss_2": null,
+          "mean_white_sum_abs_error": null
         },
         "most_hit": {
           "tickets": 13,
@@ -636,12 +1563,23 @@
           "white_matches": 0,
           "powerball_hits": 0,
           "prize_tickets": 0,
+          "within_1": 0,
+          "within_2": 0,
+          "near_miss_1": 0,
+          "near_miss_2": 0,
+          "white_sum_abs_error": 0,
+          "powerball_abs_error": 0,
           "tiers": {},
           "mean_white_matches": null,
           "expected_white_matches": 0.0,
           "expected_powerball_hits": 0.0,
           "white_matches_minus_chance": 0.0,
-          "powerball_hits_minus_chance": 0.0
+          "powerball_hits_minus_chance": 0.0,
+          "mean_within_1": null,
+          "mean_within_2": null,
+          "mean_near_miss_1": null,
+          "mean_near_miss_2": null,
+          "mean_white_sum_abs_error": null
         },
         "hot_pairs": {
           "tickets": 13,
@@ -649,12 +1587,23 @@
           "white_matches": 0,
           "powerball_hits": 0,
           "prize_tickets": 0,
+          "within_1": 0,
+          "within_2": 0,
+          "near_miss_1": 0,
+          "near_miss_2": 0,
+          "white_sum_abs_error": 0,
+          "powerball_abs_error": 0,
           "tiers": {},
           "mean_white_matches": null,
           "expected_white_matches": 0.0,
           "expected_powerball_hits": 0.0,
           "white_matches_minus_chance": 0.0,
-          "powerball_hits_minus_chance": 0.0
+          "powerball_hits_minus_chance": 0.0,
+          "mean_within_1": null,
+          "mean_within_2": null,
+          "mean_near_miss_1": null,
+          "mean_near_miss_2": null,
+          "mean_white_sum_abs_error": null
         },
         "neighbors": {
           "tickets": 13,
@@ -662,12 +1611,23 @@
           "white_matches": 0,
           "powerball_hits": 0,
           "prize_tickets": 0,
+          "within_1": 0,
+          "within_2": 0,
+          "near_miss_1": 0,
+          "near_miss_2": 0,
+          "white_sum_abs_error": 0,
+          "powerball_abs_error": 0,
           "tiers": {},
           "mean_white_matches": null,
           "expected_white_matches": 0.0,
           "expected_powerball_hits": 0.0,
           "white_matches_minus_chance": 0.0,
-          "powerball_hits_minus_chance": 0.0
+          "powerball_hits_minus_chance": 0.0,
+          "mean_within_1": null,
+          "mean_within_2": null,
+          "mean_near_miss_1": null,
+          "mean_near_miss_2": null,
+          "mean_white_sum_abs_error": null
         },
         "overdue": {
           "tickets": 13,
@@ -675,12 +1635,23 @@
           "white_matches": 0,
           "powerball_hits": 0,
           "prize_tickets": 0,
+          "within_1": 0,
+          "within_2": 0,
+          "near_miss_1": 0,
+          "near_miss_2": 0,
+          "white_sum_abs_error": 0,
+          "powerball_abs_error": 0,
           "tiers": {},
           "mean_white_matches": null,
           "expected_white_matches": 0.0,
           "expected_powerball_hits": 0.0,
           "white_matches_minus_chance": 0.0,
-          "powerball_hits_minus_chance": 0.0
+          "powerball_hits_minus_chance": 0.0,
+          "mean_within_1": null,
+          "mean_within_2": null,
+          "mean_near_miss_1": null,
+          "mean_near_miss_2": null,
+          "mean_white_sum_abs_error": null
         },
         "random": {
           "tickets": 13,
@@ -688,12 +1659,23 @@
           "white_matches": 0,
           "powerball_hits": 0,
           "prize_tickets": 0,
+          "within_1": 0,
+          "within_2": 0,
+          "near_miss_1": 0,
+          "near_miss_2": 0,
+          "white_sum_abs_error": 0,
+          "powerball_abs_error": 0,
           "tiers": {},
           "mean_white_matches": null,
           "expected_white_matches": 0.0,
           "expected_powerball_hits": 0.0,
           "white_matches_minus_chance": 0.0,
-          "powerball_hits_minus_chance": 0.0
+          "powerball_hits_minus_chance": 0.0,
+          "mean_within_1": null,
+          "mean_within_2": null,
+          "mean_near_miss_1": null,
+          "mean_near_miss_2": null,
+          "mean_white_sum_abs_error": null
         }
       }
     }
@@ -701,113 +1683,193 @@
   "cumulative": {
     "model": {
       "tickets": 26,
-      "scored": 8,
+      "scored": 13,
       "white_matches": 5,
-      "powerball_hits": 0,
-      "prize_tickets": 0,
+      "powerball_hits": 1,
+      "prize_tickets": 1,
+      "within_1": 14,
+      "within_2": 21,
+      "near_miss_1": 9,
+      "near_miss_2": 7,
+      "white_sum_abs_error": 468,
+      "powerball_abs_error": 69,
       "tiers": {
-        "none": 8
+        "none": 12,
+        "match_pb": 1
       },
-      "mean_white_matches": 0.625,
-      "expected_white_matches": 2.898550724637681,
-      "expected_powerball_hits": 0.3076923076923077,
-      "white_matches_minus_chance": 2.101449275362319,
-      "powerball_hits_minus_chance": -0.3076923076923077
+      "mean_white_matches": 0.38461538461538464,
+      "expected_white_matches": 4.7101449275362315,
+      "expected_powerball_hits": 0.5,
+      "white_matches_minus_chance": 0.2898550724637685,
+      "powerball_hits_minus_chance": 0.5,
+      "mean_within_1": 1.0769230769230769,
+      "mean_within_2": 1.6153846153846154,
+      "mean_near_miss_1": 0.6923076923076923,
+      "mean_near_miss_2": 0.5384615384615384,
+      "mean_white_sum_abs_error": 36.0
     },
     "model_weather": {
       "tickets": 26,
-      "scored": 8,
-      "white_matches": 4,
+      "scored": 13,
+      "white_matches": 5,
       "powerball_hits": 1,
       "prize_tickets": 1,
+      "within_1": 14,
+      "within_2": 20,
+      "near_miss_1": 9,
+      "near_miss_2": 6,
+      "white_sum_abs_error": 475,
+      "powerball_abs_error": 68,
       "tiers": {
         "match_pb": 1,
-        "none": 7
+        "none": 12
       },
-      "mean_white_matches": 0.5,
-      "expected_white_matches": 2.898550724637681,
-      "expected_powerball_hits": 0.3076923076923077,
-      "white_matches_minus_chance": 1.1014492753623188,
-      "powerball_hits_minus_chance": 0.6923076923076923
+      "mean_white_matches": 0.38461538461538464,
+      "expected_white_matches": 4.7101449275362315,
+      "expected_powerball_hits": 0.5,
+      "white_matches_minus_chance": 0.2898550724637685,
+      "powerball_hits_minus_chance": 0.5,
+      "mean_within_1": 1.0769230769230769,
+      "mean_within_2": 1.5384615384615385,
+      "mean_near_miss_1": 0.6923076923076923,
+      "mean_near_miss_2": 0.46153846153846156,
+      "mean_white_sum_abs_error": 36.53846153846154
     },
     "most_hit": {
       "tickets": 26,
-      "scored": 8,
-      "white_matches": 3,
+      "scored": 13,
+      "white_matches": 4,
       "powerball_hits": 1,
       "prize_tickets": 1,
+      "within_1": 9,
+      "within_2": 16,
+      "near_miss_1": 5,
+      "near_miss_2": 7,
+      "white_sum_abs_error": 608,
+      "powerball_abs_error": 68,
       "tiers": {
         "match_pb": 1,
-        "none": 7
+        "none": 12
       },
-      "mean_white_matches": 0.375,
-      "expected_white_matches": 2.898550724637681,
-      "expected_powerball_hits": 0.3076923076923077,
-      "white_matches_minus_chance": 0.10144927536231885,
-      "powerball_hits_minus_chance": 0.6923076923076923
+      "mean_white_matches": 0.3076923076923077,
+      "expected_white_matches": 4.7101449275362315,
+      "expected_powerball_hits": 0.5,
+      "white_matches_minus_chance": -0.7101449275362315,
+      "powerball_hits_minus_chance": 0.5,
+      "mean_within_1": 0.6923076923076923,
+      "mean_within_2": 1.2307692307692308,
+      "mean_near_miss_1": 0.38461538461538464,
+      "mean_near_miss_2": 0.5384615384615384,
+      "mean_white_sum_abs_error": 46.76923076923077
     },
     "hot_pairs": {
       "tickets": 26,
-      "scored": 8,
-      "white_matches": 7,
+      "scored": 13,
+      "white_matches": 9,
       "powerball_hits": 1,
       "prize_tickets": 1,
+      "within_1": 18,
+      "within_2": 27,
+      "near_miss_1": 9,
+      "near_miss_2": 9,
+      "white_sum_abs_error": 596,
+      "powerball_abs_error": 68,
       "tiers": {
         "match_pb": 1,
-        "none": 7
+        "none": 12
       },
-      "mean_white_matches": 0.875,
-      "expected_white_matches": 2.898550724637681,
-      "expected_powerball_hits": 0.3076923076923077,
-      "white_matches_minus_chance": 4.101449275362318,
-      "powerball_hits_minus_chance": 0.6923076923076923
+      "mean_white_matches": 0.6923076923076923,
+      "expected_white_matches": 4.7101449275362315,
+      "expected_powerball_hits": 0.5,
+      "white_matches_minus_chance": 4.2898550724637685,
+      "powerball_hits_minus_chance": 0.5,
+      "mean_within_1": 1.3846153846153846,
+      "mean_within_2": 2.076923076923077,
+      "mean_near_miss_1": 0.6923076923076923,
+      "mean_near_miss_2": 0.6923076923076923,
+      "mean_white_sum_abs_error": 45.84615384615385
     },
     "neighbors": {
       "tickets": 26,
-      "scored": 8,
-      "white_matches": 2,
-      "powerball_hits": 0,
-      "prize_tickets": 0,
+      "scored": 13,
+      "white_matches": 3,
+      "powerball_hits": 1,
+      "prize_tickets": 1,
+      "within_1": 13,
+      "within_2": 20,
+      "near_miss_1": 10,
+      "near_miss_2": 7,
+      "white_sum_abs_error": 542,
+      "powerball_abs_error": 69,
       "tiers": {
-        "none": 8
+        "none": 12,
+        "match_pb": 1
       },
-      "mean_white_matches": 0.25,
-      "expected_white_matches": 2.898550724637681,
-      "expected_powerball_hits": 0.3076923076923077,
-      "white_matches_minus_chance": -0.8985507246376812,
-      "powerball_hits_minus_chance": -0.3076923076923077
+      "mean_white_matches": 0.23076923076923078,
+      "expected_white_matches": 4.7101449275362315,
+      "expected_powerball_hits": 0.5,
+      "white_matches_minus_chance": -1.7101449275362315,
+      "powerball_hits_minus_chance": 0.5,
+      "mean_within_1": 1.0,
+      "mean_within_2": 1.5384615384615385,
+      "mean_near_miss_1": 0.7692307692307693,
+      "mean_near_miss_2": 0.5384615384615384,
+      "mean_white_sum_abs_error": 41.69230769230769
     },
     "overdue": {
       "tickets": 26,
-      "scored": 8,
-      "white_matches": 5,
-      "powerball_hits": 1,
-      "prize_tickets": 1,
+      "scored": 13,
+      "white_matches": 6,
+      "powerball_hits": 2,
+      "prize_tickets": 2,
+      "within_1": 19,
+      "within_2": 23,
+      "near_miss_1": 13,
+      "near_miss_2": 4,
+      "white_sum_abs_error": 392,
+      "powerball_abs_error": 81,
       "tiers": {
-        "none": 7,
-        "match_pb": 1
+        "none": 11,
+        "match_pb": 2
       },
-      "mean_white_matches": 0.625,
-      "expected_white_matches": 2.898550724637681,
-      "expected_powerball_hits": 0.3076923076923077,
-      "white_matches_minus_chance": 2.101449275362319,
-      "powerball_hits_minus_chance": 0.6923076923076923
+      "mean_white_matches": 0.46153846153846156,
+      "expected_white_matches": 4.7101449275362315,
+      "expected_powerball_hits": 0.5,
+      "white_matches_minus_chance": 1.2898550724637685,
+      "powerball_hits_minus_chance": 1.5,
+      "mean_within_1": 1.4615384615384615,
+      "mean_within_2": 1.7692307692307692,
+      "mean_near_miss_1": 1.0,
+      "mean_near_miss_2": 0.3076923076923077,
+      "mean_white_sum_abs_error": 30.153846153846153
     },
     "random": {
       "tickets": 26,
-      "scored": 8,
-      "white_matches": 5,
-      "powerball_hits": 0,
-      "prize_tickets": 0,
+      "scored": 13,
+      "white_matches": 6,
+      "powerball_hits": 1,
+      "prize_tickets": 1,
+      "within_1": 11,
+      "within_2": 19,
+      "near_miss_1": 5,
+      "near_miss_2": 8,
+      "white_sum_abs_error": 601,
+      "powerball_abs_error": 105,
       "tiers": {
-        "none": 8
+        "none": 12,
+        "match_pb": 1
       },
-      "mean_white_matches": 0.625,
-      "expected_white_matches": 2.898550724637681,
-      "expected_powerball_hits": 0.3076923076923077,
-      "white_matches_minus_chance": 2.101449275362319,
-      "powerball_hits_minus_chance": -0.3076923076923077
+      "mean_white_matches": 0.46153846153846156,
+      "expected_white_matches": 4.7101449275362315,
+      "expected_powerball_hits": 0.5,
+      "white_matches_minus_chance": 1.2898550724637685,
+      "powerball_hits_minus_chance": 0.5,
+      "mean_within_1": 0.8461538461538461,
+      "mean_within_2": 1.4615384615384615,
+      "mean_near_miss_1": 0.38461538461538464,
+      "mean_near_miss_2": 0.6153846153846154,
+      "mean_white_sum_abs_error": 46.23076923076923
     }
   },
-  "summary": "Scored 8 draws. model: white matches 5 (chance 2.90), Powerball hits 0 (chance 0.31), prize tiers 0; model_weather: white matches 4 (chance 2.90), Powerball hits 1 (chance 0.31), prize tiers 1; most_hit: white matches 3 (chance 2.90), Powerball hits 1 (chance 0.31), prize tiers 1; hot_pairs: white matches 7 (chance 2.90), Powerball hits 1 (chance 0.31), prize tiers 1; neighbors: white matches 2 (chance 2.90), Powerball hits 0 (chance 0.31), prize tiers 0; overdue: white matches 5 (chance 2.90), Powerball hits 1 (chance 0.31), prize tiers 1; random: white matches 5 (chance 2.90), Powerball hits 0 (chance 0.31), prize tiers 0."
+  "summary": "Scored 13 draws. model: white matches 5 (chance 4.71), Powerball hits 1 (chance 0.50), prize tiers 1, within \u00b11 1.08; model_weather: white matches 5 (chance 4.71), Powerball hits 1 (chance 0.50), prize tiers 1, within \u00b11 1.08; most_hit: white matches 4 (chance 4.71), Powerball hits 1 (chance 0.50), prize tiers 1, within \u00b11 0.69; hot_pairs: white matches 9 (chance 4.71), Powerball hits 1 (chance 0.50), prize tiers 1, within \u00b11 1.38; neighbors: white matches 3 (chance 4.71), Powerball hits 1 (chance 0.50), prize tiers 1, within \u00b11 1.00; overdue: white matches 6 (chance 4.71), Powerball hits 2 (chance 0.50), prize tiers 2, within \u00b11 1.46; random: white matches 6 (chance 4.71), Powerball hits 1 (chance 0.50), prize tiers 1, within \u00b11 0.85."
 }
