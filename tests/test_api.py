@@ -229,6 +229,11 @@ class TestNewEndpoints:
         resp = client.get("/")
         assert resp.status_code == 200
 
+    def test_favicon_is_served(self, client):
+        resp = client.get("/favicon.ico")
+        assert resp.status_code == 200
+        assert resp.headers["content-type"].startswith("image/")
+
 
 def _idle_training() -> None:
     _state["training"] = {"status": "idle", "result": None}
@@ -826,6 +831,11 @@ class TestForecastDashboard:
         page = client.get("/")
         assert page.status_code == 200
         html = page.text
+        assert "See what comes next." in html
+        assert 'id="welcome-heading"' in html
+        assert 'href="#forecast"' in html
+        assert 'href="#account"' in html
+        assert 'id="explore-heading"' in html
         assert 'id="forecast-chart"' in html
         assert 'id="powerball-summary"' in html
         assert 'id="powerball-body"' in html
