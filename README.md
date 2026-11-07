@@ -18,6 +18,7 @@ A production-ready transformer pipeline for time-series prediction, built with P
 - **Modular Python package** – models, data, training, evaluation, inference, and storage layers
 - **Docker & GitHub Container Registry** – `docker compose up --build` locally, or pull `ghcr.io/andrewgrayyouneek/real-neural-forge`
 - **Configurable via YAML** – all hyper-parameters in `config/config.yaml`
+- **GQ voice read-aloud** – Andrew's ElevenLabs voice clone reads forecasts and results aloud; text stays free and audio is metered per account
 
 ## Project Structure
 
@@ -51,6 +52,7 @@ A production-ready transformer pipeline for time-series prediction, built with P
 │   ├── retrain/
 │   ├── serving/
 │   ├── storage/
+│   ├── voice/
 │   └── utils/
 ├── tests/
 ├── deploy/
@@ -480,6 +482,75 @@ YouNeeK Time is **100 units / 100 minutes / 100 seconds** (not App Store 10/10/1
 - `GET /youneek/calendar` — year, 10-day week, year clock
 - `GET /youneek/lunar` — lunar YouNeeK clock
 
+### GQ voice
+
+- `GET /voice/status` — balance, today's site-wide voice usage, recent usage, and the pack catalogue. Open without a session; it then reports `signed_in: false` with a sign-up prompt.
+- `POST /voice/speak` — `{"text": "..."}` → `audio/mpeg`. `401` signed out, `402` out of credit, `422` empty or too long, `429` daily site cap reached, `502`/`503` voice unavailable. Identical text replays from cache without spending.
+- `POST /voice/checkout` — `{"pack_id": "..."}` → a Stripe Checkout URL, or `{"available": false}` ("coming soon") when Stripe is not configured.
+- `POST /voice/stripe/webhook` — Stripe webhook. The signature is verified before anything is credited, and each checkout session credits exactly once.
+
+## GQ voice: metered read-aloud
+
+The dashboard can read forecasts and results aloud in **GQ**, Andrew's professional voice clone on ElevenLabs (voice id `QMnwdN2oOwNXPcl9oXIl`). The rules:
+
+- **Text is always free.** Every page, forecast, explanation, and workspace feature works in text with no account and no credit. Voice credit never gates text.
+- **Each account gets a free GQ allowance** — 5,000 characters, granted once, the first time the account opens the Voice & credits page or listens.
+- **After that, credit is bought.** One-time packs, priced to sit well above the ElevenLabs API cost of about **$0.08 per 1,000 characters**:
+
+| Pack | Characters | Price |
+| --- | --- | --- |
+| Starter | 25,000 | $6.00 |
+| Standard | 100,000 | $18.00 |
+| Studio | 500,000 | $75.00 |
+
+  The catalogue is configurable under `voice:` in `config/config.yaml` (ids, characters, prices); the numeric caps are configurable by environment.
+- **Metering is server-side.** `POST /voice/speak` checks the account balance before calling ElevenLabs, deducts the exact character count (free credit first, then purchased), and returns `402` when the balance is short. A request longer than `max_chars_per_request` (2,000 characters) is rejected with `422`.
+- **Identical text is free to replay.** Audio is cached by a hash of voice id + text, so the same paragraph never spends credit twice.
+- **A global daily safety cap** (`daily_char_limit`, default 300,000 characters ≈ $24/day of ElevenLabs spend) stops the site-wide bill from running away; further member requests get `429` until the UTC day rolls over.
+- **Signed-out visitors get no GQ.** `POST /voice/speak` returns `401` with a prompt to create a free account. Text stays open either way.
+- **The owner account is unlimited.** The API-token owner skips the allowance, balance, and daily-cap checks. The per-request length cap still applies, because it is an ElevenLabs API limit, not a billing rule.
+- **Payments degrade gracefully.** Without `STRIPE_SECRET_KEY` the buy buttons show "coming soon"; without `ELEVENLABS_API_KEY` the listen buttons say voice is unavailable. Neither affects text.
+
+### Secrets and setup
+
+Secrets come only from the environment — never from git:
+
+| Secret | Purpose |
+| --- | --- |
+| `ELEVENLABS_API_KEY` | Calls ElevenLabs text-to-speech. Voice is unavailable (text unaffected) while it is unset. |
+| `STRIPE_SECRET_KEY` | Creates Checkout sessions. Buy buttons show "coming soon" while it is unset. |
+| `STRIPE_WEBHOOK_SECRET` | Verifies the Stripe webhook signature. The webhook returns `503` while it is unset. |
+
+On Cloudflare, from `deploy/cloudflare/`:
+
+```bash
+npx wrangler secret put ELEVENLABS_API_KEY
+npx wrangler secret put STRIPE_SECRET_KEY
+npx wrangler secret put STRIPE_WEBHOOK_SECRET
+```
+
+In the Stripe dashboard:
+
+1. **Developers → Webhooks → Add endpoint**: URL `https://forge.youneek.xyz/voice/stripe/webhook`, event `checkout.session.completed`.
+2. Copy the endpoint's **Signing secret** and store it with `npx wrangler secret put STRIPE_WEBHOOK_SECRET`, then let the container restart so the secret is picked up.
+3. Buy one pack with a test account and check the Voice & credits page shows the credited characters.
+
+The voice tables ship as D1 migration `deploy/cloudflare/migrations/0002_voice.sql`; `npx wrangler d1 migrations apply neural-forge-workspaces --remote` applies it. Locally, `prepare_workspace` creates the same tables at startup.
+
+| Voice variable | Default |
+| --- | --- |
+| `ELEVENLABS_API_KEY` | unset (voice off) |
+| `STRIPE_SECRET_KEY` | unset (buy shows "coming soon") |
+| `STRIPE_WEBHOOK_SECRET` | unset (webhook returns `503`) |
+| `NEURAL_FORGE_VOICE_ID` | `QMnwdN2oOwNXPcl9oXIl` |
+| `NEURAL_FORGE_VOICE_ENABLED` | on when an API key is set; `0`/`false`/`off`/`no` forces off |
+| `NEURAL_FORGE_VOICE_FREE_CHARS` | `5000` |
+| `NEURAL_FORGE_VOICE_MAX_CHARS` | `2000` |
+| `NEURAL_FORGE_VOICE_DAILY_LIMIT` | `300000` |
+| `NEURAL_FORGE_PUBLIC_URL` | derived from the request host; base for the Checkout success/cancel return URLs |
+
+Cached audio lives beside workspace bytes (`voice/cache/<sha256>.mp3` in R2, files under the workspace directory locally), so the cache needs no extra storage service. The $5/month Cloudflare plan is untouched: no new Workers, routes, or bindings, and the cache reduces ElevenLabs spend.
+
 ## Deployment
 
 GitHub is the home for this project:
@@ -598,6 +669,9 @@ npx wrangler secret put NEURAL_FORGE_CHECKPOINT_TOKEN
 | `NEURAL_FORGE_CONFIG` | No | Config path inside the image. Default `config/config.yaml`. |
 | `NEURAL_FORGE_CHECKPOINT_PATH` | No | Where the file is saved. Default is `inference.checkpoint_path`. |
 | `NEURAL_FORGE_CHECKPOINT_MAX_BYTES` | No | Download cap. Default 256 MiB. |
+| `ELEVENLABS_API_KEY` | For GQ voice | ElevenLabs text-to-speech key. Voice is unavailable (text unaffected) while unset. See [GQ voice](#gq-voice-metered-read-aloud). |
+| `STRIPE_SECRET_KEY` | For GQ voice sales | Creates one-time Checkout sessions. Buy buttons show "coming soon" while unset. |
+| `STRIPE_WEBHOOK_SECRET` | For GQ voice sales | Verifies the Stripe webhook that credits purchased voice packs. |
 
 The container needs outbound internet so it can download the champion. D1 and R2 calls stay inside the Worker: the container requests `http://bindings.neuralforge`, and `outboundByHost` serves those paths with the bindings.
 
@@ -651,7 +725,7 @@ npx wrangler secret put NEURAL_FORGE_API_TOKEN
 npx wrangler secret put NEURAL_FORGE_CHECKPOINT_TOKEN
 ```
 
-`NEURAL_FORGE_CHECKPOINT_TOKEN` is only required when the champions release is private. Omit that `secret put` for a public release. `npx wrangler deploy` (after the image pin is updated) attaches the custom hostnames `forge.youneek.xyz` and `forge.youneek.dev` and keeps `https://real-neural-forge-api.youneekartifacts.workers.dev`.
+`NEURAL_FORGE_CHECKPOINT_TOKEN` is only required when the champions release is private. Omit that `secret put` for a public release. `npx wrangler deploy` (after the image pin is updated) attaches the custom hostnames `forge.youneek.xyz` and `forge.youneek.dev` and keeps `https://real-neural-forge-api.youneekartifacts.workers.dev`. `npx wrangler d1 migrations apply neural-forge-workspaces --remote` above also applies `migrations/0002_voice.sql`, the GQ voice metering tables.
 
 ### Fly.io (one command after the token is filled in)
 
