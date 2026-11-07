@@ -6,7 +6,8 @@ import re
 
 _KEY = re.compile(
     r"^(bases/starters/[a-z0-9-]+/(dataset\.csv|model\.pt)"
-    r"|users/[A-Za-z0-9_]+/(datasets|models)/[A-Za-z0-9_.-]+)$"
+    r"|users/[A-Za-z0-9_]+/(datasets|models)/[A-Za-z0-9_.-]+"
+    r"|voice/cache/[a-f0-9]{64}\.mp3)$"
 )
 
 

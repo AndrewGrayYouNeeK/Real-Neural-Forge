@@ -36,6 +36,7 @@ from src.storage.experiments import ExperimentStore, db_path_from_config
 from src.training.trainer import TimeSeriesTrainer
 from src.utils.config import load_config
 from src.utils.paths import REPO_ROOT, resolve_repo_path
+from src.voice.routes import router as voice_router
 from src.workspace.errors import WorkspaceError
 from src.workspace.routes import router as workspace_router
 from src.workspace.runtime import runtime
@@ -268,6 +269,7 @@ if FRONTEND_DIR.exists():
     app.mount("/assets", StaticFiles(directory=FRONTEND_DIR), name="assets")
 
 app.include_router(workspace_router)
+app.include_router(voice_router)
 
 
 class PredictRequest(BaseModel):

@@ -32,6 +32,9 @@ filelock>=3.12,<4.1.1
 # SciPy 1.16 dropped Python 3.10. scikit-learn 1.7 accepts SciPy >= 1.8.
 scipy>=1.8,<1.16
 
+# GQ voice: Stripe Checkout sessions and webhook signature verification.
+stripe>=12,<17
+
 # Editable build hook. Workers Builds installs the lock before Wrangler, and
 # this entry writes wrangler.jsonc when WRANGLER_CI_OVERRIDE_NAME is set.
 # It must stay editable so the hook runs against this checkout. A normal
