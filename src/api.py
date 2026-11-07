@@ -414,6 +414,14 @@ def dashboard() -> FileResponse:
     return FileResponse(index)
 
 
+@app.get("/favicon.ico", include_in_schema=False)
+def favicon() -> FileResponse:
+    icon = FRONTEND_DIR / "favicon.ico"
+    if not icon.exists():
+        raise HTTPException(status_code=404, detail="Favicon not found.")
+    return FileResponse(icon, media_type="image/x-icon")
+
+
 @app.get("/health", tags=["monitoring"])
 def health() -> dict[str, str]:
     return {"status": "ok"}

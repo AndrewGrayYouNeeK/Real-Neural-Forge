@@ -3,11 +3,12 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Neural Forge — Forecast</title>
+    <title>Neural Forge — See what comes next</title>
     <meta
       name="description"
-      content="Forecast dashboard for the Neural Forge time-series model."
+      content="Neural Forge is a small AI that learns the rhythm of a stream of numbers and sketches what happens next."
     />
+    <link rel="icon" href="/favicon.ico" sizes="any" />
     <link rel="stylesheet" href="/assets/styles.css" />
   </head>
   <body>
@@ -17,10 +18,6 @@
       <header class="topbar">
         <div>
           <p class="eyebrow">Neural Forge</p>
-          <h1>Forecast</h1>
-          <p class="subtitle">
-            Recent history, the next forecast, and how that compares with baselines.
-          </p>
         </div>
         <div class="topbar-actions">
           <p id="status-line" class="status-line"></p>
@@ -28,58 +25,52 @@
         </div>
       </header>
 
-      <p id="notice" class="notice" role="alert"></p>
-      <section class="panel" id="account" aria-labelledby="account-heading">
-        <h2 id="account-heading">Account</h2>
-        <p id="account-summary" class="hint">
-          Sign in to open a private workspace. Shared forecasts, the lunar calendar,
-          and the near-Earth panels stay available either way.
+      <section class="hero" id="welcome" aria-labelledby="welcome-heading">
+        <h1 id="welcome-heading">See what comes next.</h1>
+        <p class="hero-copy">
+          Neural Forge is a small AI that learns the rhythm of a stream of
+          numbers — weather, markets, lottery draws, near-Earth asteroids —
+          and sketches what happens next. Everything on this page is open to
+          explore. An account only adds a private workspace.
         </p>
-        <div id="account-signed-in" hidden>
-          <p id="account-label"></p>
-          <button id="sign-out-btn" class="btn secondary" type="button">Sign out</button>
+        <div class="hero-actions">
+          <a class="btn primary" href="#forecast">See the live forecast</a>
+          <a class="btn secondary" href="#account">Create a free account</a>
         </div>
-        <div id="account-signed-out" class="account-grid">
-          <form id="sign-in-form">
-            <h3>Sign in</h3>
-            <label for="sign-in-email">Email</label>
-            <input id="sign-in-email" name="email" type="email" autocomplete="username" required />
-            <label for="sign-in-password">Password</label>
-            <input id="sign-in-password" name="password" type="password" autocomplete="current-password" required />
-            <button class="btn primary" type="submit">Sign in</button>
-          </form>
-          <form id="sign-up-form">
-            <h3>Create an account</h3>
-            <label for="sign-up-email">Email</label>
-            <input id="sign-up-email" name="email" type="email" autocomplete="username" required />
-            <label for="sign-up-password">Password</label>
-            <input
-              id="sign-up-password"
-              name="password"
-              type="password"
-              autocomplete="new-password"
-              minlength="10"
-              required
-            />
-            <p class="hint">At least 10 characters. A new account gets its own sample datasets and models.</p>
-            <button class="btn primary" type="submit">Create account</button>
-          </form>
-        </div>
+        <ol class="hero-steps">
+          <li>
+            <span class="step-number" aria-hidden="true">1</span>
+            <strong>Pick a sample.</strong> Weather, markets, lottery draws —
+            the starter samples are already loaded for you.
+          </li>
+          <li>
+            <span class="step-number" aria-hidden="true">2</span>
+            <strong>See the forecast.</strong> The chart just below shows what
+            the model expects next, with a range of likely outcomes.
+          </li>
+          <li>
+            <span class="step-number" aria-hidden="true">3</span>
+            <strong>Make it yours.</strong> A free account lets you train on
+            your own numbers in a private workspace.
+          </li>
+        </ol>
       </section>
+
+      <p id="notice" class="notice" role="alert"></p>
       <noscript>
         <p class="notice">The forecast dashboard needs JavaScript to load charts.</p>
       </noscript>
 
       <main>
         <section class="panel" aria-labelledby="overview-heading">
-          <h2 id="overview-heading" class="visually-hidden">System status</h2>
+          <h2 id="overview-heading" class="visually-hidden">What is running right now</h2>
           <div id="status-grid" class="status-grid"></div>
         </section>
 
         <section id="forecast" class="panel" tabindex="-1" aria-labelledby="forecast-heading">
           <div class="panel-header">
             <div>
-              <h2 id="forecast-heading">Forecast</h2>
+              <h2 id="forecast-heading">The live forecast</h2>
               <p id="forecast-kicker" class="hint"></p>
             </div>
           </div>
@@ -90,14 +81,14 @@
 
         <section class="split">
           <section class="panel" aria-labelledby="accuracy-heading">
-            <h2 id="accuracy-heading">Accuracy vs baselines</h2>
+            <h2 id="accuracy-heading">How good is it?</h2>
             <p id="accuracy-caption" class="hint"></p>
             <div id="accuracy-grid" class="status-grid"></div>
             <div id="accuracy-chart" class="chart-host chart-host-short"></div>
           </section>
 
           <section class="panel" aria-labelledby="backtest-heading">
-            <h2 id="backtest-heading">Predictions vs actuals</h2>
+            <h2 id="backtest-heading">What it guessed vs what happened</h2>
             <p id="backtest-caption" class="hint">
               One-step predictions on the recent window, plotted against what happened.
             </p>
@@ -105,8 +96,96 @@
           </section>
         </section>
 
+        <section class="panel" id="account" aria-labelledby="account-heading">
+          <h2 id="account-heading">Sign in or create a free account</h2>
+          <p id="account-summary" class="hint">
+            An account only adds a private workspace — your own datasets, models,
+            and training runs. Everything else on this page stays open either way.
+          </p>
+          <div id="account-signed-in" hidden>
+            <p id="account-label"></p>
+            <button id="sign-out-btn" class="btn secondary" type="button">Sign out</button>
+          </div>
+          <div id="account-signed-out" class="account-grid">
+            <form id="sign-in-form">
+              <h3>Sign in</h3>
+              <label for="sign-in-email">Email</label>
+              <input id="sign-in-email" name="email" type="email" autocomplete="username" required />
+              <label for="sign-in-password">Password</label>
+              <input id="sign-in-password" name="password" type="password" autocomplete="current-password" required />
+              <button class="btn primary" type="submit">Sign in</button>
+            </form>
+            <form id="sign-up-form">
+              <h3>Create an account</h3>
+              <label for="sign-up-email">Email</label>
+              <input id="sign-up-email" name="email" type="email" autocomplete="username" required />
+              <label for="sign-up-password">Password</label>
+              <input
+                id="sign-up-password"
+                name="password"
+                type="password"
+                autocomplete="new-password"
+                minlength="10"
+                required
+              />
+              <p class="hint">At least 10 characters. A new account gets its own sample datasets and models.</p>
+              <button class="btn primary" type="submit">Create account</button>
+            </form>
+          </div>
+        </section>
+
+        <section class="panel" id="explore" aria-labelledby="explore-heading">
+          <h2 id="explore-heading">Explore what the model watches</h2>
+          <p class="hint">
+            Every topic below lives on this page and is open without an account.
+            Pick one to jump straight to it, or simply keep scrolling.
+          </p>
+          <nav class="explore-grid" aria-label="Topics on this page">
+            <a class="explore-card" href="#forecast">
+              <strong>The live forecast</strong>
+              <span>What the model expects next</span>
+            </a>
+            <a class="explore-card" href="#workspace">
+              <strong>Your private workspace</strong>
+              <span>Samples, datasets, and your own models</span>
+            </a>
+            <a class="explore-card" href="#experiments">
+              <strong>Experiments</strong>
+              <span>Every training run and its numbers</span>
+            </a>
+            <a class="explore-card" href="#adhoc">
+              <strong>Try your own numbers</strong>
+              <span>Paste a short series and get a prediction</span>
+            </a>
+            <a class="explore-card" href="#training">
+              <strong>Train a new model</strong>
+              <span>Start a training run from the browser</span>
+            </a>
+            <a class="explore-card" href="#near-earth">
+              <strong>What's coming close to Earth</strong>
+              <span>Asteroids, satellites, and the 24-month outlook</span>
+            </a>
+            <a class="explore-card" href="#solar-system">
+              <strong>The rest of the solar system</strong>
+              <span>Planets, comets, and the model's outlook</span>
+            </a>
+            <a class="explore-card" href="#lunar">
+              <strong>Moon and the lottery</strong>
+              <span>A published check, not a way to pick numbers</span>
+            </a>
+            <a class="explore-card" href="#powerball">
+              <strong>Powerball scorecard</strong>
+              <span>Logged tickets against published draws</span>
+            </a>
+            <a class="explore-card" href="#youneek-time">
+              <strong>YouNeeK Time</strong>
+              <span>A 100/100/100 calendar, kept for fun</span>
+            </a>
+          </nav>
+        </section>
+
         <section class="panel" id="workspace" aria-labelledby="workspace-heading">
-          <h2 id="workspace-heading">My workspace</h2>
+          <h2 id="workspace-heading">Your private workspace</h2>
           <p class="hint">
             Datasets, templates, and models here belong to this account. Training
             writes a private checkpoint. Shared starter files stay read-only.
@@ -138,10 +217,10 @@
           </div>
         </section>
 
-        <section class="panel" aria-labelledby="experiments-heading">
+        <section class="panel" id="experiments" aria-labelledby="experiments-heading">
           <div class="panel-header">
             <div>
-              <h2 id="experiments-heading">Experiments</h2>
+              <h2 id="experiments-heading">Experiments — every training run</h2>
               <p id="experiments-caption" class="hint">
                 Select a run to compare metrics and open its validation predictions.
               </p>
@@ -172,11 +251,15 @@
           </div>
         </section>
 
-        <section class="panel split">
-          <div>
+        <section class="panel split" id="adhoc-training">
+          <div id="adhoc">
             <div class="panel-header">
-              <h2>Ad-hoc prediction</h2>
+              <h2>Try your own numbers</h2>
             </div>
+            <p class="hint">
+              Paste a short list of numbers in order — the model answers with what
+              it thinks comes next.
+            </p>
             <label for="sequence-input">Sequence JSON</label>
             <textarea id="sequence-input" rows="8">[[0.1], [0.2], [0.3], [0.4], [0.5]]</textarea>
             <button id="predict-btn" class="btn primary" type="button">Predict</button>
@@ -184,9 +267,9 @@
             <pre id="prediction-output" class="output"></pre>
           </div>
 
-          <div>
+          <div id="training">
             <div class="panel-header">
-              <h2>Training</h2>
+              <h2>Train a new model</h2>
             </div>
             <p class="hint">Kick off a background training run using the current config.</p>
             <label for="api-token">API token (optional)</label>
@@ -197,10 +280,13 @@
               aria-describedby="token-hint"
               placeholder="Only required when the server sets a token"
             />
-            <p id="token-hint" class="hint">
-              Saved in this browser and sent with training requests. On a public server this
-              token is the owner account. Visitors use the account forms above.
-            </p>
+            <details>
+              <summary>What is an API token?</summary>
+              <p id="token-hint" class="hint">
+                Saved in this browser and sent with training requests. On a public server this
+                token is the owner account. Visitors use the account forms above.
+              </p>
+            </details>
             <button id="owner-sign-in-btn" class="btn secondary" type="button">
               Sign in as owner with API token
             </button>
@@ -209,7 +295,7 @@
           </div>
         </section>
 
-        <section class="panel" aria-labelledby="near-earth-heading">
+        <section class="panel" id="near-earth" aria-labelledby="near-earth-heading">
           <div class="panel-header">
             <div>
               <h2 id="near-earth-heading">What's coming close to Earth</h2>
@@ -270,7 +356,7 @@
           <p id="near-earth-context" class="hint"></p>
         </section>
 
-        <section class="panel" aria-labelledby="solar-system-heading">
+        <section class="panel" id="solar-system" aria-labelledby="solar-system-heading">
           <div class="panel-header">
             <div>
               <h2 id="solar-system-heading">The rest of the solar system</h2>
@@ -374,7 +460,7 @@
           <p id="solar-showers" class="hint"></p>
         </section>
 
-        <section class="panel" aria-labelledby="lunar-heading">
+        <section class="panel" id="lunar" aria-labelledby="lunar-heading">
           <div class="panel-header">
             <div>
               <h2 id="lunar-heading">Moon and the lottery</h2>
@@ -405,10 +491,20 @@
               <tbody id="lunar-body"></tbody>
             </table>
           </div>
+          <details>
+            <summary>What do p and BH p mean?</summary>
+            <p class="hint">
+              p is the chance that a pattern this strong would appear in draws even
+              if the moon had no effect at all. BH p is the same number after
+              adjusting for testing many patterns at once. A small value would hint
+              at a real effect; "Survives" says whether the pattern holds up after
+              that adjustment.
+            </p>
+          </details>
           <p id="lunar-models" class="hint"></p>
         </section>
 
-        <section class="panel" aria-labelledby="powerball-heading">
+        <section class="panel" id="powerball" aria-labelledby="powerball-heading">
           <div class="panel-header">
             <div>
               <h2 id="powerball-heading">Powerball scorecard</h2>
@@ -440,7 +536,7 @@
           </div>
         </section>
 
-        <section class="panel">
+        <section class="panel" id="youneek-time">
           <details>
             <summary>YouNeeK Time</summary>
             <p class="hint">

@@ -91,7 +91,11 @@ function formatMetric(value) {
 function formatSkill(value) {
   if (value == null || !Number.isFinite(value)) return "—";
   const rounded = Math.round(value * 100);
-  return `${rounded > 0 ? "+" : ""}${rounded}%`;
+  if (rounded === 0) return "level with a naive guess";
+  const percent = `${Math.abs(rounded)}%`;
+  return rounded > 0
+    ? `+${percent} better than a naive guess`
+    : `${percent} behind a naive guess`;
 }
 
 function reportError(error) {
@@ -378,7 +382,7 @@ function renderAccuracy() {
       ? 1 - model.value / persistence.value
       : null;
   const cards = view.rows.slice(0, 3).map((row) => [row.name, formatMetric(row.value)]);
-  cards.push(["Skill vs persistence", formatSkill(skill)]);
+  cards.push(["Model skill", formatSkill(skill)]);
   if (mean && !cards.some(([label]) => label === mean.name)) {
     cards.splice(cards.length - 1, 0, [mean.name, formatMetric(mean.value)]);
   }
