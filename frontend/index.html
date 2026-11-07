@@ -14,16 +14,59 @@
   <body>
     <a class="skip-link" href="#forecast">Skip to forecast</a>
     <div class="grid-bg" aria-hidden="true"></div>
-    <div class="shell">
-      <header class="topbar">
-        <div>
-          <p class="eyebrow">Neural Forge</p>
-        </div>
-        <div class="topbar-actions">
-          <p id="status-line" class="status-line"></p>
-          <button id="refresh-btn" class="btn secondary" type="button">Refresh</button>
-        </div>
-      </header>
+    <div class="app-shell">
+      <button
+        id="sidebar-toggle"
+        class="sidebar-toggle"
+        type="button"
+        aria-expanded="false"
+        aria-controls="sidebar"
+      >
+        Menu
+      </button>
+      <aside class="sidebar" id="sidebar" aria-label="Site sections">
+        <p class="eyebrow sidebar-brand">Neural Forge</p>
+        <nav id="sidebar-nav" class="sidebar-nav" aria-label="Main navigation">
+          <a class="side-link" href="#forecast">Forecast</a>
+          <a class="side-link" href="#workspace">My workspace</a>
+          <p class="side-group-label" id="sidebar-explore-label">Explore</p>
+          <a class="side-link side-sub" href="#near-earth" aria-describedby="sidebar-explore-label">
+            Space — near Earth
+          </a>
+          <a class="side-link side-sub" href="#solar-system" aria-describedby="sidebar-explore-label">
+            Space — solar system
+          </a>
+          <a class="side-link side-sub" href="#lunar" aria-describedby="sidebar-explore-label">
+            Moon &amp; the lottery
+          </a>
+          <a class="side-link side-sub" href="#powerball" aria-describedby="sidebar-explore-label">
+            Powerball scorecard
+          </a>
+          <a class="side-link side-sub" href="#youneek-time" aria-describedby="sidebar-explore-label">
+            YouNeeK Time
+          </a>
+          <a class="side-link side-sub" href="#explore" aria-describedby="sidebar-explore-label">
+            All topics
+          </a>
+          <a class="side-link" href="#experiments">Experiments</a>
+          <a class="side-link" href="#training">Training</a>
+          <a class="side-link" href="#voice">Voice &amp; credits</a>
+          <a class="side-link" href="#account">Account</a>
+        </nav>
+        <p class="sidebar-foot hint">
+          Reading this site in text is always free. Only GQ voice spends credit.
+        </p>
+      </aside>
+      <div class="shell">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow topbar-brand">Neural Forge</p>
+          </div>
+          <div class="topbar-actions">
+            <p id="status-line" class="status-line"></p>
+            <button id="refresh-btn" class="btn secondary" type="button">Refresh</button>
+          </div>
+        </header>
 
       <section class="hero" id="welcome" aria-labelledby="welcome-heading">
         <h1 id="welcome-heading">See what comes next.</h1>
@@ -72,6 +115,11 @@
             <div>
               <h2 id="forecast-heading">The live forecast</h2>
               <p id="forecast-kicker" class="hint"></p>
+            </div>
+            <div>
+              <button id="listen-forecast-btn" class="btn secondary" type="button">
+                Listen in GQ
+              </button>
             </div>
           </div>
           <p id="forecast-summary" class="summary" aria-live="polite"></p>
@@ -132,6 +180,26 @@
               <button class="btn primary" type="submit">Create account</button>
             </form>
           </div>
+        </section>
+
+        <section class="panel" id="voice" aria-labelledby="voice-heading">
+          <div class="panel-header">
+            <div>
+              <h2 id="voice-heading">Voice &amp; credits</h2>
+              <p class="hint">
+                Hear forecasts and results read aloud in Andrew's "GQ" voice.
+                Reading this site in text is always free — only listening
+                spends voice credit. A new account starts with a small free
+                GQ allowance.
+              </p>
+            </div>
+          </div>
+          <div id="voice-status-grid" class="status-grid"></div>
+          <p id="voice-message" class="hint" aria-live="polite"></p>
+          <h3>GQ voice credit packs</h3>
+          <div id="voice-packs" class="starter-list"></div>
+          <h3>Recent GQ usage</h3>
+          <ul id="voice-usage-list"></ul>
         </section>
 
         <section class="panel" id="explore" aria-labelledby="explore-heading">
@@ -263,6 +331,9 @@
             <label for="sequence-input">Sequence JSON</label>
             <textarea id="sequence-input" rows="8">[[0.1], [0.2], [0.3], [0.4], [0.5]]</textarea>
             <button id="predict-btn" class="btn primary" type="button">Predict</button>
+            <button id="listen-adhoc-btn" class="btn secondary" type="button">
+              Listen in GQ
+            </button>
             <div id="adhoc-chart" class="chart-host chart-host-short"></div>
             <pre id="prediction-output" class="output"></pre>
           </div>
@@ -548,6 +619,7 @@
           </details>
         </section>
       </main>
+      </div>
     </div>
     <script src="/assets/chart.js"></script>
     <script src="/assets/app.js"></script>

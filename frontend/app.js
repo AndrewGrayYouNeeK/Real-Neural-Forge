@@ -26,7 +26,11 @@ const state = {
   selectedStamp: null,
   comparisonRows: null,
   detailToken: 0,
+  forecastSpeech: "",
+  adhocSpeech: "",
 };
+
+const voiceState = { status: null };
 
 let holdTrainingMessage = false;
 let lastTrainingStatus = null;
@@ -405,6 +409,7 @@ function renderForecast() {
     kicker.textContent = "";
     summary.textContent = "";
     note.textContent = "";
+    state.forecastSpeech = "";
     charts.renderLineChart(document.getElementById("forecast-chart"), {
       ariaLabel: "Forecast",
       empty: "Recent history is not available.",
@@ -499,6 +504,10 @@ function renderForecast() {
   else if (steps.length) parts.push("This response has no p10–p90 interval.");
   else parts.push("No forecast was returned.");
   summary.textContent = parts.join(" ");
+  state.forecastSpeech = [
+    `The live forecast for ${series.dataset || series.source || "the loaded series"}.`,
+    ...parts,
+  ].join(" ");
   const windowNote = windowSummary(series.metrics);
   const seriesNote = typeof series.note === "string" ? series.note : "";
   note.textContent = [seriesNote, windowNote].filter(Boolean).join(" ");
@@ -1022,6 +1031,20 @@ async function refreshStatus() {
 function renderAdhoc(result) {
   const steps = normalizeForecast(result);
   const host = document.getElementById("adhoc-chart");
+  if (steps.length) {
+    state.adhocSpeech =
+      "Your prediction. " +
+      steps
+        .map(
+          (step, index) =>
+            `Step ${step.step || index + 1}: ${
+              formatMetric(step.p50 != null ? step.p50 : step.value)
+            }.`
+        )
+        .join(" ");
+  } else {
+    state.adhocSpeech = "";
+  }
   if (steps.length > 1 || hasInterval(steps)) {
     const labels = steps.map((step, index) => `+${step.step || index + 1}`);
     const low = steps.map((step) => step.p10);
@@ -1715,6 +1738,7 @@ document.getElementById("refresh-btn").addEventListener("click", () => {
   clearNotice();
   refreshLunar();
   refreshScorecard();
+  refreshVoice();
   refreshNearEarth().catch(reportError);
   refreshSolar().catch(reportError);
   Promise.all([refreshStatus(), refreshSeries()]).catch(reportError);
@@ -1815,6 +1839,7 @@ document.getElementById("sign-in-form").addEventListener("submit", async (event)
     });
     form.reset();
     clearNotice();
+    refreshVoice();
     await refreshStatus();
   } catch (error) {
     reportError(error);
@@ -1835,6 +1860,7 @@ document.getElementById("sign-up-form").addEventListener("submit", async (event)
     });
     form.reset();
     clearNotice();
+    refreshVoice();
     await refreshStatus();
   } catch (error) {
     reportError(error);
@@ -1844,6 +1870,7 @@ document.getElementById("sign-up-form").addEventListener("submit", async (event)
 document.getElementById("sign-out-btn").addEventListener("click", async () => {
   try {
     await fetchJson("/auth/logout", { method: "POST" });
+    refreshVoice();
     await refreshStatus();
   } catch (error) {
     reportError(error);
@@ -1896,12 +1923,198 @@ document.getElementById("owner-sign-in-btn").addEventListener("click", async () 
       throw new Error(errorMessage(response, data, text));
     }
     clearNotice();
+    refreshVoice();
     await refreshStatus();
   } catch (error) {
     reportError(error);
   }
 });
 
+function voiceMessage(text) {
+  document.getElementById("voice-message").textContent = text || "";
+}
+
+function renderVoice() {
+  const status = voiceState.status;
+  const grid = document.getElementById("voice-status-grid");
+  const packs = document.getElementById("voice-packs");
+  const usage = document.getElementById("voice-usage-list");
+  packs.replaceChildren();
+  usage.replaceChildren();
+  if (!status) {
+    fillStatGrid(grid, [["GQ voice", "checking"]]);
+    return;
+  }
+  const cards = [["Text on the site", "always free"]];
+  if (!status.signed_in) {
+    cards.push(["GQ voice", status.voice ? "sign in to listen" : "unavailable"]);
+    cards.push(["Free GQ allowance", "with a free account"]);
+    fillStatGrid(grid, cards);
+  } else if (status.owner_unlimited) {
+    cards.push(["GQ voice", status.voice ? "unlimited (owner)" : "unavailable"]);
+    cards.push([
+      "Max per request",
+      `${Number(status.max_chars_per_request).toLocaleString()} chars`,
+    ]);
+    fillStatGrid(grid, cards);
+  } else {
+    const balance = status.balance || { free: 0, purchased: 0, spent: 0 };
+    cards.push(["Free GQ left", Number(balance.free).toLocaleString()]);
+    cards.push(["Purchased GQ left", Number(balance.purchased).toLocaleString()]);
+    cards.push(["GQ spent", Number(balance.spent).toLocaleString()]);
+    const daily = status.daily || { used: 0, limit: 0 };
+    cards.push([
+      "Site voice budget today",
+      daily.limit
+        ? `${Number(daily.used).toLocaleString()} / ${Number(daily.limit).toLocaleString()}`
+        : Number(daily.used).toLocaleString(),
+    ]);
+    cards.push([
+      "Max per request",
+      `${Number(status.max_chars_per_request).toLocaleString()} chars`,
+    ]);
+    fillStatGrid(grid, cards);
+    renderVoiceUsage(status.usage);
+  }
+  renderVoicePacks(status);
+  voiceMessage(status.message || "");
+}
+
+function renderVoicePacks(status) {
+  const host = document.getElementById("voice-packs");
+  host.replaceChildren();
+  const packs = status.packs || [];
+  if (!packs.length) {
+    appendTextItem(host, "No credit packs are configured yet.");
+    return;
+  }
+  for (const pack of packs) {
+    const card = document.createElement("article");
+    card.className = "starter-card";
+    const title = document.createElement("h3");
+    title.textContent = pack.name;
+    const chars = document.createElement("p");
+    chars.className = "hint";
+    chars.textContent = `${Number(pack.chars).toLocaleString()} GQ characters`;
+    const price = document.createElement("p");
+    price.textContent = `$${Number(pack.price_usd).toFixed(2)} — one-time`;
+    const buy = document.createElement("button");
+    buy.type = "button";
+    buy.className = "btn primary";
+    buy.id = `voice-buy-${pack.id}`;
+    buy.textContent = status.signed_in ? "Buy credit pack" : "Sign in to buy";
+    buy.addEventListener("click", () => buyVoicePack(pack.id, status.signed_in));
+    card.append(title, chars, price, buy);
+    host.append(card);
+  }
+}
+
+async function buyVoicePack(packId, signedIn) {
+  if (!signedIn) {
+    voiceMessage(
+      "Create a free account first — then buy GQ credit here. Text stays free either way."
+    );
+    return;
+  }
+  try {
+    const result = await fetchJson("/voice/checkout", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ pack_id: packId }),
+    });
+    if (result && result.available && result.url) {
+      window.location.assign(result.url);
+      return;
+    }
+    voiceMessage(
+      (result && result.detail) ||
+        "Buying GQ voice credit is coming soon. Text stays free."
+    );
+  } catch (error) {
+    voiceMessage(error.message);
+  }
+}
+
+function renderVoiceUsage(rows) {
+  const list = document.getElementById("voice-usage-list");
+  list.replaceChildren();
+  for (const row of rows || []) {
+    const cached = row.cached ? " (replayed from cache, no charge)" : "";
+    appendTextItem(
+      list,
+      `${String(row.created_at).slice(0, 19)} · ${row.kind} · ` +
+        `${Number(row.chars).toLocaleString()} chars${cached}`
+    );
+  }
+  if (!list.children.length) appendTextItem(list, "No GQ usage yet.");
+}
+
+async function refreshVoice() {
+  try {
+    voiceState.status = await fetchJson("/voice/status");
+    renderVoice();
+  } catch (error) {
+    voiceMessage(error.message);
+  }
+}
+
+async function listenInGQ(text) {
+  try {
+    const response = await fetch("/voice/speak", {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text }),
+    });
+    if (response.status === 401) {
+      voiceMessage(
+        "Create a free account to hear GQ. Text on Neural Forge stays free."
+      );
+      return;
+    }
+    if (!response.ok) {
+      let detail = `GQ voice is unavailable (${response.status}). Text stays free.`;
+      try {
+        const data = await response.json();
+        if (typeof data.detail === "string" && data.detail) detail = data.detail;
+      } catch {
+        // Keep the generic message when the body is not JSON.
+      }
+      voiceMessage(detail);
+      return;
+    }
+    const audio = new Audio(URL.createObjectURL(await response.blob()));
+    audio.addEventListener("ended", () => URL.revokeObjectURL(audio.src));
+    audio.play().catch(() => voiceMessage("Your browser blocked audio playback."));
+    refreshVoice();
+  } catch (error) {
+    voiceMessage(error.message);
+  }
+}
+
+document.getElementById("listen-forecast-btn").addEventListener("click", () => {
+  listenInGQ(state.forecastSpeech || "The live forecast is not ready yet.");
+});
+
+document.getElementById("listen-adhoc-btn").addEventListener("click", () => {
+  listenInGQ(state.adhocSpeech || "Predict first, then listen.");
+});
+
+const sidebarToggle = document.getElementById("sidebar-toggle");
+if (sidebarToggle) {
+  sidebarToggle.addEventListener("click", () => {
+    const open = document.body.classList.toggle("sidebar-open");
+    sidebarToggle.setAttribute("aria-expanded", open ? "true" : "false");
+  });
+  document.querySelectorAll("#sidebar-nav a").forEach((link) => {
+    link.addEventListener("click", () => {
+      document.body.classList.remove("sidebar-open");
+      sidebarToggle.setAttribute("aria-expanded", "false");
+    });
+  });
+}
+
+refreshVoice();
 refreshLunar();
 refreshScorecard();
 refreshNearEarth().catch(reportError);

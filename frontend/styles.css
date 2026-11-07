@@ -54,9 +54,90 @@ body {
 
 .shell {
   position: relative;
+  flex: 1;
+  min-width: 0;
   max-width: 1200px;
+  margin: 0;
+  padding: 0;
+}
+
+.app-shell {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: 24px;
+  max-width: 1440px;
   margin: 0 auto;
   padding: 28px 20px 72px;
+}
+
+.sidebar {
+  position: sticky;
+  top: 28px;
+  flex: 0 0 232px;
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100vh - 56px);
+  overflow-y: auto;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  padding: 18px 14px;
+  box-shadow: var(--shadow);
+}
+
+.sidebar-brand {
+  margin: 0 0 10px;
+}
+
+.sidebar-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.side-link {
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  color: var(--text);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.side-link.side-sub {
+  padding-left: 24px;
+  color: var(--muted);
+  font-weight: 500;
+  font-size: 0.92rem;
+}
+
+.side-link:hover,
+.side-link:focus-visible {
+  background: rgba(124, 255, 214, 0.08);
+  color: var(--accent);
+}
+
+.side-group-label {
+  margin: 12px 12px 2px;
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.sidebar-foot {
+  margin: 12px 0 0;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+  font-size: 0.8rem;
+}
+
+.sidebar-toggle {
+  display: none;
 }
 
 .topbar {
@@ -551,6 +632,45 @@ details .output {
   .topbar-actions {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .app-shell {
+    flex-direction: column;
+    gap: 0;
+    padding-top: 20px;
+  }
+
+  .sidebar {
+    position: fixed;
+    z-index: 5;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: min(300px, 84vw);
+    max-height: none;
+    border-radius: 0 18px 18px 0;
+    transform: translateX(-105%);
+    transition: transform 0.2s ease;
+  }
+
+  body.sidebar-open .sidebar {
+    transform: none;
+  }
+
+  .sidebar-toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 0 14px;
+    background: var(--panel);
+    color: var(--accent);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 10px 18px;
+    font-weight: 700;
+    cursor: pointer;
+    min-height: 44px;
+    align-self: flex-start;
   }
 
   .chart-frame,
