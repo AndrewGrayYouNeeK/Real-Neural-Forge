@@ -88,6 +88,14 @@ def test_container_worker_is_not_a_dashboard_worker():
     assert "async alarm(" not in worker
 
 
+def test_voice_migration_matches_the_schema():
+    schema = (ROOT / "src" / "voice" / "schema.sql").read_text(encoding="utf-8")
+    migration = (
+        ROOT / "deploy" / "cloudflare" / "migrations" / "0002_voice.sql"
+    ).read_text(encoding="utf-8")
+    assert schema == migration
+
+
 def test_fly_and_render_use_the_published_image_and_no_baked_secrets():
     image = "ghcr.io/andrewgrayyouneek/real-neural-forge:latest"
     fly = (ROOT / "fly.toml").read_text(encoding="utf-8")

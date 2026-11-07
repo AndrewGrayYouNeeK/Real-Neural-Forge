@@ -73,3 +73,28 @@ limits:
   max_checkpoint_bytes: 32000000
   max_active_jobs_per_user: 1
   max_batch_size: 32
+
+# GQ voice (ElevenLabs read-aloud). Text on the site is always free; only
+# audio playback spends credit. Every account gets free_chars once; after
+# that it buys one-time credit packs. Environment variables documented in
+# the README override these numbers. Prices sit well above the ElevenLabs
+# API cost of about $0.08 per 1,000 characters.
+voice:
+  voice_id: QMnwdN2oOwNXPcl9oXIl
+  model_id: eleven_multilingual_v2
+  free_chars: 5000
+  max_chars_per_request: 2000
+  daily_char_limit: 300000
+  packs:
+    - id: starter
+      name: Starter pack
+      chars: 25000
+      price_usd: 6.0
+    - id: standard
+      name: Standard pack
+      chars: 100000
+      price_usd: 18.0
+    - id: studio
+      name: Studio pack
+      chars: 500000
+      price_usd: 75.0

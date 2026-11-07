@@ -30,6 +30,7 @@ from src.accounts.limits import Limits, load_limits
 from src.accounts.passwords import hash_password, validate_password, verify_password
 from src.inference.predictor import Predictor
 from src.models.registry import build_model
+from src.voice.store import migrate_voice
 from src.workspace.errors import WorkspaceError
 from src.workspace.keys import user_dataset_key
 from src.workspace.runner import execute_member_job
@@ -72,6 +73,7 @@ def prepare_workspace(config: dict[str, Any] | None = None) -> None:
     try:
         store.ensure_owner(owner_email())
         publish_starter_bases(store)
+        migrate_voice(store)
     except (OSError, SqlError, ValueError) as exc:
         runtime.store = None
         runtime.error = f"Workspace storage failed to start: {exc}"
