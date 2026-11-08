@@ -831,26 +831,26 @@ class TestForecastDashboard:
         page = client.get("/")
         assert page.status_code == 200
         html = page.text
-        assert "See what comes next." in html
+        assert "Ask Neural Forge anything." in html
         assert 'id="welcome-heading"' in html
-        assert 'href="#forecast"' in html
-        assert 'href="#account"' in html
-        assert 'id="explore-heading"' in html
-        assert 'id="forecast-chart"' in html
-        assert 'id="powerball-summary"' in html
-        assert 'id="powerball-body"' in html
-        assert 'id="near-earth-heading"' in html
-        assert 'id="near-earth-summary"' in html
-        assert 'id="near-earth-days"' in html
-        assert 'id="solar-system-heading"' in html
-        assert 'id="solar-system-days"' in html
-        assert 'id="solar-system-summary"' in html
-        assert 'id="lunar-heading"' in html
-        assert 'id="lunar-today"' in html
-        assert 'id="lunar-summary"' in html
-        assert 'id="lunar-body"' in html
+        assert 'id="chat-log"' in html
+        assert 'id="chat-form"' in html
+        assert 'id="chat-input"' in html
+        assert "Predict tomorrow's weather" in html
+        assert "Next lottery numbers" in html
+        assert "Moon phase" in html
+        assert "Train a model on my data" in html
+        assert 'id="account-btn"' in html
+        assert 'id="sign-in-modal"' in html
+        assert 'id="owner-modal" hidden' in html
+        assert 'id="auth-tab-owner"' not in html
+        assert 'id="owner-token"' in html
+        assert 'id="api-token"' not in html
+        assert 'id="sidebar"' in html
+        assert 'id="workspace-panel"' in html
+        assert 'id="training-panel"' in html
+        assert 'id="voice-panel"' in html
         assert "/assets/chart.js" in html
-        assert 'id="api-token"' in html
         for path in ("/assets/app.js", "/assets/chart.js"):
             script = client.get(path)
             assert script.status_code == 200
@@ -863,6 +863,7 @@ class TestForecastDashboard:
         assert "neuralForgeApiToken" in app_js
         assert "Authorization" in app_js
         assert "Bearer " in app_js
+        assert "/voice/speak" in app_js
         assert "/space/near-earth" in app_js
         assert "/space/solar-system" in app_js
         assert "/lunar" in app_js
