@@ -1,10 +1,8 @@
 import { Container, ContainerProxy, getContainer, type State } from "@cloudflare/containers";
 
-export { ContainerProxy };
+import { BINDINGS_HOST, containerEnv } from "./containerEnv";
 
-// The container calls http://bindings.neuralforge/_bindings/... . That host
-// never leaves the Worker: outboundByHost runs here with the D1 and R2
-// bindings, so signup does not depend on a public workers.dev round trip.
+export { ContainerProxy };
 
 // Hand-written to match wrangler.jsonc. `npx wrangler types` can replace it.
 interface D1Prepared {
@@ -56,35 +54,14 @@ interface Env {
   NEURAL_FORGE_MAX_ACTIVE_JOBS?: string;
   NEURAL_FORGE_MAX_BATCH_SIZE?: string;
   NEURAL_FORGE_QUEUE_RUNNER?: string;
+  ELEVENLABS_API_KEY?: string;
+  FORGE_VOICE_ID?: string;
+  NEURAL_FORGE_VOICE_ID?: string;
+  STRIPE_SECRET_KEY?: string;
+  STRIPE_WEBHOOK_SECRET?: string;
 }
 
-const CONTAINER_ENV_KEYS = [
-  "NEURAL_FORGE_CONFIG",
-  "NEURAL_FORGE_CHECKPOINT_URL",
-  "NEURAL_FORGE_CHECKPOINT_TOKEN",
-  "NEURAL_FORGE_API_TOKEN",
-  "NEURAL_FORGE_STORAGE",
-  "NEURAL_FORGE_BINDINGS_URL",
-  "NEURAL_FORGE_STORAGE_SECRET",
-  "NEURAL_FORGE_OWNER_EMAIL",
-  "NEURAL_FORGE_MAX_DATASET_BYTES",
-  "NEURAL_FORGE_MAX_DATASETS",
-  "NEURAL_FORGE_MAX_CONFIG_BYTES",
-  "NEURAL_FORGE_MAX_EPOCHS",
-  "NEURAL_FORGE_MAX_RUN_SECONDS",
-  "NEURAL_FORGE_MAX_SAMPLES",
-  "NEURAL_FORGE_MAX_SEQ_LEN",
-  "NEURAL_FORGE_GLOBAL_QUEUE_LIMIT",
-  "NEURAL_FORGE_MAX_PREDICTIONS",
-  "NEURAL_FORGE_MAX_PREDICTION_POINTS",
-  "NEURAL_FORGE_MAX_CHECKPOINT_BYTES",
-  "NEURAL_FORGE_MAX_ACTIVE_JOBS",
-  "NEURAL_FORGE_MAX_BATCH_SIZE",
-  "NEURAL_FORGE_QUEUE_RUNNER",
-] as const;
-
 // Binding uploads stop here even if a limit env var is set higher.
-const BINDINGS_HOST = "bindings.neuralforge";
 const BINDING_OBJECT_BYTES = 64 * 1024 * 1024;
 const OBJECT_KEY = /^((bases\/starters\/[a-z0-9-]+\/(dataset\.csv|model\.pt))|(users\/[A-Za-z0-9_]+\/(datasets|models)\/[A-Za-z0-9_.-]+))$/;
 
@@ -99,20 +76,6 @@ type TrainingWatchPayload = {
 };
 
 type ContainerStatus = State["status"];
-
-function containerEnv(env: Env): Record<string, string> {
-  const source = env as unknown as Record<string, string | undefined>;
-  const vars = Object.fromEntries(
-    CONTAINER_ENV_KEYS.flatMap((key) => {
-      const value = source[key];
-      return typeof value === "string" && value.length > 0 ? [[key, value]] : [];
-    }),
-  );
-  if (!vars.NEURAL_FORGE_BINDINGS_URL) {
-    vars.NEURAL_FORGE_BINDINGS_URL = `http://${BINDINGS_HOST}`;
-  }
-  return vars;
-}
 
 export class NeuralForgeContainer extends Container<Env> {
   defaultPort = 8000;

@@ -31,10 +31,13 @@ def test_container_worker_is_not_a_dashboard_worker():
     assert container["class_name"] == "NeuralForgeContainer"
     assert container["instance_type"] == "standard-1"
     assert container["max_instances"] == 1
-    assert container["image"] == (
-        "registry.cloudflare.com/d74b0de637f4d9d9eb3efb9e13142784/"
-        "real-neural-forge:main-6ce3b6f"
-    )
+    # The pin moves with every repin; it must always name the account
+    # registry, the real-neural-forge repository, and a main-<sha> tag.
+    assert re.fullmatch(
+        r"registry\.cloudflare\.com/d74b0de637f4d9d9eb3efb9e13142784/"
+        r"real-neural-forge:main-[0-9a-f]{7}",
+        container["image"],
+    ), container["image"]
     assert ":latest" not in container["image"]
     assert config["migrations"] == [
         {"tag": "v1", "new_sqlite_classes": ["NeuralForgeContainer"]}
@@ -60,18 +63,30 @@ def test_container_worker_is_not_a_dashboard_worker():
     assert hostnames["forge.youneek.dev"]["custom_domain"] is True
     assert hostnames["forge.youneek.dev"]["zone_name"] == "youneek.dev"
     worker = (ROOT / "deploy" / "cloudflare" / "src" / "index.ts").read_text()
+    # Voice and payments secrets must reach the container through envVars.
+    forward = (ROOT / "deploy" / "cloudflare" / "src" / "containerEnv.ts").read_text()
     assert "NEURAL_FORGE_API_TOKEN" in worker
     assert "X-Forwarded-Host" in worker
     assert "X-Forwarded-Proto" in worker
     assert 'headers.delete("X-Neural-Forge-Watch")' in worker
     assert "/_bindings/sql" in worker
     assert "/_bindings/object" in worker
-    assert "bindings.neuralforge" in worker
+    assert "bindings.neuralforge" in forward
     assert "outboundByHost" in worker
     assert "ContainerProxy" in worker
     assert "youneek-xyz" not in worker
+    assert "youneek-xyz" not in forward
     assert "WORKSPACES_DB" in worker
     assert "Set-Cookie" not in worker
+    assert "envVars: containerEnv(env)" in worker
+    for name in (
+        "ELEVENLABS_API_KEY",
+        "NEURAL_FORGE_VOICE_ID",
+        "STRIPE_SECRET_KEY",
+        "STRIPE_WEBHOOK_SECRET",
+        "FORGE_VOICE_ID",
+    ):
+        assert name in forward
     schema = (ROOT / "src" / "workspace" / "schema.sql").read_text(encoding="utf-8")
     migration = (
         ROOT / "deploy" / "cloudflare" / "migrations" / "0001_workspaces.sql"

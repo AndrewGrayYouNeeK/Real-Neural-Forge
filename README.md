@@ -527,7 +527,16 @@ On Cloudflare, from `deploy/cloudflare/`:
 npx wrangler secret put ELEVENLABS_API_KEY
 npx wrangler secret put STRIPE_SECRET_KEY
 npx wrangler secret put STRIPE_WEBHOOK_SECRET
+# Optional: override the built-in GQ voice id. The Worker forwards it into
+# the container as NEURAL_FORGE_VOICE_ID (deploy/cloudflare/src/containerEnv.ts).
+npx wrangler secret put FORGE_VOICE_ID
 ```
+
+Worker secrets reach the FastAPI container only through the `envVars` that
+`deploy/cloudflare/src/index.ts` passes at container start. If `GET
+/voice/status` still reports `voice: false` after the secrets are set, deploy
+the Worker again and let the container restart (it sleeps after ten idle
+minutes); secrets never reach an already-running instance.
 
 In the Stripe dashboard:
 
@@ -622,7 +631,7 @@ Instance: `standard-1` (1/2 vCPU, 4 GiB RAM, 8 GB disk) with `max_instances` 1. 
 
 The Worker name is `real-neural-forge-api`. Leave the Workers Build for `real-neural-forge` on the repository root so it keeps publishing `frontend/`. Do not connect a build that deploys `youneek-xyz`. If that build is still connected, the hook renames it to `real-neural-forge-frontend` and gives it no custom domains.
 
-GHCR is not a registry Containers pulls from directly. The Worker config pins one image tag. It does not follow `:latest`. The pin in `deploy/cloudflare/wrangler.jsonc` is `registry.cloudflare.com/d74b0de637f4d9d9eb3efb9e13142784/real-neural-forge:main-6ce3b6f`. Account id `d74b0de637f4d9d9eb3efb9e13142784` is the Cloudflare account that owns the Worker. The `migrations` entry `v1` created the SQLite Durable Object class `NeuralForgeContainer`. Leave that entry in the file. Add a new tag only when that class's storage changes. Do not add a Durable Object `exports` entry beside it. Current Wrangler rejects `migrations` and `exports` together. The class is still exported from `deploy/cloudflare/src/index.ts`, and the container binds it by `class_name`.
+GHCR is not a registry Containers pulls from directly. The Worker config pins one image tag. It does not follow `:latest`. The pin in `deploy/cloudflare/wrangler.jsonc` is `registry.cloudflare.com/d74b0de637f4d9d9eb3efb9e13142784/real-neural-forge:main-b49247b`. Account id `d74b0de637f4d9d9eb3efb9e13142784` is the Cloudflare account that owns the Worker. The `migrations` entry `v1` created the SQLite Durable Object class `NeuralForgeContainer`. Leave that entry in the file. Add a new tag only when that class's storage changes. Do not add a Durable Object `exports` entry beside it. Current Wrangler rejects `migrations` and `exports` together. The class is still exported from `deploy/cloudflare/src/index.ts`, and the container binds it by `class_name`.
 
 To serve a dataset other than `default`, change `vars.NEURAL_FORGE_CONFIG` and `vars.NEURAL_FORGE_CHECKPOINT_URL` in that file. The URL pattern is the champion asset above.
 
@@ -633,7 +642,7 @@ Wait until [Publish image](https://github.com/AndrewGrayYouNeeK/Real-Neural-Forg
 Copy that image into Cloudflare's registry and point the Worker at the new tag. From a machine that can pull GHCR and is logged into the same Cloudflare account:
 
 ```bash
-SHA=6ce3b6f
+SHA=b49247b
 docker pull ghcr.io/andrewgrayyouneek/real-neural-forge:main-$SHA
 docker tag ghcr.io/andrewgrayyouneek/real-neural-forge:main-$SHA real-neural-forge:main-$SHA
 cd deploy/cloudflare
@@ -672,6 +681,7 @@ npx wrangler secret put NEURAL_FORGE_CHECKPOINT_TOKEN
 | `ELEVENLABS_API_KEY` | For GQ voice | ElevenLabs text-to-speech key. Voice is unavailable (text unaffected) while unset. See [GQ voice](#gq-voice-metered-read-aloud). |
 | `STRIPE_SECRET_KEY` | For GQ voice sales | Creates one-time Checkout sessions. Buy buttons show "coming soon" while unset. |
 | `STRIPE_WEBHOOK_SECRET` | For GQ voice sales | Verifies the Stripe webhook that credits purchased voice packs. |
+| `FORGE_VOICE_ID` | No | Overrides the GQ voice id. A Worker secret with the pre-`NEURAL_FORGE_` name; the Worker forwards it into the container as `NEURAL_FORGE_VOICE_ID` (`deploy/cloudflare/src/containerEnv.ts`). Omit it to use the built-in voice. |
 
 The container needs outbound internet so it can download the champion. D1 and R2 calls stay inside the Worker: the container requests `http://bindings.neuralforge`, and `outboundByHost` serves those paths with the bindings.
 
