@@ -798,16 +798,22 @@ function refreshAuthModal() {
   }
 }
 
-function selectAuthTab(tab) {
-  const accountTab = document.getElementById("auth-tab-account");
-  const ownerTab = document.getElementById("auth-tab-owner");
-  const accountPanel = document.getElementById("auth-panel-account");
-  const ownerPanel = document.getElementById("auth-panel-owner");
-  const owner = tab === "owner";
-  accountTab.setAttribute("aria-selected", owner ? "false" : "true");
-  ownerTab.setAttribute("aria-selected", owner ? "true" : "false");
-  accountPanel.hidden = owner;
-  ownerPanel.hidden = !owner;
+function selectOwnerHash() {
+  const params = new URLSearchParams(window.location.search);
+  const ownerUrl =
+    params.get("owner") != null ||
+    window.location.hash.replace(/^#\/?/, "").toLowerCase() === "owner";
+  if (ownerUrl) openOwnerModal();
+}
+
+function openOwnerModal() {
+  const modal = document.getElementById("owner-modal");
+  modal.hidden = false;
+  document.getElementById("owner-token").focus();
+}
+
+function closeOwnerModal() {
+  document.getElementById("owner-modal").hidden = true;
 }
 
 async function refreshAccount() {
@@ -1083,11 +1089,11 @@ document.getElementById("sign-in-modal").addEventListener("click", (event) => {
   if (event.target === event.currentTarget) closeSignInModal();
 });
 document.addEventListener("keydown", (event) => {
-  if (event.key === "Escape") closeSignInModal();
+  if (event.key === "Escape") {
+    closeSignInModal();
+    closeOwnerModal();
+  }
 });
-
-document.getElementById("auth-tab-account").addEventListener("click", () => selectAuthTab("account"));
-document.getElementById("auth-tab-owner").addEventListener("click", () => selectAuthTab("owner"));
 
 document.getElementById("sign-in-form").addEventListener("submit", async (event) => {
   event.preventDefault();
@@ -1139,6 +1145,11 @@ document.getElementById("sign-up-form").addEventListener("submit", async (event)
   }
 });
 
+document.getElementById("owner-modal-close").addEventListener("click", closeOwnerModal);
+document.getElementById("owner-modal").addEventListener("click", (event) => {
+  if (event.target === event.currentTarget) closeOwnerModal();
+});
+
 document.getElementById("owner-form").addEventListener("submit", async (event) => {
   event.preventDefault();
   const form = event.currentTarget;
@@ -1149,6 +1160,7 @@ document.getElementById("owner-form").addEventListener("submit", async (event) =
     await fetchJson("/auth/owner", { method: "POST" });
     form.reset();
     clearNotice();
+    closeOwnerModal();
     await refreshAccount();
     await refreshAccountDependents();
   } catch (error) {
@@ -1252,3 +1264,4 @@ refreshAccount()
   .catch(() => {});
 refreshVoiceStatus().catch(() => {});
 refreshStatusLine().catch(() => {});
+selectOwnerHash();

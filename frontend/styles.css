@@ -18,6 +18,11 @@
   box-sizing: border-box;
 }
 
+/* Flex/grid rules below must not override the hidden attribute. */
+[hidden] {
+  display: none !important;
+}
+
 body {
   margin: 0;
   min-height: 100vh;
@@ -634,26 +639,8 @@ td {
   gap: 12px;
 }
 
-.auth-tabs {
-  display: flex;
-  gap: 6px;
-}
-
-.auth-tab {
-  flex: 1;
-  min-height: 40px;
-  border-radius: 10px;
-  border: 1px solid var(--border);
-  background: transparent;
-  color: var(--muted);
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.auth-tab[aria-selected="true"] {
-  border-color: var(--accent);
-  color: var(--accent);
-  background: rgba(124, 255, 214, 0.08);
+.modal-body[hidden] {
+  display: none;
 }
 
 /* Sidebar toggle (mobile drawer) */

@@ -842,6 +842,8 @@ class TestForecastDashboard:
         assert "Train a model on my data" in html
         assert 'id="account-btn"' in html
         assert 'id="sign-in-modal"' in html
+        assert 'id="owner-modal" hidden' in html
+        assert 'id="auth-tab-owner"' not in html
         assert 'id="owner-token"' in html
         assert 'id="api-token"' not in html
         assert 'id="sidebar"' in html

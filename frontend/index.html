@@ -205,73 +205,63 @@
           </button>
         </div>
         <div id="account-signed-out" class="modal-body">
-          <div class="auth-tabs" role="tablist" aria-label="Sign-in options">
-            <button
-              class="auth-tab"
-              id="auth-tab-account"
-              type="button"
-              role="tab"
-              aria-selected="true"
-              aria-controls="auth-panel-account"
-            >
-              Account
-            </button>
-            <button
-              class="auth-tab"
-              id="auth-tab-owner"
-              type="button"
-              role="tab"
-              aria-selected="false"
-              aria-controls="auth-panel-owner"
-            >
-              Owner sign-in
-            </button>
-          </div>
+          <form id="sign-in-form">
+            <label for="sign-in-email">Email</label>
+            <input id="sign-in-email" name="email" type="email" autocomplete="username" required />
+            <label for="sign-in-password">Password</label>
+            <input id="sign-in-password" name="password" type="password" autocomplete="current-password" required />
+            <button class="btn primary" type="submit">Sign in</button>
+          </form>
+          <p class="hint">New here? <button id="show-sign-up" class="linklike" type="button">Create a free account</button> — it only adds a private workspace.</p>
+          <form id="sign-up-form" hidden>
+            <label for="sign-up-email">Email</label>
+            <input id="sign-up-email" name="email" type="email" autocomplete="username" required />
+            <label for="sign-up-password">Password</label>
+            <input
+              id="sign-up-password"
+              name="password"
+              type="password"
+              autocomplete="new-password"
+              minlength="10"
+              required
+            />
+            <p class="hint">At least 10 characters. A new account gets its own sample datasets and models.</p>
+            <button class="btn primary" type="submit">Create account</button>
+          </form>
+        </div>
+      </div>
+    </div>
 
-          <div id="auth-panel-account" role="tabpanel" aria-labelledby="auth-tab-account">
-            <form id="sign-in-form">
-              <label for="sign-in-email">Email</label>
-              <input id="sign-in-email" name="email" type="email" autocomplete="username" required />
-              <label for="sign-in-password">Password</label>
-              <input id="sign-in-password" name="password" type="password" autocomplete="current-password" required />
-              <button class="btn primary" type="submit">Sign in</button>
-            </form>
-            <p class="hint">New here? <button id="show-sign-up" class="linklike" type="button">Create a free account</button> — it only adds a private workspace.</p>
-            <form id="sign-up-form" hidden>
-              <label for="sign-up-email">Email</label>
-              <input id="sign-up-email" name="email" type="email" autocomplete="username" required />
-              <label for="sign-up-password">Password</label>
-              <input
-                id="sign-up-password"
-                name="password"
-                type="password"
-                autocomplete="new-password"
-                minlength="10"
-                required
-              />
-              <p class="hint">At least 10 characters. A new account gets its own sample datasets and models.</p>
-              <button class="btn primary" type="submit">Create account</button>
-            </form>
-          </div>
-
-          <div id="auth-panel-owner" role="tabpanel" aria-labelledby="auth-tab-owner" hidden>
-            <form id="owner-form">
-              <label for="owner-token">Owner API token</label>
-              <input
-                id="owner-token"
-                name="token"
-                type="password"
-                autocomplete="off"
-                placeholder="The token configured on the server"
-                required
-              />
-              <p class="hint">
-                The owner token unlocks the shared champion model and unlimited
-                GQ voice. Saved in this browser only.
-              </p>
-              <button class="btn primary" type="submit">Sign in as owner</button>
-            </form>
-          </div>
+    <div class="modal-backdrop" id="owner-modal" hidden>
+      <div
+        class="modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="owner-heading"
+      >
+        <div class="modal-head">
+          <h2 id="owner-heading">Owner sign-in</h2>
+          <button id="owner-modal-close" class="modal-close" type="button" aria-label="Close">
+            ✕
+          </button>
+        </div>
+        <div class="modal-body">
+          <form id="owner-form">
+            <label for="owner-token">Owner API token</label>
+            <input
+              id="owner-token"
+              name="token"
+              type="password"
+              autocomplete="off"
+              placeholder="The token configured on the server"
+              required
+            />
+            <p class="hint">
+              The owner token unlocks the shared champion model and unlimited
+              GQ voice. Saved in this browser only.
+            </p>
+            <button class="btn primary" type="submit">Sign in as owner</button>
+          </form>
         </div>
       </div>
     </div>
