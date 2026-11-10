@@ -72,6 +72,8 @@ def test_public_starter_catalog_lists_the_five_samples() -> None:
     assert names["weather"] == "Central Park temperature"
     assert "AAPL" in names["stocks"]
     assert "Bitcoin" in names["crypto"]
-    weather = next(starter for starter in body["starters"] if starter["id"] == "weather")
+    weather = next(
+        starter for starter in body["starters"] if starter["id"] == "weather"
+    )
     assert weather["unit"] == "°C"
     assert "NOAA" in weather["source"]

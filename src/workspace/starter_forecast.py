@@ -84,6 +84,7 @@ def starter_forecast(starter_id: str, *, points: int = 120) -> dict[str, Any]:
     payload["checkpoint_loaded"] = True
     return payload
 
+
 def public_starter_catalog() -> dict[str, Any]:
     """Shipped sample models. No account required. Lottery is not included."""
     return {
@@ -98,4 +99,3 @@ def public_starter_catalog() -> dict[str, Any]:
             for starter in load_starters()
         ]
     }
-
