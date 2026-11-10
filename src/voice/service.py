@@ -298,6 +298,11 @@ def create_checkout_session(
             client_reference_id=actor.user_id,
             success_url=f"{origin}/#voice",
             cancel_url=f"{origin}/#voice",
+            # The connected Stripe account has Managed Payments on by
+            # default, which rejects inline price_data unless a product
+            # tax_code is set. These are one-time digital voice credits,
+            # not a Managed Payments sale, so disable it on the session.
+            managed_payments={"enabled": False},
         )
     except stripe.StripeError as exc:
         logger.exception("Stripe checkout session failed")

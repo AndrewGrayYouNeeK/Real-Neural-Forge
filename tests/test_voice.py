@@ -524,3 +524,33 @@ def test_resolve_checkout_base_url_upgrades_http_and_rejects_internal(
         )
         == "https://forge.youneek.dev"
     )
+
+
+def test_checkout_session_disables_managed_payments(
+    voice_client, monkeypatch: pytest.MonkeyPatch
+):
+    client, _root = voice_client
+    _signup(client, "managed-payments@example.com")
+    monkeypatch.setenv("STRIPE_SECRET_KEY", STRIPE_SECRET)
+    monkeypatch.setenv("NEURAL_FORGE_PUBLIC_URL", "https://forge.youneek.dev")
+    captured: dict = {}
+
+    class FakeSession:
+        id = "cs_test_managed"
+        url = "https://checkout.stripe.com/c/pay/cs_test_managed"
+
+        @classmethod
+        def create(cls, **kwargs):
+            captured.update(kwargs)
+            return cls()
+
+    monkeypatch.setattr(
+        voice_service.stripe.checkout.Session, "create", FakeSession.create
+    )
+    response = client.post("/voice/checkout", json={"pack_id": "starter"})
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["url"].startswith("https://checkout.stripe.com/")
+    assert captured["mode"] == "payment"
+    assert captured["managed_payments"] == {"enabled": False}
+    assert captured["success_url"].startswith("https://forge.youneek.dev/")
