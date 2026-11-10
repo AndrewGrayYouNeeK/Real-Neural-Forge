@@ -1,6 +1,7 @@
 import { Container, ContainerProxy, getContainer, type State } from "@cloudflare/containers";
 
 import { BINDINGS_HOST, containerEnv } from "./containerEnv";
+import { isAllowedObjectKey } from "./objectKey";
 
 export { ContainerProxy };
 
@@ -63,7 +64,6 @@ interface Env {
 
 // Binding uploads stop here even if a limit env var is set higher.
 const BINDING_OBJECT_BYTES = 64 * 1024 * 1024;
-const OBJECT_KEY = /^((bases\/starters\/[a-z0-9-]+\/(dataset\.csv|model\.pt))|(users\/[A-Za-z0-9_]+\/(datasets|models)\/[A-Za-z0-9_.-]+))$/;
 
 // Idle sleep stays at 10 minutes. Poll well inside that window so a training
 // run with no client traffic still counts as activity.
@@ -259,7 +259,7 @@ async function authorized(request: Request, secret: string | undefined): Promise
 
 function objectKey(request: Request): string | null {
   const key = request.headers.get("X-Object-Key") ?? "";
-  if (!OBJECT_KEY.test(key) || key.includes("..") || key.includes("\\")) {
+  if (!isAllowedObjectKey(key)) {
     return null;
   }
   return key;

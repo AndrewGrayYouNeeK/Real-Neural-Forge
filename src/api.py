@@ -51,6 +51,7 @@ from src.workspace.service import (
     training_active,
     watch_authorized,
 )
+from src.workspace.starter_forecast import starter_forecast
 from src.youneek import parse_moment, snapshot
 
 logger = logging.getLogger("uvicorn.error")
@@ -565,6 +566,17 @@ def lottery_lunar_analysis() -> dict[str, Any]:
         return read_lunar_analysis()
     except ValueError as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@app.get("/starters/{starter_id}/forecast", tags=["starters"])
+def public_starter_forecast(
+    starter_id: str, points: int = Query(120, ge=8, le=400)
+) -> dict[str, Any]:
+    """Next-step forecast for a shipped sample dataset. No account required."""
+    try:
+        return starter_forecast(starter_id, points=points)
+    except WorkspaceError as exc:
+        raise _workspace_http(exc) from exc
 
 
 @app.get("/series/recent", tags=["dashboard"])
