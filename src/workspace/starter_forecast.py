@@ -7,9 +7,13 @@ and run the same recent-history forecast used by the dashboard.
 
 from __future__ import annotations
 
+import json
 from typing import Any
 
+import torch
+
 from src.dashboard_data import recent_series
+from src.forecasting.spec import forecast_spec_from_config
 from src.inference.predictor import Predictor
 from src.models.registry import build_model
 from src.workspace.errors import WorkspaceError
@@ -51,6 +55,57 @@ def _predictor(starter: Starter, cfg: dict[str, Any]) -> Predictor:
     return predictor
 
 
+def _highlights(starter: Starter) -> list[dict[str, Any]]:
+    path = starter.dataset_path.with_name(f"{starter.id}-highlights.json")
+    if not path.is_file():
+        return []
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return []
+    if not isinstance(payload, list):
+        return []
+    return [row for row in payload if isinstance(row, dict)]
+
+
+def _attach_horizon(
+    payload: dict[str, Any], predictor: Predictor, cfg: dict[str, Any]
+) -> None:
+    """Replace the one-step chart forecast when the sample is a multi-day demo."""
+    spec = forecast_spec_from_config(cfg)
+    window = payload.get("predict_window")
+    if spec.horizon <= 1 or not isinstance(window, list) or not window:
+        return
+    batch = predictor.forecast(
+        torch.tensor(window, dtype=torch.float32), horizon=spec.horizon
+    )
+    values = [float(item) for item in batch.point[0, :, 0].detach().cpu().tolist()]
+    lower = None if batch.lower is None else batch.lower[0, :, 0].detach().cpu()
+    upper = None if batch.upper is None else batch.upper[0, :, 0].detach().cpu()
+    history = payload.get("history")
+    last_index = 0
+    if isinstance(history, list) and history and isinstance(history[-1], dict):
+        index = history[-1].get("index")
+        if isinstance(index, int):
+            last_index = index
+    steps: list[dict[str, Any]] = []
+    for offset, value in enumerate(values, start=1):
+        step: dict[str, Any] = {
+            "step": offset,
+            "index": last_index + offset,
+            "value": value,
+            "p10": None,
+            "p50": value,
+            "p90": None,
+        }
+        if lower is not None and upper is not None:
+            step["p10"] = float(lower[offset - 1].item())
+            step["p90"] = float(upper[offset - 1].item())
+        steps.append(step)
+    payload["forecast"] = steps
+    payload["horizon"] = spec.horizon
+
+
 def starter_forecast(starter_id: str, *, points: int = 120) -> dict[str, Any]:
     """Forecast the next step of a shipped starter series. No account required."""
     starter = starter_by_id(starter_id)
@@ -76,11 +131,16 @@ def starter_forecast(starter_id: str, *, points: int = 120) -> dict[str, Any]:
         raise WorkspaceError(
             503, "The sample forecast could not be built right now."
         ) from exc
+    _attach_horizon(payload, predictor, cfg)
     payload["starter_id"] = starter.id
     payload["name"] = starter.name
     payload["summary"] = starter.summary
     payload["description"] = starter.source
-    payload["unit"] = STARTER_UNITS.get(starter.id)
+    payload["unit"] = starter.unit or STARTER_UNITS.get(starter.id)
+    payload["demo"] = starter.demo
+    highlights = _highlights(starter)
+    if highlights:
+        payload["highlights"] = highlights
     payload["checkpoint_loaded"] = True
     return payload
 
@@ -94,7 +154,8 @@ def public_starter_catalog() -> dict[str, Any]:
                 "name": starter.name,
                 "summary": starter.summary,
                 "source": starter.source,
-                "unit": STARTER_UNITS.get(starter.id),
+                "unit": starter.unit or STARTER_UNITS.get(starter.id),
+                "demo": starter.demo,
             }
             for starter in load_starters()
         ]

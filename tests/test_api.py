@@ -887,6 +887,8 @@ class TestForecastDashboard:
         assert "/live/lottery" not in app_js
         assert "/live/ask" in app_js
         assert "/starters/weather/forecast" in app_js
+        assert "loadDefaultDemos" in app_js
+        assert "/starters/near-earth/forecast" in app_js or "`/starters/${id}/forecast" in app_js
         assert "/workspace/datasets/" in app_js
         assert "/predict-latest" in app_js
         assert "isCsvTrainRequest" in app_js

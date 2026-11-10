@@ -450,15 +450,58 @@ function sampleModelLines(starterId, series, steps) {
   return lines;
 }
 
+function approachHighlightLine(highlights) {
+  if (!Array.isArray(highlights) || !highlights.length) return "";
+  const bits = highlights.slice(0, 5).map((row) => {
+    const name = row.name || row.designation || "An object";
+    const when = row.date ? String(row.date).slice(0, 10) : "an upcoming date";
+    const dist = asNumber(row.dist_ld);
+    const distance = dist == null ? "" : ` (${dist.toFixed(2)} lunar distances)`;
+    return `${name} on ${when}${distance}`;
+  });
+  return `Closest catalogued approaches in this saved snapshot: ${bits.join("; ")}.`;
+}
+
+function sampleReplyParts(starterId, series, steps) {
+  const lines = sampleModelLines(starterId, series, steps);
+  const extra = approachHighlightLine(series.highlights);
+  if (extra) lines.push(extra);
+  if (steps.length > 1) {
+    const path = stepText(steps);
+    if (path) lines.push(path);
+  }
+  return { text: lines.join("\n\n"), chart: forecastChart(series, steps) };
+}
+
+async function loadDefaultDemos() {
+  let ids = ["weather", "near-earth"];
+  try {
+    const catalog = await fetchJson("/starters");
+    const marked = (catalog.starters || [])
+      .filter((row) => row && row.demo)
+      .map((row) => String(row.id));
+    if (marked.length) ids = marked;
+  } catch {
+    // The two shipped demos still load if the catalog request fails.
+  }
+  for (const id of ids) {
+    try {
+      const series = await fetchJson(`/starters/${id}/forecast?points=90`);
+      const steps = normalizeForecast(series);
+      const reply = sampleReplyParts(id, series, steps);
+      addReply(reply.text, reply.chart);
+    } catch {
+      // The sample chips still open the same model if this preload fails.
+    }
+  }
+}
+
 async function sampleModelReply(question) {
   const starterId = starterIdFromQuestion(question);
   try {
     const series = await fetchJson(`/starters/${starterId}/forecast?points=120`);
     const steps = normalizeForecast(series);
-    return {
-      text: sampleModelLines(starterId, series, steps).join("\n\n"),
-      chart: forecastChart(series, steps),
-    };
+    return sampleReplyParts(starterId, series, steps);
   } catch (error) {
     return {
       text:
@@ -1692,6 +1735,7 @@ addMessage(
   "assistant",
   "Hi! I am Neural Forge. Ask me in plain words for a live weather forecast, a market or crypto price, the moon, space, a sample model, training, or a general question. Text is free. Listening uses voice credits; payments are not live. Every reply comes with a speaker button that reads it aloud in GQ voice."
 );
+loadDefaultDemos().catch(() => {});
 
 refreshAccount()
   .then(() => refreshAccountDependents())

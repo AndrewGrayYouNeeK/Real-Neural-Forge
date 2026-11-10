@@ -34,6 +34,8 @@ class Starter:
     dataset_path: Path
     template_path: Path
     model_path: Path
+    demo: bool = False
+    unit: str = ""
 
     def template_text(self) -> str:
         return self.template_path.read_text(encoding="utf-8")
@@ -66,6 +68,8 @@ def _starter(entry: dict[str, Any]) -> Starter:
         dataset_path=dataset,
         template_path=template,
         model_path=model,
+        demo=bool(entry.get("demo", False)),
+        unit=str(entry.get("unit") or ""),
     )
 
 
@@ -83,6 +87,11 @@ def load_starters() -> tuple[Starter, ...]:
     if len(ids) != len(set(ids)):
         raise ValueError("starter ids must be unique.")
     return starters
+
+
+def default_demos() -> tuple[Starter, ...]:
+    """Weather and near-Earth samples that the landing page preloads."""
+    return tuple(starter for starter in load_starters() if starter.demo)
 
 
 def starter_by_id(starter_id: str) -> Starter | None:
