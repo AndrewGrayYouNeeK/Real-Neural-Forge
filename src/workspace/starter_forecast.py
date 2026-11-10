@@ -15,7 +15,7 @@ from typing import Any
 import torch
 
 from src.dashboard_data import recent_series
-from src.evaluation.tracking import default_tracker, steps_from_payload
+from src.evaluation.tracking import default_tracker, steps_from_payload, uncertainty_for
 from src.forecasting.spec import forecast_spec_from_config
 from src.inference.predictor import Predictor
 from src.models.registry import build_model
@@ -146,8 +146,44 @@ def starter_forecast(starter_id: str, *, points: int = 120) -> dict[str, Any]:
     if highlights:
         payload["highlights"] = highlights
     payload["checkpoint_loaded"] = True
+    _attach_uncertainty(starter.id, payload)
     _track_starter(starter.id, payload)
     return payload
+
+
+def _attach_uncertainty(starter_id: str, payload: dict[str, Any]) -> None:
+    steps = payload.get("forecast")
+    if not isinstance(steps, list) or not steps:
+        return
+    midpoint: list[float] = []
+    lows: list[float] = []
+    highs: list[float] = []
+    bounded = True
+    for row in steps:
+        if not isinstance(row, dict):
+            return
+        center = row.get("p50", row.get("value"))
+        if isinstance(center, bool) or not isinstance(center, int | float):
+            return
+        midpoint.append(float(center))
+        low = row.get("p10")
+        high = row.get("p90")
+        if (
+            isinstance(low, bool)
+            or isinstance(high, bool)
+            or not isinstance(low, int | float)
+            or not isinstance(high, int | float)
+        ):
+            bounded = False
+            continue
+        lows.append(float(low))
+        highs.append(float(high))
+    payload["uncertainty"] = uncertainty_for(
+        starter_id,
+        midpoint,
+        lows if bounded else None,
+        highs if bounded else None,
+    )
 
 
 def _track_starter(starter_id: str, payload: dict[str, Any]) -> None:

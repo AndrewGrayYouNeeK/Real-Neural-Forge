@@ -343,6 +343,9 @@ def test_training_queue_cannot_touch_another_user_or_the_owner(workspace_client)
     predicted = client.post("/workspace/starters/lunar/predict")
     assert predicted.status_code == 200, predicted.text
     assert isinstance(predicted.json()["prediction"], list)
+    uncertainty = predicted.json()["uncertainty"]
+    assert uncertainty["p50"] == [predicted.json()["prediction"][0]]
+    assert uncertainty["calibrated"] is False
     _login(client, "a@example.com")
     assert (
         client.get(f"/workspace/predictions/{predicted.json()['id']}").status_code

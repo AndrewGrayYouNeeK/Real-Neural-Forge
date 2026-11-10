@@ -136,7 +136,7 @@ def test_predict_response_stays_a_point_and_is_recorded(tmp_path, monkeypatch):
             "/predict", json={"sequence": [[0.1], [0.2], [0.3], [0.4]]}
         )
     assert response.status_code == 200
-    assert set(response.json()) == {"prediction"}
+    assert "prediction" in response.json()
     clear_tracker_cache()
     tracker = OutcomeTracker(SqliteSql(tmp_path / "evaluation.db")).ensure()
     rows = tracker.sql.query("SELECT model_id, p50, p10 FROM forecast_outcomes")

@@ -28,7 +28,7 @@ from src.accounts.actor import (
 )
 from src.accounts.limits import Limits, load_limits
 from src.accounts.passwords import hash_password, validate_password, verify_password
-from src.evaluation.tracking import record_payload
+from src.evaluation.tracking import record_payload, uncertainty_for
 from src.inference.predictor import Predictor
 from src.models.registry import build_model
 from src.voice.store import migrate_voice
@@ -782,8 +782,17 @@ def _predict_with_model(
         forecast = predictor.forecast(tensor, horizon=1)
     point = forecast.point[0].detach().cpu()
     prediction = point[0].tolist()
+    midpoint = [float(prediction[0])]
+    low = None
+    high = None
+    if forecast.lower is not None and forecast.upper is not None:
+        low = [float(forecast.lower[0, 0, 0].item())]
+        high = [float(forecast.upper[0, 0, 0].item())]
     record_id = new_id("prd_")
-    result = {"prediction": prediction}
+    result = {
+        "prediction": prediction,
+        "uncertainty": uncertainty_for(str(model["id"]), midpoint, low, high),
+    }
     record_payload(str(model["id"]), result)
     store.insert_prediction(
         {

@@ -20,7 +20,7 @@ from pydantic import BaseModel, Field
 from src import __version__
 from src.dashboard_data import recent_series, validation_predictions
 from src.data.lunar import lunar_now, lunar_on
-from src.evaluation.tracking import record_payload
+from src.evaluation.tracking import record_payload, uncertainty_for
 from src.forecasting.spec import MAX_HORIZON, forecast_spec_from_config
 from src.inference.predictor import ForecastBatch, Predictor
 from src.models.registry import ModelRegistry, build_model
@@ -313,6 +313,7 @@ class PredictResponse(BaseModel):
     nominal_coverage: float | None = None
     validation_coverage: float | None = None
     interval_method: str | None = None
+    uncertainty: dict[str, Any] | None = None
 
 
 class ForecastResponse(PredictResponse):
@@ -818,6 +819,26 @@ def _loaded_spec():
     return predictor.spec
 
 
+def _uncertainty_block(
+    payload: dict[str, Any], result: ForecastBatch, model_id: str
+) -> dict[str, Any]:
+    if isinstance(payload.get("p50"), list) and payload["p50"]:
+        midpoint = [float(value) for value in payload["p50"]]
+    else:
+        midpoint = [float(payload["prediction"][0])]
+    low = payload.get("p10") if isinstance(payload.get("p10"), list) else None
+    high = payload.get("p90") if isinstance(payload.get("p90"), list) else None
+    if (
+        low is None
+        and high is None
+        and result.lower is not None
+        and result.upper is not None
+    ):
+        low = _first_channel(result.lower[0].detach().cpu().tolist())
+        high = _first_channel(result.upper[0].detach().cpu().tolist())
+    return uncertainty_for(model_id, midpoint, low, high)
+
+
 def _loaded_model_id() -> str:
     cfg = _state.get("config")
     model = cfg.get("model") if isinstance(cfg, dict) else None
@@ -899,6 +920,7 @@ def _forecast_payload(
             payload["validation_coverage"] = result.validation_coverage
         if result.interval_method is not None:
             payload["interval_method"] = result.interval_method
+    payload["uncertainty"] = _uncertainty_block(payload, result, _loaded_model_id())
     return payload
 
 
