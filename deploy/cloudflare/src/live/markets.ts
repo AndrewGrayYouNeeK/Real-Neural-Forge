@@ -12,17 +12,17 @@ export type Quote = {
   currency: string;
 };
 
-const CRYPTO_IDS: Record<string, { id: string; symbol: string; name: string; binance: string }> = {
-  bitcoin: { id: "bitcoin", symbol: "BTC", name: "Bitcoin", binance: "BTCUSDT" },
-  btc: { id: "bitcoin", symbol: "BTC", name: "Bitcoin", binance: "BTCUSDT" },
-  ethereum: { id: "ethereum", symbol: "ETH", name: "Ethereum", binance: "ETHUSDT" },
-  eth: { id: "ethereum", symbol: "ETH", name: "Ethereum", binance: "ETHUSDT" },
-  solana: { id: "solana", symbol: "SOL", name: "Solana", binance: "SOLUSDT" },
-  sol: { id: "solana", symbol: "SOL", name: "Solana", binance: "SOLUSDT" },
-  dogecoin: { id: "dogecoin", symbol: "DOGE", name: "Dogecoin", binance: "DOGEUSDT" },
-  doge: { id: "dogecoin", symbol: "DOGE", name: "Dogecoin", binance: "DOGEUSDT" },
-  xrp: { id: "ripple", symbol: "XRP", name: "XRP", binance: "XRPUSDT" },
-  ripple: { id: "ripple", symbol: "XRP", name: "XRP", binance: "XRPUSDT" },
+const CRYPTO_IDS: Record<string, { id: string; symbol: string; name: string; binance: string; yahoo: string }> = {
+  bitcoin: { id: "bitcoin", symbol: "BTC", name: "Bitcoin", binance: "BTCUSDT", yahoo: "BTC-USD" },
+  btc: { id: "bitcoin", symbol: "BTC", name: "Bitcoin", binance: "BTCUSDT", yahoo: "BTC-USD" },
+  ethereum: { id: "ethereum", symbol: "ETH", name: "Ethereum", binance: "ETHUSDT", yahoo: "ETH-USD" },
+  eth: { id: "ethereum", symbol: "ETH", name: "Ethereum", binance: "ETHUSDT", yahoo: "ETH-USD" },
+  solana: { id: "solana", symbol: "SOL", name: "Solana", binance: "SOLUSDT", yahoo: "SOL-USD" },
+  sol: { id: "solana", symbol: "SOL", name: "Solana", binance: "SOLUSDT", yahoo: "SOL-USD" },
+  dogecoin: { id: "dogecoin", symbol: "DOGE", name: "Dogecoin", binance: "DOGEUSDT", yahoo: "DOGE-USD" },
+  doge: { id: "dogecoin", symbol: "DOGE", name: "Dogecoin", binance: "DOGEUSDT", yahoo: "DOGE-USD" },
+  xrp: { id: "ripple", symbol: "XRP", name: "XRP", binance: "XRPUSDT", yahoo: "XRP-USD" },
+  ripple: { id: "ripple", symbol: "XRP", name: "XRP", binance: "XRPUSDT", yahoo: "XRP-USD" },
 };
 
 const NAME_TO_TICKER: Record<string, string> = {
@@ -112,42 +112,77 @@ export function quoteReplyText(quote: Quote): string {
   return `${noun} is at ${formatMoney(quote.price, quote.currency)}${when}.${change} This is a live ${quote.kind === "crypto" ? "price" : "market quote"}, not financial advice.`;
 }
 
+
+async function firstSuccessful<T>(attempts: Array<() => Promise<T>>): Promise<T> {
+  let last: unknown;
+  for (const attempt of attempts) {
+    try {
+      return await attempt();
+    } catch (error) {
+      last = error;
+    }
+  }
+  throw last instanceof Error ? last : new Error("all quote sources failed");
+}
+
 export async function fetchCrypto(coin: (typeof CRYPTO_IDS)[string]): Promise<Quote> {
   const cacheKey = `crypto:${coin.id}`;
-  return cachedJson(cacheKey, PRICE_TTL_SECONDS, async () => {
-    try {
-      const url =
-        "https://api.coingecko.com/api/v3/simple/price?ids=" +
-        encodeURIComponent(coin.id) +
-        "&vs_currencies=usd&include_24hr_change=true";
-      const payload = await fetchJson<Record<string, { usd?: number; usd_24h_change?: number }>>(url);
-      const row = payload[coin.id];
-      if (!row || row.usd == null) throw new Error("missing");
-      return {
-        kind: "crypto",
-        symbol: coin.symbol,
-        name: coin.name,
-        price: row.usd,
-        changePct: row.usd_24h_change ?? null,
-        asOf: null,
-        currency: "USD",
-      } satisfies Quote;
-    } catch {
-      const url = `https://api.binance.com/api/v3/ticker/24hr?symbol=${coin.binance}`;
-      const row = await fetchJson<{ lastPrice?: string; priceChangePercent?: string }>(url);
-      const price = Number(row.lastPrice);
-      if (!Number.isFinite(price)) throw new Error("missing binance price");
-      return {
-        kind: "crypto",
-        symbol: coin.symbol,
-        name: coin.name,
-        price,
-        changePct: row.priceChangePercent != null ? Number(row.priceChangePercent) : null,
-        asOf: null,
-        currency: "USD",
-      } satisfies Quote;
-    }
-  });
+  return cachedJson(cacheKey, PRICE_TTL_SECONDS, () =>
+    firstSuccessful([
+      async () => {
+        const url =
+          "https://api.coingecko.com/api/v3/simple/price?ids=" +
+          encodeURIComponent(coin.id) +
+          "&vs_currencies=usd&include_24hr_change=true";
+        const payload = await fetchJson<Record<string, { usd?: number; usd_24h_change?: number }>>(url);
+        const row = payload[coin.id];
+        if (!row || row.usd == null) throw new Error("missing");
+        return {
+          kind: "crypto",
+          symbol: coin.symbol,
+          name: coin.name,
+          price: row.usd,
+          changePct: row.usd_24h_change ?? null,
+          asOf: null,
+          currency: "USD",
+        } satisfies Quote;
+      },
+      async () => {
+        const url = `https://api.binance.com/api/v3/ticker/24hr?symbol=${coin.binance}`;
+        const row = await fetchJson<{ lastPrice?: string; priceChangePercent?: string }>(url);
+        const price = Number(row.lastPrice);
+        if (!Number.isFinite(price)) throw new Error("missing binance price");
+        return {
+          kind: "crypto",
+          symbol: coin.symbol,
+          name: coin.name,
+          price,
+          changePct: row.priceChangePercent != null ? Number(row.priceChangePercent) : null,
+          asOf: null,
+          currency: "USD",
+        } satisfies Quote;
+      },
+      async () => {
+        const url = `https://api.coinbase.com/v2/prices/${encodeURIComponent(coin.symbol)}-USD/spot`;
+        const payload = await fetchJson<{ data?: { amount?: string } }>(url);
+        const price = Number(payload.data?.amount);
+        if (!Number.isFinite(price)) throw new Error("missing coinbase price");
+        return {
+          kind: "crypto",
+          symbol: coin.symbol,
+          name: coin.name,
+          price,
+          changePct: null,
+          asOf: null,
+          currency: "USD",
+        } satisfies Quote;
+      },
+      async () => {
+        const quote = await fetchYahooChart(coin.yahoo);
+        return { ...quote, kind: "crypto", symbol: coin.symbol, name: coin.name };
+      },
+    ]),
+  );
 }
 
 export function parseStooqCsv(text: string): Quote | null {
