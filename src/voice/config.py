@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import urllib.parse
 from dataclasses import dataclass
 from typing import Any
 
@@ -86,9 +87,69 @@ def webhook_secret() -> str | None:
     return raw or None
 
 
+# Hosts that must not be sent to Stripe as success/cancel URLs.
+_INTERNAL_HOSTS = {"0.0.0.0", "bindings.neuralforge", "::", "[::]"}
+_LOOPBACK_HOSTS = {"localhost", "127.0.0.1", "::1", "[::1]"}
+
+
 def public_base_url() -> str | None:
     raw = os.environ.get(_PUBLIC_URL_ENV, "").strip()
     return raw.rstrip("/") or None
+
+
+def resolve_checkout_base_url(
+    *,
+    forwarded_proto: str | None = None,
+    forwarded_host: str | None = None,
+    request_base_url: str | None = None,
+) -> str | None:
+    """Public site origin for Stripe success/cancel URLs.
+
+    The FastAPI process inside the Cloudflare container is plain HTTP, and
+    uvicorn is not started with --proxy-headers unless the image opts in.
+    ``request.base_url`` is therefore often ``http://forge.youneek.dev``.
+    Stripe live mode rejects non-HTTPS URLs, which surfaces as an unhandled
+    500 from Session.create. Prefer the Worker's forwarded host, then the
+    configured public URL, then the request base, and upgrade http to https
+    for non-loopback hosts.
+    """
+    host = (forwarded_host or "").split(",")[0].strip()
+    proto = (forwarded_proto or "").split(",")[0].strip().lower()
+    candidates = []
+    if host and proto:
+        candidates.append(f"{proto}://{host}")
+    configured = public_base_url()
+    if configured:
+        candidates.append(configured)
+    if request_base_url:
+        candidates.append(request_base_url)
+    for raw in candidates:
+        resolved = normalize_public_url(raw)
+        if resolved:
+            return resolved
+    return None
+
+
+def normalize_public_url(raw: str) -> str | None:
+    """Return a Stripe-safe origin, or None when the host is internal."""
+    text = raw.strip()
+    if not text:
+        return None
+    if "://" not in text:
+        text = f"https://{text}"
+    parsed = urllib.parse.urlparse(text)
+    host = (parsed.hostname or "").lower().strip("[]")
+    if not host or host in _INTERNAL_HOSTS:
+        return None
+    scheme = (parsed.scheme or "https").lower()
+    if scheme not in {"http", "https"}:
+        return None
+    if scheme == "http" and host not in _LOOPBACK_HOSTS:
+        scheme = "https"
+    netloc = parsed.netloc
+    # Keep userinfo/port if present, but swap the scheme only.
+    path = parsed.path.rstrip("/")
+    return f"{scheme}://{netloc}{path}"
 
 
 def voice_enabled(config: dict[str, Any] | None = None) -> bool:

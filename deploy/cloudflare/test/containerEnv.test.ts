@@ -52,4 +52,9 @@ describe("containerEnv", () => {
     const vars = containerEnv(env());
     expect(vars.NEURAL_FORGE_BINDINGS_URL).toBe("http://bindings.neuralforge");
   });
+
+  it("forwards the public site URL used for Stripe checkout redirects", () => {
+    const vars = containerEnv(env({ NEURAL_FORGE_PUBLIC_URL: "https://forge.youneek.dev" }));
+    expect(vars.NEURAL_FORGE_PUBLIC_URL).toBe("https://forge.youneek.dev");
+  });
 });

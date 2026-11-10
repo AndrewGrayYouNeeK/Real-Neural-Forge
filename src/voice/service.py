@@ -10,6 +10,8 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
+import re
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -33,6 +35,8 @@ from src.workspace.bindings import StorageError
 from src.workspace.errors import WorkspaceError
 from src.workspace.service import require_store
 from src.workspace.store import SqlError
+
+logger = logging.getLogger("uvicorn.error")
 
 SPEAK_USAGE_KIND = "speak"
 PURCHASE_USAGE_KIND = "purchase"
@@ -270,30 +274,62 @@ def create_checkout_session(
 ) -> dict[str, str]:
     """Open a Stripe Checkout session. One-time payment, no subscription."""
     stripe.api_key = secret
-    session = stripe.checkout.Session.create(
-        mode="payment",
-        line_items=[
-            {
-                "quantity": 1,
-                "price_data": {
-                    "currency": "usd",
-                    "unit_amount": int(round(pack.price_usd * 100)),
-                    "product_data": {
-                        "name": f"Neural Forge GQ voice — {pack.name}",
-                        "description": (
-                            f"{pack.chars:,} characters read aloud in GQ. "
-                            "Text on the site stays free."
-                        ),
+    origin = base_url.rstrip("/")
+    try:
+        session = stripe.checkout.Session.create(
+            mode="payment",
+            line_items=[
+                {
+                    "quantity": 1,
+                    "price_data": {
+                        "currency": "usd",
+                        "unit_amount": int(round(pack.price_usd * 100)),
+                        "product_data": {
+                            "name": f"Neural Forge GQ voice — {pack.name}",
+                            "description": (
+                                f"{pack.chars:,} characters read aloud in GQ. "
+                                "Text on the site stays free."
+                            ),
+                        },
                     },
-                },
-            }
-        ],
-        metadata={"nf_user_id": actor.user_id, "nf_pack_id": pack.id},
-        client_reference_id=actor.user_id,
-        success_url=f"{base_url}/#voice",
-        cancel_url=f"{base_url}/#voice",
+                }
+            ],
+            metadata={"nf_user_id": actor.user_id, "nf_pack_id": pack.id},
+            client_reference_id=actor.user_id,
+            success_url=f"{origin}/#voice",
+            cancel_url=f"{origin}/#voice",
+        )
+    except stripe.StripeError as exc:
+        logger.exception("Stripe checkout session failed")
+        raise WorkspaceError(502, _safe_stripe_message(exc)) from exc
+    url = getattr(session, "url", None) or (
+        session.get("url") if isinstance(session, dict) else None
     )
-    return {"id": str(session.id), "url": str(session.url)}
+    session_id = getattr(session, "id", None) or (
+        session.get("id") if isinstance(session, dict) else None
+    )
+    if not url or not session_id:
+        raise WorkspaceError(502, "Stripe did not return a checkout URL.")
+    return {"id": str(session_id), "url": str(url)}
+
+
+def _safe_stripe_message(exc: stripe.StripeError) -> str:
+    """Surface Stripe's public error text without leaking keys or payloads."""
+    raw = ""
+    user = getattr(exc, "user_message", None)
+    if isinstance(user, str) and user.strip():
+        raw = user.strip()
+    else:
+        body = getattr(exc, "json_body", None) or {}
+        error = body.get("error") if isinstance(body, dict) else None
+        if isinstance(error, dict) and isinstance(error.get("message"), str):
+            raw = error["message"].strip()
+        elif exc.args:
+            raw = str(exc.args[0]).strip()
+    raw = re.sub(r"(sk|rk|pk|whsec)_([a-zA-Z]+_)?[A-Za-z0-9]+", r"\1_[REDACTED]", raw)
+    if not raw:
+        return "Stripe could not start checkout. Try again in a moment."
+    return f"Stripe could not start checkout: {raw}"
 
 
 def create_checkout(
@@ -311,6 +347,11 @@ def create_checkout(
                 "Buying GQ voice credit is coming soon. Text on the site stays free."
             ),
         }
+    if not base_url:
+        raise WorkspaceError(
+            503,
+            "Voice checkout is missing a public site URL.",
+        )
     session = create_checkout_session(pack, actor, secret, base_url)
     return {
         "available": True,

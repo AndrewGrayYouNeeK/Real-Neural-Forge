@@ -8,7 +8,7 @@ from fastapi import APIRouter, Header, HTTPException, Request, Response
 from pydantic import BaseModel, Field
 
 from src.accounts.actor import Actor
-from src.voice.config import public_base_url
+from src.voice.config import resolve_checkout_base_url
 from src.voice.service import create_checkout, handle_webhook, speak, voice_status
 from src.workspace.errors import WorkspaceError
 from src.workspace.runtime import runtime
@@ -93,11 +93,13 @@ def voice_checkout(
     authorization: str | None = Header(default=None),
 ) -> dict[str, Any]:
     actor = _voice_actor(request, authorization)
-    base = public_base_url()
-    if base is None:
-        base = str(request.base_url).rstrip("/")
+    base = resolve_checkout_base_url(
+        forwarded_proto=request.headers.get("x-forwarded-proto"),
+        forwarded_host=request.headers.get("x-forwarded-host"),
+        request_base_url=str(request.base_url).rstrip("/"),
+    )
     try:
-        return create_checkout(actor, body.pack_id, _app_config(), base)
+        return create_checkout(actor, body.pack_id, _app_config(), base or "")
     except WorkspaceError as exc:
         _raise(exc)
 
