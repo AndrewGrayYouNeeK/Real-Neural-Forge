@@ -326,35 +326,85 @@ function stepText(steps) {
   return parts.join(" ");
 }
 
-async function forecastReply(kind) {
-  let series;
-  try {
-    series = await fetchJson("/series/recent?points=120");
-  } catch (error) {
-    return {
-      text:
-        "I could not load the live series right now. " +
-        (error.message || "The model may still be starting up."),
-    };
+const FORECAST_STARTERS = {
+  weather: "weather",
+  markets: "stocks",
+  crypto: "crypto",
+};
+
+function formatStarterValue(kind, value) {
+  const number = asNumber(value);
+  if (number == null) return null;
+  if (kind === "weather") return `${formatMetric(number)}°C`;
+  return formatMetric(number);
+}
+
+function forecastPlainLines(kind, series, steps) {
+  const name = series.name || series.dataset || "this sample series";
+  const next = steps[0];
+  const value = next
+    ? formatStarterValue(kind, next.p50 != null ? next.p50 : next.value)
+    : null;
+  const history = Array.isArray(series.history) ? series.history : [];
+  const last = history.length ? history[history.length - 1] : null;
+  const lastValue =
+    last && last.actual != null ? formatStarterValue(kind, last.actual) : null;
+  const lastTime = last && last.time ? String(last.time) : null;
+  const lines = [];
+  if (kind === "weather") {
+    lines.push(
+      "I do not have a live forecast for your location. I can show the sample model for daily high temperatures at Central Park."
+    );
+    if (value) {
+      lines.push(`On the next day in that sample, it expects a high of about ${value}.`);
+    } else {
+      lines.push("The sample is too short right now for a next-day read.");
+    }
+  } else if (kind === "markets" || kind === "crypto") {
+    lines.push(
+      `This is not live market advice. It is the sample model for ${name}.`
+    );
+    if (value) {
+      lines.push(`It expects the next day's log return to be about ${value}.`);
+    } else {
+      lines.push("The sample is too short right now for a next-step read.");
+    }
+  } else {
+    lines.push(`Here is what the sample model expects next on ${name}.`);
+    const nextText = stepText(steps);
+    if (nextText) lines.push(nextText);
+    else lines.push("The sample is too short right now for a forecast.");
   }
-  state.series = series;
-  const steps = normalizeForecast(series);
-  const label = series.dataset || series.source || "the loaded series";
-  const openers = {
-    weather: `Here is the model's read on ${label}.`,
-    markets: `Here is what the model expects next on ${label}.`,
-    general: `Here is what comes next on ${label}.`,
-  };
-  const lines = [openers[kind] || openers.general];
-  const next = stepText(steps);
-  if (next) lines.push(next);
-  else lines.push("The series is too short right now for a forecast.");
+  if (lastValue && lastTime) {
+    lines.push(`The last point in the sample is ${lastValue} on ${lastTime}.`);
+  }
   if (series.checkpoint_loaded === false) {
     lines.push(
       "Heads up: no trained checkpoint is loaded at the moment, so treat this as a rough sketch."
     );
   }
-  if (typeof series.note === "string" && series.note) lines.push(series.note);
+  if (typeof series.summary === "string" && series.summary) lines.push(series.summary);
+  return lines;
+}
+
+async function forecastReply(kind) {
+  const starterId = FORECAST_STARTERS[kind];
+  const url = starterId
+    ? `/starters/${starterId}/forecast?points=120`
+    : "/series/recent?points=120";
+  let series;
+  try {
+    series = await fetchJson(url);
+  } catch (error) {
+    return {
+      text:
+        "I could not load that sample forecast right now. " +
+        (error.message || "The model may still be starting up."),
+    };
+  }
+  state.series = series;
+  const steps = normalizeForecast(series);
+  const lines = forecastPlainLines(kind, series, steps);
   const chart = steps.length ? forecastChart(series, steps) : null;
   return { text: lines.join("\n\n"), chart };
 }
@@ -495,7 +545,19 @@ function trainingOutcomeText(status, message) {
   return message || "Training did not start.";
 }
 
-async function trainReply() {
+function isTrainStartRequest(question) {
+  return /\b(start training|retrain|train(ing)? now|fit a model|train (a |the |my )?model)\b/i.test(
+    question || ""
+  );
+}
+
+async function trainReply(question) {
+  if (!isTrainStartRequest(question)) {
+    return {
+      text:
+        "I can train a model on your data in a private workspace, or the owner can train the shared champion. Say “start training” or “train a model” when you want a run to begin. Until then, nothing is started.",
+    };
+  }
   let current = null;
   try {
     current = await fetchJson("/training/status");
@@ -561,15 +623,14 @@ async function voiceReply() {
 function helpReply() {
   return {
     text:
-      "You can ask me things like:\n" +
-      "• Predict tomorrow's weather — or any forecast on the series I am watching\n" +
-      "• How are the markets doing?\n" +
-      "• Next lottery numbers (I will be honest about the odds)\n" +
-      "• What's coming close to Earth? · What's happening in the solar system?\n" +
-      "• Moon phase\n" +
-      "• Train a model on my data\n" +
-      "• How much GQ voice credit do I have?\n\n" +
-      "Every reply has a speaker button that reads it aloud.",
+      "Here is what I can actually do, in plain words:\n" +
+      "• Weather — a sample model of daily highs at Central Park, not a live forecast for your town\n" +
+      "• Markets and crypto — sample models for AAPL and Bitcoin returns, not live trading advice\n" +
+      "• Lottery — a check of published draws; I will not pretend I can pick winners\n" +
+      "• Moon phase, near-Earth approaches, and the solar system\n" +
+      "• Training a model on your data, if you ask me to start a run\n" +
+      "• GQ voice — the speaker button on each reply, once you have an account\n\n" +
+      "If you ask something outside those topics, I will say so rather than make something up.",
   };
 }
 
@@ -581,38 +642,72 @@ function greetReply() {
 }
 
 const INTENTS = [
-  { test: /^\s*(hi|hello|hey|yo|good (morning|afternoon|evening))\b/i, handler: greetReply },
-  { test: /\b(train|retrain|fit a model|teach)\b/i, handler: trainReply },
-  { test: /\b(voice|speak|aloud|audio|listen|gq|credit)\b/i, handler: voiceReply },
-  { test: /\b(moon|lunar|eclipse)\b/i, handler: moonReply },
   {
+    name: "greet",
+    test: /^\s*(hi|hello|hey|yo|good (morning|afternoon|evening))\b/i,
+    handler: greetReply,
+  },
+  {
+    name: "help",
+    test: /\b(what can you do|what do you do|how do (i|you) use|help me|what are you)\b/i,
+    handler: helpReply,
+  },
+  {
+    name: "lottery",
     test: /\b(lottery|lotto|powerball|mega millions|winning numbers|lucky numbers)\b/i,
     handler: lotteryReply,
   },
-  { test: /\b(asteroid|space|near.?earth|close to earth|satellite|comet)\b/i, handler: spaceReply },
-  { test: /\b(solar system|planet|planets|jupiter|saturn|mars|venus|mercury)\b/i, handler: solarReply },
+  { name: "moon", test: /\b(moon|lunar|eclipse)\b/i, handler: moonReply },
   {
-    test: /\b(stock|stocks|market|markets|crypto|bitcoin|btc|ethereum|eth|s&p|nasdaq)\b/i,
+    name: "space",
+    test: /\b(asteroid|near.?earth|close to earth|outer space|in space|space (news|weather|junk|station)|satellites?|comet)\b/i,
+    handler: spaceReply,
+  },
+  {
+    name: "solar",
+    test: /\b(solar system|planet|planets|jupiter|saturn|mars|venus|mercury)\b/i,
+    handler: solarReply,
+  },
+  {
+    name: "crypto",
+    test: /\b(crypto|bitcoin|btc|ethereum|eth)\b/i,
+    handler: () => forecastReply("crypto"),
+  },
+  {
+    name: "markets",
+    test: /\b(stock|stocks|market|markets|s&p|nasdaq|aapl|share price)\b/i,
     handler: () => forecastReply("markets"),
   },
   {
-    test: /\b(weather|temperature|rain|forecast|tomorrow|predict|prediction)\b/i,
+    name: "weather",
+    test: /\b(weather|temperature|rainfall|humidity|climate|how hot|how cold|rain|snow|sunny)\b/i,
     handler: () => forecastReply("weather"),
+  },
+  {
+    name: "voice",
+    test: /\b(gq( voice)?|voice credit|read (it |this |that )?aloud|speaker button|text to speech)\b/i,
+    handler: voiceReply,
+  },
+  {
+    name: "train",
+    test: /\b(train(ing)?|retrain|fit a model)\b/i,
+    handler: trainReply,
   },
 ];
 
-async function answer(question) {
+function matchIntent(question) {
   for (const intent of INTENTS) {
-    if (intent.test.test(question)) {
-      return intent.handler();
-    }
+    if (intent.test.test(question)) return intent;
   }
-  const forecast = await forecastReply("general");
+  return null;
+}
+
+async function answer(question) {
+  const intent = matchIntent(question);
+  if (intent) return intent.handler(question);
   return {
     text:
-      `${forecast.text}\n\n` +
-      "I am best at weather-style forecasts, markets, the lottery check, space, the moon, training, and GQ voice. Try one of the suggestion chips below.",
-    chart: forecast.chart,
+      "I do not have an answer for that. I can help with sample weather and market forecasts, lottery draw checks, the moon, near-Earth space, training a model, and GQ voice. Ask one of those, or try a suggestion chip.",
   };
 }
 

@@ -29,8 +29,10 @@ from src.voice.config import (
     webhook_secret,
 )
 from src.voice.store import VoiceStore, utc_day
+from src.workspace.bindings import StorageError
 from src.workspace.errors import WorkspaceError
 from src.workspace.service import require_store
+from src.workspace.store import SqlError
 
 SPEAK_USAGE_KIND = "speak"
 PURCHASE_USAGE_KIND = "purchase"
@@ -161,6 +163,15 @@ def voice_status(actor: Actor | None, config: dict[str, Any] | None) -> dict[str
     }
 
 
+def _unavailable_voice(exc: Exception) -> WorkspaceError:
+    error = WorkspaceError(
+        503,
+        "GQ voice is temporarily unavailable. Text on the site is unaffected.",
+    )
+    error.__cause__ = exc
+    return error
+
+
 def speak(actor: Actor, text: str, config: dict[str, Any] | None) -> dict[str, Any]:
     """Synthesize (or replay) audio, charging member credit only on a fresh call."""
     cfg = load_voice_config(config)
@@ -176,63 +187,75 @@ def speak(actor: Actor, text: str, config: dict[str, Any] | None) -> dict[str, A
         )
     store = voice_store()
     digest = _cache_digest(cfg, cleaned)
-    cached = store.cache_get(digest)
-    if cached is not None:
-        # Same text, same audio: the owner pays nothing twice and neither do visitors.
-        return {
-            "audio": cached,
-            "cached": True,
-            "chars": len(cleaned),
-            "balance": None if actor.is_owner else store.account(actor.user_id),
-        }
-    day = utc_day()
-    if actor.is_owner:
-        balance = None
-    else:
-        if cfg.daily_char_limit:
-            if store.daily_chars(day) + len(cleaned) > cfg.daily_char_limit:
+    try:
+        cached = store.cache_get(digest)
+        if cached is not None:
+            # Same text, same audio: the owner pays nothing twice and neither do visitors.
+            return {
+                "audio": cached,
+                "cached": True,
+                "chars": len(cleaned),
+                "balance": None if actor.is_owner else store.account(actor.user_id),
+            }
+        day = utc_day()
+        if actor.is_owner:
+            balance = None
+        else:
+            if cfg.daily_char_limit:
+                if store.daily_chars(day) + len(cleaned) > cfg.daily_char_limit:
+                    raise WorkspaceError(
+                        429,
+                        "The site's daily GQ voice budget is spent. Try again tomorrow. "
+                        "Text stays free.",
+                    )
+                if len(cleaned) > cfg.daily_char_limit:
+                    raise WorkspaceError(
+                        422,
+                        "The request is longer than the site's daily GQ voice budget.",
+                    )
+            row = _member_row(store, actor, cfg)
+            total = row["free_remaining"] + row["purchased_remaining"]
+            if total < len(cleaned):
                 raise WorkspaceError(
-                    429,
-                    "The site's daily GQ voice budget is spent. Try again tomorrow. "
-                    "Text stays free.",
+                    402,
+                    "You are out of GQ voice credit. Buy a credit pack on the "
+                    "Voice & credits page. Text on Neural Forge stays free.",
                 )
-            if len(cleaned) > cfg.daily_char_limit:
-                raise WorkspaceError(
-                    422,
-                    "The request is longer than the site's daily GQ voice budget.",
-                )
-        row = _member_row(store, actor, cfg)
-        total = row["free_remaining"] + row["purchased_remaining"]
-        if total < len(cleaned):
+    except (SqlError, StorageError) as exc:
+        raise _unavailable_voice(exc)
+    audio = synthesize_speech(cleaned, cfg)
+    try:
+        store.cache_put(digest, audio)
+        if actor.is_owner:
+            store.record_usage(
+                actor.user_id, SPEAK_USAGE_KIND, len(cleaned), cached=False, balance=None
+            )
+            return {"audio": audio, "cached": False, "chars": len(cleaned), "balance": None}
+        balance = store.spend(actor.user_id, len(cleaned))
+        if balance is None:  # pragma: no cover - the check above makes this a race
             raise WorkspaceError(
                 402,
                 "You are out of GQ voice credit. Buy a credit pack on the "
                 "Voice & credits page. Text on Neural Forge stays free.",
             )
-    audio = synthesize_speech(cleaned, cfg)
-    store.cache_put(digest, audio)
-    if actor.is_owner:
+        store.add_daily_chars(day, len(cleaned))
         store.record_usage(
-            actor.user_id, SPEAK_USAGE_KIND, len(cleaned), cached=False, balance=None
+            actor.user_id, SPEAK_USAGE_KIND, len(cleaned), cached=False, balance=balance
         )
-        return {"audio": audio, "cached": False, "chars": len(cleaned), "balance": None}
-    balance = store.spend(actor.user_id, len(cleaned))
-    if balance is None:  # pragma: no cover - the check above makes this a race
-        raise WorkspaceError(
-            402,
-            "You are out of GQ voice credit. Buy a credit pack on the "
-            "Voice & credits page. Text on Neural Forge stays free.",
-        )
-    store.add_daily_chars(day, len(cleaned))
-    store.record_usage(
-        actor.user_id, SPEAK_USAGE_KIND, len(cleaned), cached=False, balance=balance
-    )
-    return {
-        "audio": audio,
-        "cached": False,
-        "chars": len(cleaned),
-        "balance": balance,
-    }
+        return {
+            "audio": audio,
+            "cached": False,
+            "chars": len(cleaned),
+            "balance": balance,
+        }
+    except (SqlError, StorageError):
+        # The audio is ready; a cache or ledger write should not drop the reply.
+        return {
+            "audio": audio,
+            "cached": False,
+            "chars": len(cleaned),
+            "balance": None,
+        }
 
 
 def create_checkout_session(

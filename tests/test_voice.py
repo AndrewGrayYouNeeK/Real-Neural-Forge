@@ -387,3 +387,22 @@ def test_voice_store_cache_keys_are_safe(voice_client):
     assert voice.cache_get("0" * 64) is None
     with pytest.raises(SqlError):
         voice.cache_get("../escape")
+
+
+def test_cache_store_failure_is_json_503(voice_client, monkeypatch: pytest.MonkeyPatch):
+    client, _root = voice_client
+    from src.workspace.bindings import StorageError
+
+    def boom(self, digest):
+        raise StorageError("R2 get failed (400): Invalid object key.")
+
+    monkeypatch.setattr(VoiceStore, "cache_get", boom)
+    spoken = client.post(
+        "/voice/speak",
+        json={"text": "Hello from Neural Forge."},
+        headers={"Authorization": "Bearer owner-secret"},
+    )
+    assert spoken.status_code == 503
+    assert "application/json" in spoken.headers["content-type"]
+    assert "temporarily unavailable" in spoken.json()["detail"]
+    assert spoken.text != "Internal Server Error"

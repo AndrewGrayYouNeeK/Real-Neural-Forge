@@ -864,6 +864,8 @@ class TestForecastDashboard:
         assert "Authorization" in app_js
         assert "Bearer " in app_js
         assert "/voice/speak" in app_js
+        assert "/starters/" in app_js
+        assert "/starters/${starterId}/forecast" in app_js
         assert "/space/near-earth" in app_js
         assert "/space/solar-system" in app_js
         assert "/lunar" in app_js
