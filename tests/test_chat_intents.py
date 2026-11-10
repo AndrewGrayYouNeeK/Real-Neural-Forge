@@ -74,12 +74,16 @@ def match_intent(question: str) -> str | None:
         ("Hi there", "greet"),
         ("What can you do?", "help"),
         ("What will the weather be tomorrow?", "weather"),
+        ("Weather in Dallas this weekend?", "weather"),
         ("How hot will it be at Central Park?", "weather"),
         ("Is it going to rain?", "weather"),
         ("How are the markets doing?", "markets"),
+        ("How is AAPL doing?", "markets"),
         ("What about AAPL stock?", "markets"),
         ("How is Bitcoin doing?", "crypto"),
+        ("What's Bitcoin at?", "crypto"),
         ("What are the next lottery numbers?", "lottery"),
+        ("What were the last Powerball numbers?", "lottery"),
         ("Has 21 come up in Powerball?", "lottery"),
         ("What's the moon phase tonight?", "moon"),
         ("What's coming close to Earth?", "space"),
@@ -102,6 +106,7 @@ def test_questions_route_to_the_right_topic(question: str, expected: str) -> Non
         "What will happen tomorrow?",
         "Can you predict my future?",
         "What's 2 + 2?",
+        "Who was the first president?",
         "Who won the World Cup?",
         "Tell me a joke",
         "Give me some space in this box",
@@ -121,3 +126,12 @@ def test_generic_training_questions_do_not_start_a_run() -> None:
     assert start.search("Please retrain")
     assert not start.search("How does training work?")
     assert not start.search("Tell me about training")
+
+
+def test_live_endpoints_are_wired_in_the_chat() -> None:
+    source = APP_JS.read_text(encoding="utf-8")
+    assert "/live/weather" in source
+    assert "/live/quote" in source
+    assert "/live/lottery" in source
+    assert "/live/ask" in source
+    assert "askLive(question)" in source

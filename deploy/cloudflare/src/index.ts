@@ -2,6 +2,7 @@ import { Container, ContainerProxy, getContainer, type State } from "@cloudflare
 
 import { BINDINGS_HOST, containerEnv } from "./containerEnv";
 import { isAllowedObjectKey } from "./objectKey";
+import { handleLive } from "./live/handle";
 
 export { ContainerProxy };
 
@@ -9,6 +10,8 @@ export { ContainerProxy };
 interface D1Prepared {
   bind(...values: unknown[]): D1Prepared;
   all(): Promise<{ results?: Record<string, unknown>[]; meta?: { changes?: number } }>;
+  first<T = Record<string, unknown>>(): Promise<T | null>;
+  run(): Promise<{ meta?: { changes?: number } }>;
 }
 
 interface D1Database {
@@ -33,6 +36,7 @@ interface Env {
   NEURAL_FORGE: Parameters<typeof getContainer>[0];
   WORKSPACES_DB: D1Database;
   WORKSPACES: R2Bucket;
+  AI?: { run(model: string, inputs: Record<string, unknown>): Promise<unknown> };
   NEURAL_FORGE_CONFIG?: string;
   NEURAL_FORGE_CHECKPOINT_URL?: string;
   NEURAL_FORGE_CHECKPOINT_TOKEN?: string;
@@ -368,6 +372,9 @@ export default {
     const url = new URL(request.url);
     if (url.pathname === "/_bindings/sql" || url.pathname === "/_bindings/object") {
       return handleBindings(request, env);
+    }
+    if (url.pathname === "/live" || url.pathname.startsWith("/live/")) {
+      return handleLive(request, env);
     }
     const container = getContainer(env.NEURAL_FORGE, "primary");
     await container.startAndWaitForPorts({

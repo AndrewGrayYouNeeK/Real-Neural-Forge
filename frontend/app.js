@@ -387,51 +387,72 @@ function forecastPlainLines(kind, series, steps) {
   return lines;
 }
 
-async function forecastReply(kind) {
-  const starterId = FORECAST_STARTERS[kind];
-  const url = starterId
-    ? `/starters/${starterId}/forecast?points=120`
-    : "/series/recent?points=120";
-  let series;
+function liveUrl(path, question) {
+  const join = path.includes("?") ? "&" : "?";
+  return `${path}${join}q=${encodeURIComponent(question || "")}`;
+}
+
+async function optionalWeatherSampleLine() {
   try {
-    series = await fetchJson(url);
+    const series = await fetchJson("/starters/weather/forecast?points=120");
+    const steps = normalizeForecast(series);
+    const next = steps[0];
+    const celsius = asNumber(next && next.p50 != null ? next.p50 : next && next.value);
+    if (celsius == null) return "";
+    const fahrenheit = celsius * (9 / 5) + 32;
+    return (
+      `For comparison, the sample Central Park model expects a next-day high of about ${formatMetric(fahrenheit)}°F on that historical series. That is not the live forecast.`
+    );
+  } catch {
+    return "";
+  }
+}
+
+async function forecastReply(kind, question) {
+  const path =
+    kind === "weather"
+      ? "/live/weather"
+      : kind === "crypto"
+        ? "/live/quote?kind=crypto"
+        : "/live/quote?kind=stock";
+  try {
+    const result = await fetchJson(liveUrl(path, question));
+    const lines = [];
+    if (result && typeof result.text === "string" && result.text.trim()) {
+      lines.push(result.text.trim());
+    } else {
+      lines.push("I could not load that live answer right now.");
+    }
+    if (kind === "weather") {
+      const extra = await optionalWeatherSampleLine();
+      if (extra) lines.push(extra);
+    }
+    return { text: lines.join("\n\n") };
   } catch (error) {
     return {
       text:
-        "I could not load that sample forecast right now. " +
-        (error.message || "The model may still be starting up."),
+        "I could not load that live answer right now. " +
+        (error.message || "Please try again in a moment."),
     };
   }
-  state.series = series;
-  const steps = normalizeForecast(series);
-  const lines = forecastPlainLines(kind, series, steps);
-  const chart = steps.length ? forecastChart(series, steps) : null;
-  return { text: lines.join("\n\n"), chart };
 }
 
-async function lotteryReply() {
-  let scorecard = null;
-  let study = null;
-  const results = await Promise.allSettled([
-    fetchJson("/powerball/scorecard"),
-    fetchJson("/lottery/lunar-analysis"),
-  ]);
-  if (results[0].status === "fulfilled") scorecard = results[0].value;
-  if (results[1].status === "fulfilled") study = results[1].value;
-  const lines = [
-    "Honest answer first: lottery draws are random, so no model — not even this one — can pick the next winning numbers. What Neural Forge can do is check published draws against patterns.",
-  ];
-  if (scorecard && typeof scorecard.summary === "string" && scorecard.summary) {
-    lines.push(`Powerball scorecard: ${scorecard.summary}`);
+async function lotteryReply(question) {
+  try {
+    const result = await fetchJson(liveUrl("/live/lottery", question));
+    if (result && typeof result.text === "string" && result.text.trim()) {
+      return { text: result.text.trim() };
+    }
+  } catch (error) {
+    return {
+      text:
+        "I could not load the latest lottery draws right now. Draws are random either way — no model can pick the next winning numbers. " +
+        (error.message || ""),
+    };
   }
-  if (study && typeof study.summary === "string" && study.summary) {
-    lines.push(`Lunar study: ${study.summary}`);
-    if (typeof study.caveat === "string" && study.caveat) lines.push(study.caveat);
-  }
-  if (lines.length === 1) {
-    lines.push("The published lottery reports are not available right now.");
-  }
-  return { text: lines.join("\n\n") };
+  return {
+    text: "I could not load the latest lottery draws right now. Draws are random either way — no model can pick the next winning numbers.",
+  };
 }
 
 async function moonReply() {
@@ -624,20 +645,21 @@ function helpReply() {
   return {
     text:
       "Here is what I can actually do, in plain words:\n" +
-      "• Weather — a sample model of daily highs at Central Park, not a live forecast for your town\n" +
-      "• Markets and crypto — sample models for AAPL and Bitcoin returns, not live trading advice\n" +
-      "• Lottery — a check of published draws; I will not pretend I can pick winners\n" +
+      "• Weather — a live forecast (high, low, rain, and conditions in °F) for a place you name, or your approximate location\n" +
+      "• Markets and crypto — a live price for a ticker or coin, with the caveat that it is not advice\n" +
+      "• Lottery — the latest Powerball and Mega Millions draws from published results; I will not pretend I can pick winners\n" +
       "• Moon phase, near-Earth approaches, and the solar system\n" +
       "• Training a model on your data, if you ask me to start a run\n" +
-      "• GQ voice — the speaker button on each reply, once you have an account\n\n" +
-      "If you ask something outside those topics, I will say so rather than make something up.",
+      "• GQ voice — the speaker button on each reply, once you have an account\n" +
+      "• General questions — a short AI answer, within a daily free allowance\n\n" +
+      "If the AI allowance is used up, I will say so and still help with the live topics above.",
   };
 }
 
 function greetReply() {
   return {
     text:
-      "Hello! I am Neural Forge. Ask me about the weather, the markets, the lottery, space, or the moon — or tell me to train a model on your data. What would you like to know?",
+      "Hello! I am Neural Forge. Ask me for a live weather forecast, a market or crypto price, the latest lottery draws, the moon, space, or a general question. You can also tell me to train a model on your data. What would you like to know?",
   };
 }
 
@@ -671,17 +693,17 @@ const INTENTS = [
   {
     name: "crypto",
     test: /\b(crypto|bitcoin|btc|ethereum|eth)\b/i,
-    handler: () => forecastReply("crypto"),
+    handler: (question) => forecastReply("crypto", question),
   },
   {
     name: "markets",
     test: /\b(stock|stocks|market|markets|s&p|nasdaq|aapl|share price)\b/i,
-    handler: () => forecastReply("markets"),
+    handler: (question) => forecastReply("markets", question),
   },
   {
     name: "weather",
     test: /\b(weather|temperature|rainfall|humidity|climate|how hot|how cold|rain|snow|sunny)\b/i,
-    handler: () => forecastReply("weather"),
+    handler: (question) => forecastReply("weather", question),
   },
   {
     name: "voice",
@@ -702,13 +724,32 @@ function matchIntent(question) {
   return null;
 }
 
+async function askLive(question) {
+  try {
+    const result = await fetchJson("/live/ask", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ question }),
+    });
+    if (result && typeof result.text === "string" && result.text.trim()) {
+      return { text: result.text.trim() };
+    }
+  } catch (error) {
+    return {
+      text:
+        (error && error.message) ||
+        "I could not reach the general-answer model right now. I can still help with live weather, market prices, lottery draws, the moon, near-Earth space, and training.",
+    };
+  }
+  return {
+    text: "I could not reach the general-answer model right now. I can still help with live weather, market prices, lottery draws, the moon, near-Earth space, and training.",
+  };
+}
+
 async function answer(question) {
   const intent = matchIntent(question);
   if (intent) return intent.handler(question);
-  return {
-    text:
-      "I do not have an answer for that. I can help with sample weather and market forecasts, lottery draw checks, the moon, near-Earth space, training a model, and GQ voice. Ask one of those, or try a suggestion chip.",
-  };
+  return askLive(question);
 }
 
 async function handleQuestion(question) {
@@ -1351,7 +1392,7 @@ setSidebarControls();
 
 addMessage(
   "assistant",
-  "Hi! I am Neural Forge. Ask me in plain words — weather, markets, the lottery, space, the moon, or training. Every reply comes with a speaker button that reads it aloud in GQ voice."
+  "Hi! I am Neural Forge. Ask me in plain words for a live weather forecast, a market or crypto price, the latest lottery draws, the moon, space, training, or a general question. Every reply comes with a speaker button that reads it aloud in GQ voice."
 );
 
 refreshAccount()
