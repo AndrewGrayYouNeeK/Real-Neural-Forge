@@ -576,7 +576,7 @@ async function trainReply(question) {
   if (!isTrainStartRequest(question)) {
     return {
       text:
-        "I can train a model on your data in a private workspace, or the owner can train the shared champion. Say “start training” or “train a model” when you want a run to begin. Until then, nothing is started.",
+        "I can train a small model on a CSV in your private workspace, and you can compare the runs under Experiments in the Tools sidebar. Open Tools → My workspace to upload a file, or say “start training” when you want a run to begin. Until then, nothing is started.",
     };
   }
   let current = null;

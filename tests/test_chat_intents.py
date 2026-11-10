@@ -92,6 +92,7 @@ def match_intent(question: str) -> str | None:
         ("How does training work?", "train"),
         ("Start training", "train"),
         ("Train a model on my data", "train"),
+        ("Train on my CSV", "train"),
     ],
 )
 def test_questions_route_to_the_right_topic(question: str, expected: str) -> None:
@@ -126,6 +127,7 @@ def test_generic_training_questions_do_not_start_a_run() -> None:
     assert start.search("Please retrain")
     assert not start.search("How does training work?")
     assert not start.search("Tell me about training")
+    assert not start.search("Train on my CSV")
 
 
 def test_live_endpoints_are_wired_in_the_chat() -> None:

@@ -831,7 +831,11 @@ class TestForecastDashboard:
         page = client.get("/")
         assert page.status_code == 200
         html = page.text
-        assert "Ask Neural Forge anything." in html
+        assert "Train a small model on your numbers." in html
+        assert "Ask what comes next." in html
+        assert "Listening uses voice credits." in html
+        assert "Train on a CSV" in html
+        assert "Compare experiments" in html
         assert 'id="welcome-heading"' in html
         assert 'id="chat-log"' in html
         assert 'id="chat-form"' in html
@@ -839,10 +843,12 @@ class TestForecastDashboard:
         assert "What will the weather be tomorrow?" in html
         assert "Next lottery numbers" in html
         assert "Moon phase" in html
-        assert "Train a model on my data" in html
+        assert "Train on my CSV" in html
         assert 'id="account-btn"' in html
         assert 'id="sign-in-modal"' in html
         assert 'id="owner-modal" hidden' in html
+        assert "Owner sign-in" in html
+        assert html.split('id="owner-modal"', 1)[0].count("Owner sign-in") == 0
         assert 'id="auth-tab-owner"' not in html
         assert 'id="owner-token"' in html
         assert 'id="api-token"' not in html
