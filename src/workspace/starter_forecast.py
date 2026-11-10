@@ -13,7 +13,7 @@ from src.dashboard_data import recent_series
 from src.inference.predictor import Predictor
 from src.models.registry import build_model
 from src.workspace.errors import WorkspaceError
-from src.workspace.starters import Starter, starter_by_id
+from src.workspace.starters import Starter, load_starters, starter_by_id
 
 # Display units for the starter target, used in plain-language replies.
 STARTER_UNITS = {
@@ -83,3 +83,19 @@ def starter_forecast(starter_id: str, *, points: int = 120) -> dict[str, Any]:
     payload["unit"] = STARTER_UNITS.get(starter.id)
     payload["checkpoint_loaded"] = True
     return payload
+
+
+def public_starter_catalog() -> dict[str, Any]:
+    """Shipped sample models. No account required. Lottery is not included."""
+    return {
+        "starters": [
+            {
+                "id": starter.id,
+                "name": starter.name,
+                "summary": starter.summary,
+                "source": starter.source,
+                "unit": STARTER_UNITS.get(starter.id),
+            }
+            for starter in load_starters()
+        ]
+    }

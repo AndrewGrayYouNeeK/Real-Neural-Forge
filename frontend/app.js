@@ -246,8 +246,8 @@ async function speakMessage(message, speakButton) {
     if (response.status === 402) {
       showHint(
         message,
-        "You are out of GQ voice credit. Buy a credit pack in Voice & credits — text stays free.",
-        [["Buy credits", openVoicePanel]]
+        "You are out of GQ voice credit. Text stays free. Credit packs are listed under Voice & credits; checkout is in test mode and will not charge a real card.",
+        [["Voice & credits", openVoicePanel]]
       );
       return;
     }
@@ -338,6 +338,8 @@ function formatStarterValue(kind, value) {
   const number = asNumber(value);
   if (number == null) return null;
   if (kind === "weather") return `${formatMetric(number)}°C`;
+  if (kind === "lunar") return formatMetric(number);
+  if (kind === "near-earth") return formatMetric(number);
   return formatMetric(number);
 }
 
@@ -407,6 +409,62 @@ async function optionalWeatherSampleLine() {
     );
   } catch {
     return "";
+  }
+}
+
+function starterIdFromQuestion(question) {
+  const q = String(question || "").toLowerCase();
+  if (/\b(bitcoin|btc|crypto)\b/.test(q)) return "crypto";
+  if (/\b(aapl|stocks?)\b/.test(q)) return "stocks";
+  if (/\b(near-?earth|approaches)\b/.test(q)) return "near-earth";
+  if (/\b(moon|lunar|illumination)\b/.test(q)) return "lunar";
+  return "weather";
+}
+
+function sampleModelLines(starterId, series, steps) {
+  const name = series.name || series.dataset || "this sample series";
+  const unit = series.unit ? ` (${series.unit})` : "";
+  const next = steps[0];
+  const value = next
+    ? formatStarterValue(starterId, next.p50 != null ? next.p50 : next.value)
+    : null;
+  const history = Array.isArray(series.history) ? series.history : [];
+  const last = history.length ? history[history.length - 1] : null;
+  const lastValue =
+    last && last.actual != null
+      ? formatStarterValue(starterId, last.actual)
+      : null;
+  const lastTime = last && last.time ? String(last.time) : null;
+  const lines = [
+    `This is the shipped “${name}” sample model, not a live forecast. No account is required to try it.`,
+  ];
+  if (value) {
+    lines.push(`It expects the next step to be about ${value}${unit}.`);
+  } else {
+    lines.push("The sample is too short right now for a next-step read.");
+  }
+  if (lastValue && lastTime) {
+    lines.push(`The last point in the sample is ${lastValue} on ${lastTime}.`);
+  }
+  if (typeof series.summary === "string" && series.summary) lines.push(series.summary);
+  return lines;
+}
+
+async function sampleModelReply(question) {
+  const starterId = starterIdFromQuestion(question);
+  try {
+    const series = await fetchJson(`/starters/${starterId}/forecast?points=120`);
+    const steps = normalizeForecast(series);
+    return {
+      text: sampleModelLines(starterId, series, steps).join("\n\n"),
+      chart: forecastChart(series, steps),
+    };
+  } catch (error) {
+    return {
+      text:
+        "I could not load that sample model right now. " +
+        (error.message || "Please try again in a moment."),
+    };
   }
 }
 
@@ -861,7 +919,7 @@ async function voiceReply() {
         `You have ${Number(balance.free || 0).toLocaleString()} free and ${Number(
           balance.purchased || 0
         ).toLocaleString()} purchased GQ characters left. ` +
-        "Press any speaker button to listen; packs live under Voice & credits in the Tools sidebar.",
+        "Press any speaker button to listen; packs live under Voice & credits in the Tools sidebar. Checkout is in test mode and will not charge a real card.",
     };
   } catch (error) {
     return { text: `I could not check GQ voice right now. ${error.message}` };
@@ -875,17 +933,18 @@ function helpReply() {
       "• Weather — a live forecast (high, low, rain, and conditions in °F) for a place you name, or your approximate location\n" +
       "• Markets and crypto — a live price for a ticker or coin, with the caveat that it is not advice\n" +
       "• Moon phase, near-Earth approaches, and the solar system\n" +
+      "• Sample models — try the Central Park, AAPL, Bitcoin, near-Earth, or moon illumination starters. No account needed. These are historical samples, not live forecasts\n" +
       "• Training a small model on your CSV — use the Train on my CSV chip for the one-click flow\n" +
-      "• GQ voice — the speaker button on each reply, once you have an account\n" +
+      "• GQ voice — the speaker button on each reply, once you have an account. Listening uses credits; text stays free. Payments are not live\n" +
       "• General questions — a short AI answer, within a daily free allowance\n\n" +
-      "If the AI allowance is used up, I will say so and still help with the live topics above.",
+      "If the AI allowance is used up, I will say so and still help with the live topics and sample models above.",
   };
 }
 
 function greetReply() {
   return {
     text:
-      "Hello! I am Neural Forge. Ask me for a live weather forecast, a market or crypto price, the moon, space, or a general question. You can also tell me to train a model on your data. What would you like to know?",
+      "Hello! I am Neural Forge. Ask me for a live weather forecast, a market or crypto price, the moon, space, or a general question. You can also try a sample model with no account, or train a model on your data. What would you like to know?",
   };
 }
 
@@ -899,6 +958,11 @@ const INTENTS = [
     name: "help",
     test: /\b(what can you do|what do you do|how do (i|you) use|help me|what are you)\b/i,
     handler: helpReply,
+  },
+  {
+    name: "demo",
+    test: /\btry\b[\s\S]{0,80}\bsample\b/i,
+    handler: sampleModelReply,
   },
   { name: "moon", test: /\b(moon|lunar|eclipse)\b/i, handler: moonReply },
   {
@@ -1049,7 +1113,16 @@ function renderVoicePanel() {
     const buy = document.createElement("button");
     buy.type = "button";
     buy.className = "btn primary btn-small";
-    buy.textContent = status.signed_in ? "Buy credit pack" : "Sign in to buy";
+    if (!status.checkout_available) {
+      buy.textContent = "Payments are not live";
+      buy.disabled = true;
+    } else if (status.checkout_test_mode) {
+      buy.textContent = status.signed_in
+        ? "Test checkout (no real charge)"
+        : "Sign in for test checkout";
+    } else {
+      buy.textContent = status.signed_in ? "Buy credit pack" : "Sign in to buy";
+    }
     buy.addEventListener("click", () => buyVoicePack(pack.id, status.signed_in));
     card.append(title, detail, buy);
     packs.append(card);
@@ -1090,8 +1163,13 @@ async function buyVoicePack(packId, signedIn) {
   const message = document.getElementById("voice-message");
   if (!signedIn) {
     message.textContent =
-      "Create a free account first — then buy GQ credit here. Text stays free either way.";
+      "Create a free account first to try GQ credit checkout. Text stays free either way. Payments are not live; checkout is in test mode and will not charge a real card.";
     openSignInModal();
+    return;
+  }
+  const status = state.voiceStatus || {};
+  if (!status.checkout_available) {
+    message.textContent = "Payments are not live yet. Text stays free.";
     return;
   }
   try {
@@ -1106,7 +1184,7 @@ async function buyVoicePack(packId, signedIn) {
     }
     message.textContent =
       (result && result.detail) ||
-      "Buying GQ voice credit is coming soon. Text stays free.";
+      "Payments are not live yet. Text stays free.";
   } catch (error) {
     message.textContent = error.message;
   }
@@ -1439,7 +1517,7 @@ document.getElementById("chat-form").addEventListener("submit", (event) => {
   handleQuestion(question);
 });
 
-document.querySelectorAll("#suggestion-chips .chip").forEach((chip) => {
+document.querySelectorAll("#suggestion-chips .chip, #demo-chips .chip").forEach((chip) => {
   chip.addEventListener("click", () => {
     handleQuestion(chip.dataset.question);
   });
@@ -1612,7 +1690,7 @@ setSidebarControls();
 
 addMessage(
   "assistant",
-  "Hi! I am Neural Forge. Ask me in plain words for a live weather forecast, a market or crypto price, the moon, space, training, or a general question. Every reply comes with a speaker button that reads it aloud in GQ voice."
+  "Hi! I am Neural Forge. Ask me in plain words for a live weather forecast, a market or crypto price, the moon, space, a sample model, training, or a general question. Text is free. Listening uses voice credits; payments are not live. Every reply comes with a speaker button that reads it aloud in GQ voice."
 );
 
 refreshAccount()

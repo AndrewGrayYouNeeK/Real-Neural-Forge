@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Neural Forge API docs</title>
+    <meta
+      name="description"
+      content="API docs and examples for Neural Forge: health, sample models, predict, forecast, workspace training, and live data."
+    />
+    <link rel="icon" href="/favicon.ico" sizes="any" />
+    <link rel="stylesheet" href="/assets/styles.css" />
+  </head>
+  <body>
+    <a class="skip-link" href="#docs">Skip to the API docs</a>
+    <div class="grid-bg" aria-hidden="true"></div>
+    <header class="topbar">
+      <p class="eyebrow topbar-brand"><a href="/">Neural Forge</a></p>
+      <div class="topbar-actions">
+        <a class="topbar-link" href="/docs" aria-current="page">API docs</a>
+        <a class="topbar-link" href="/">Back to chat</a>
+      </div>
+    </header>
+    <main class="docs-shell" id="docs">
+      <h1>API docs and examples</h1>
+      <p>
+        Neural Forge is a small time-series model you can train on your own
+        numbers, plus live weather, markets, and space answers in the chat.
+        The examples below use the public site origin. Replace the host if you
+        are calling a local server. Text answers are free. Training needs a
+        free account and stays under published caps. GQ voice uses credits.
+        Payments are not live — checkout is in test mode and will not charge a
+        real card.
+      </p>
+      <p>
+        The machine-readable schema stays at
+        <a href="/openapi.json"><code>/openapi.json</code></a>, with a generated
+        explorer at
+        <a href="/openapi/docs"><code>/openapi/docs</code></a>
+        and
+        <a href="/openapi/redoc"><code>/openapi/redoc</code></a>.
+      </p>
+
+      <h2>Health</h2>
+      <pre><code>curl -sS https://forge.youneek.dev/health</code></pre>
+      <p>A healthy process returns <code>{"status":"ok"}</code>.</p>
+
+      <h2>Sample models (no account)</h2>
+      <p>
+        New accounts also get private copies of these starters: Central Park
+        temperature, AAPL daily return, Bitcoin daily return, near-Earth
+        approaches, and moon illumination. The public catalog and forecasts
+        need no sign-in.
+      </p>
+      <pre><code>curl -sS https://forge.youneek.dev/starters
+
+curl -sS "https://forge.youneek.dev/starters/weather/forecast?points=16"</code></pre>
+      <p>
+        Other starter ids are <code>stocks</code>, <code>crypto</code>,
+        <code>near-earth</code>, and <code>lunar</code>. Each forecast includes
+        recent history and a next-step prediction. These are shipped samples,
+        not live forecasts.
+      </p>
+
+      <h2>Predict and forecast</h2>
+      <p>
+        <code>POST /predict</code> scores a sequence against the loaded
+        champion model. The default response is a single point:
+        <code>{"prediction":[...]}</code>.
+      </p>
+      <pre><code>curl -sS -X POST https://forge.youneek.dev/predict \
+  -H "Content-Type: application/json" \
+  -d '{"sequence":[[0.1],[0.2],[0.3],[0.4]]}'</code></pre>
+      <p>
+        <code>POST /forecast</code> asks for a multi-step outlook from the same
+        model. See the schema for horizon and quantile fields.
+      </p>
+      <pre><code>curl -sS -X POST https://forge.youneek.dev/forecast \
+  -H "Content-Type: application/json" \
+  -d '{"sequence":[[0.1],[0.2],[0.3],[0.4]],"horizon":3}'</code></pre>
+
+      <h2>Workspace training (signed in)</h2>
+      <p>
+        Caps are public so you can see the limits before you upload.
+        Authenticated routes accept a session cookie from the site, or
+        <code>Authorization: Bearer YOUR_TOKEN</code>.
+      </p>
+      <pre><code>curl -sS https://forge.youneek.dev/workspace/limits
+
+# After you upload a CSV (multipart) and get a dataset id:
+curl -sS -X POST https://forge.youneek.dev/workspace/datasets/DATASET_ID/train \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"target_column":"value"}'
+
+curl -sS -X POST https://forge.youneek.dev/workspace/models/MODEL_ID/predict-latest \
+  -H "Authorization: Bearer YOUR_TOKEN"</code></pre>
+
+      <h2>Live data</h2>
+      <p>
+        These routes are answered by the Worker in front of the API. They do
+        not require an account.
+      </p>
+      <pre><code>curl -sS "https://forge.youneek.dev/live/weather?q=Dallas"
+
+curl -sS "https://forge.youneek.dev/live/quote?kind=stock&amp;q=AAPL"
+
+curl -sS -X POST https://forge.youneek.dev/live/ask \
+  -H "Content-Type: application/json" \
+  -d '{"question":"What can Neural Forge do?"}'</code></pre>
+      <p>
+        Related container routes include
+        <code>GET /lunar</code>,
+        <code>GET /space/near-earth</code>, and
+        <code>GET /space/solar-system</code>.
+      </p>
+    </main>
+  </body>
+</html>

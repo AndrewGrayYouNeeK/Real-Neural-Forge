@@ -50,7 +50,7 @@ from src.workspace.service import (
     training_active,
     watch_authorized,
 )
-from src.workspace.starter_forecast import starter_forecast
+from src.workspace.starter_forecast import public_starter_catalog, starter_forecast
 from src.youneek import parse_moment, snapshot
 
 logger = logging.getLogger("uvicorn.error")
@@ -263,6 +263,8 @@ app = FastAPI(
     description="Production-ready transformer pipeline for time-series prediction.",
     version=__version__,
     lifespan=lifespan,
+    docs_url="/openapi/docs",
+    redoc_url="/openapi/redoc",
 )
 
 if FRONTEND_DIR.exists():
@@ -422,6 +424,20 @@ def favicon() -> FileResponse:
     if not icon.exists():
         raise HTTPException(status_code=404, detail="Favicon not found.")
     return FileResponse(icon, media_type="image/x-icon")
+
+
+@app.get("/docs", include_in_schema=False)
+def api_docs_page() -> FileResponse:
+    page = FRONTEND_DIR / "docs.html"
+    if not page.exists():
+        raise HTTPException(status_code=404, detail="API docs not found.")
+    return FileResponse(page)
+
+
+@app.get("/starters", tags=["starters"])
+def public_starters() -> dict[str, Any]:
+    """Catalog of shipped sample models. No account required."""
+    return public_starter_catalog()
 
 
 @app.get("/health", tags=["monitoring"])

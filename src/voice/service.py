@@ -1,9 +1,10 @@
 """GQ voice: metered read-aloud in the owner's cloned voice.
 
 Text on Neural Forge is always free. Only audio playback spends voice
-credit: each account gets a small one-time free allowance, then buys
-one-time credit packs through Stripe. Signed-out visitors get no GQ.
-The owner account is unlimited.
+credit: each account gets a small one-time free allowance. Additional
+packs are listed in the app. Checkout may run in Stripe test mode and
+will not charge a real card. Signed-out visitors get no GQ. The owner
+account is unlimited.
 """
 
 from __future__ import annotations
@@ -26,6 +27,7 @@ from src.voice.config import (
     api_key,
     load_voice_config,
     pack_by_id,
+    stripe_is_test_mode,
     stripe_secret,
     voice_enabled,
     webhook_secret,
@@ -116,12 +118,15 @@ def voice_status(actor: Actor | None, config: dict[str, Any] | None) -> dict[str
     cfg = load_voice_config(config)
     available = voice_enabled()
     packs = [pack.as_dict() for pack in cfg.packs]
+    checkout_available = stripe_secret() is not None
+    checkout_test_mode = stripe_is_test_mode()
     if actor is None:
         return {
             "signed_in": False,
             "voice": available,
             "owner_unlimited": False,
-            "checkout_available": stripe_secret() is not None,
+            "checkout_available": checkout_available,
+            "checkout_test_mode": checkout_test_mode,
             "max_chars_per_request": cfg.max_chars_per_request,
             "packs": packs,
             "message": (
@@ -136,6 +141,7 @@ def voice_status(actor: Actor | None, config: dict[str, Any] | None) -> dict[str
             "voice": available,
             "owner_unlimited": True,
             "checkout_available": False,
+            "checkout_test_mode": checkout_test_mode,
             "max_chars_per_request": cfg.max_chars_per_request,
             "packs": packs,
             "balance": None,
@@ -149,7 +155,8 @@ def voice_status(actor: Actor | None, config: dict[str, Any] | None) -> dict[str
         "role": "member",
         "voice": available,
         "owner_unlimited": False,
-        "checkout_available": stripe_secret() is not None,
+        "checkout_available": checkout_available,
+        "checkout_test_mode": checkout_test_mode,
         "max_chars_per_request": cfg.max_chars_per_request,
         "packs": packs,
         "balance": {

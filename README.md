@@ -12,13 +12,13 @@ A production-ready transformer pipeline for time-series prediction, built with P
 
 - **Transformer encoder architecture** – positional encoding + stacked encoder layers
 - **GPU-accelerated training & inference** – CUDA support via PyTorch; automatically falls back to CPU when no GPU is available
-- **FastAPI REST API** – prediction, training, experiment tracking, and model metadata
+- **FastAPI REST API** – prediction, training, experiment tracking, and model metadata, with examples at `/docs`
 - **Forecast dashboard** – recent history, the next forecast (with a p10–p90 band when the API provides one), past predictions against actuals, and experiment metrics, served at `/`
 - **SQLite experiment store** – local persistence for training runs and metrics
 - **Modular Python package** – models, data, training, evaluation, inference, and storage layers
 - **Docker & GitHub Container Registry** – `docker compose up --build` locally, or pull `ghcr.io/andrewgrayyouneek/real-neural-forge`
 - **Configurable via YAML** – all hyper-parameters in `config/config.yaml`
-- **GQ voice read-aloud** – Andrew's ElevenLabs voice clone reads forecasts and results aloud; text stays free and audio is metered per account
+- **GQ voice read-aloud** – Andrew's ElevenLabs voice clone reads forecasts and results aloud; text stays free and audio is metered per account. Credit-pack checkout is in test mode and will not charge a real card.
 
 ## Project Structure
 
@@ -338,6 +338,16 @@ One refit, then one score. `config/weather_refit.yaml` trains the residual netwo
 The blend was chosen on 2009–2016. The other rows are references on the same 3,281 days, not candidates. Persistence and the seasonal naive match the previously published figures for this window (4.3009 and 6.4337). An earlier transformer RMSE of 3.7959 on these days was early-stopped on the test window itself, so it is not a comparable score.
 
 ## API Reference
+
+The same curl examples live on the site at [https://forge.youneek.dev/docs](https://forge.youneek.dev/docs). The OpenAPI schema is `/openapi.json`, with explorers at `/openapi/docs` and `/openapi/redoc`.
+
+### `GET /starters`
+
+Public catalog of the shipped sample models (weather, stocks, crypto, near-earth, lunar). No account required. Each item has a matching `GET /starters/{starter_id}/forecast`.
+
+### `GET /docs`
+
+Human-readable API docs and examples for the public and authenticated routes.
 
 ### `GET /health`
 

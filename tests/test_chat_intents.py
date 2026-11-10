@@ -48,6 +48,7 @@ def load_intents() -> list[tuple[str, re.Pattern[str]]]:
     assert names == [
         "greet",
         "help",
+        "demo",
         "moon",
         "space",
         "solar",
@@ -89,6 +90,11 @@ def match_intent(question: str) -> str | None:
         ("Start training", "train"),
         ("Train a model on my data", "train"),
         ("Train on my CSV", "train"),
+        ("Try the Central Park temperature sample", "demo"),
+        ("Try the AAPL sample", "demo"),
+        ("Try the Bitcoin sample", "demo"),
+        ("Try the near-Earth sample", "demo"),
+        ("Try the moon illumination sample", "demo"),
     ],
 )
 def test_questions_route_to_the_right_topic(question: str, expected: str) -> None:
