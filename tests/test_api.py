@@ -841,7 +841,8 @@ class TestForecastDashboard:
         assert 'id="chat-form"' in html
         assert 'id="chat-input"' in html
         assert "What will the weather be tomorrow?" in html
-        assert "Next lottery numbers" in html
+        assert "Next lottery numbers" not in html
+        assert "lottery" not in html.lower()
         assert "Moon phase" in html
         assert "Train on my CSV" in html
         assert 'id="csv-train-file"' in html
@@ -874,7 +875,7 @@ class TestForecastDashboard:
         assert "/starters/" in app_js
         assert "/live/weather" in app_js
         assert "/live/quote" in app_js
-        assert "/live/lottery" in app_js
+        assert "/live/lottery" not in app_js
         assert "/live/ask" in app_js
         assert "/starters/weather/forecast" in app_js
         assert "/workspace/datasets/" in app_js
@@ -883,29 +884,7 @@ class TestForecastDashboard:
         assert "/space/near-earth" in app_js
         assert "/space/solar-system" in app_js
         assert "/lunar" in app_js
-        assert "/lottery/lunar-analysis" in app_js
-
-
-class TestPowerballScorecard:
-    def test_missing_file_is_available_false(self, client, monkeypatch, tmp_path):
-        monkeypatch.setattr(
-            api_module, "POWERBALL_SCORECARD", str(tmp_path / "missing.json")
-        )
-        response = client.get("/powerball/scorecard")
-        assert response.status_code == 200
-        body = response.json()
-        assert body["available"] is False
-        assert "summary" in body
-
-    def test_published_file_is_available(self, client, monkeypatch, tmp_path):
-        path = tmp_path / "scorecard.json"
-        path.write_text('{"summary": "Scored 1 draws.", "cumulative": {}}')
-        monkeypatch.setattr(api_module, "POWERBALL_SCORECARD", str(path))
-        response = client.get("/powerball/scorecard")
-        assert response.status_code == 200
-        body = response.json()
-        assert body["available"] is True
-        assert body["summary"] == "Scored 1 draws."
+        assert "/lottery/lunar-analysis" not in app_js
 
 
 class TestLunarEndpoints:
@@ -925,18 +904,10 @@ class TestLunarEndpoints:
         response = client.get("/lunar", params={"date": "not-a-date"})
         assert response.status_code == 422
 
-    def test_missing_lunar_analysis_is_available_false(
-        self, client, monkeypatch, tmp_path
-    ):
-        monkeypatch.setattr(
-            "src.evaluation.lunar_lottery.PUBLISHED_REPORT",
-            str(tmp_path / "missing.json"),
-        )
-        response = client.get("/lottery/lunar-analysis")
-        assert response.status_code == 200
-        body = response.json()
-        assert body["available"] is False
-        assert "summary" in body
+    def test_lottery_routes_are_gone(self, client):
+        assert client.get("/powerball/scorecard").status_code == 404
+        assert client.get("/lottery/lunar-analysis").status_code == 404
+        assert client.get("/starters/lottery/forecast").status_code == 404
 
 
 class TestAppVersion:

@@ -21,7 +21,7 @@ from src.workspace.runtime import runtime
 from src.workspace.service import watch_authorized
 from src.workspace.store import open_workspace
 
-STARTER_IDS = ("weather", "stocks", "crypto", "lottery", "near-earth", "lunar")
+STARTER_IDS = ("weather", "stocks", "crypto", "near-earth", "lunar")
 
 
 @pytest.fixture(scope="module")

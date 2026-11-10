@@ -28,15 +28,6 @@
       "model": "starters/models/crypto.pt"
     },
     {
-      "id": "lottery",
-      "name": "Powerball sample",
-      "summary": "Recent Powerball numbers. This is a demo that the draw is close to chance, not a picker.",
-      "source": "Powerball number (1-26) from the NY Open Data resource d6yy-54nr. The sample is the latest 180 draws. It is not a way to pick numbers.",
-      "dataset": "starters/data/lottery.csv",
-      "template": "starters/templates/lottery.yaml",
-      "model": "starters/models/lottery.pt"
-    },
-    {
       "id": "near-earth",
       "name": "Near-Earth approaches",
       "summary": "How many catalogued objects pass within 0.05 AU of Earth each day in the saved snapshot.",

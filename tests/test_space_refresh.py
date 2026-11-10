@@ -12,7 +12,6 @@ import src.space.approaches as approaches
 import src.space.refresh as refresh
 import src.space.solar_system as solar_system
 from scripts.check_image_events import require_served_events
-from src.api import read_powerball_scorecard
 from src.utils.paths import REPO_ROOT
 
 
@@ -158,15 +157,12 @@ def test_committed_snapshot_serves_events(monkeypatch):
     today = pd.Timestamp("2026-10-22")
     near = approaches.near_earth_report(days=730, today=today)
     solar = solar_system.solar_system_report(days=730, today=today)
-    scorecard = read_powerball_scorecard()
     require_served_events(
         near,
         solar,
-        scorecard,
         {"history": [{"actual": 1.0}], "forecast": [{"value": 1.0}]},
     )
     assert near["reentries"] or near["fireballs_recent"]
-    assert scorecard["available"] is True
 
 
 def test_require_served_events_rejects_an_empty_approach_list():
@@ -177,12 +173,10 @@ def test_require_served_events_rejects_an_empty_approach_list():
         "forecasts": [{"id": "x"}],
         "moons": {"by_planet": [{"planet": "Mars"}]},
     }
-    scorecard = {"available": True}
     series = {"history": [{}], "forecast": [{}]}
     with pytest.raises(SystemExit, match="near-earth"):
         require_served_events(
             {**payload, "approaches": []},
             payload,
-            scorecard,
             series,
         )

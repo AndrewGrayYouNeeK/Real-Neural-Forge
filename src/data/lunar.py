@@ -1077,27 +1077,3 @@ def daily_lunar_frame(
         days.append(cursor)
         cursor += timedelta(days=1)
     return _lunar_dataframe_once(days, tz=tz, at=at)
-
-
-def lottery_study_hooks() -> tuple[dict[str, Any], ...]:
-    """Daily moon features the lottery study can align to draw dates.
-
-    The value is the moon at 12:00 UTC, which is before a 22:59 ET draw, so
-    the study treats the row as known on that calendar date.
-    """
-    frame = daily_lunar_frame(date(2000, 1, 1), date(2040, 12, 31))
-    return (
-        {
-            "dataset_id": "lunar",
-            "group": "environment",
-            "description": (
-                "Moon phase, illumination, Chinese lunar month, perigee, and "
-                "geometric eclipse flags at 12:00 UTC. Computed offline from "
-                "Meeus series; known before a 22:59 ET draw."
-            ),
-            "availability": "same_day_before_draw",
-            "date_columns": ("date",),
-            "value_columns": LUNAR_MODEL_COLUMNS,
-            "frame": frame,
-        },
-    )

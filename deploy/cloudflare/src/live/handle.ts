@@ -1,7 +1,6 @@
 import { visitorFromCf, type CfIncoming } from "./geo";
 import { answerWeather } from "./weather";
 import { answerQuote } from "./markets";
-import { answerLottery } from "./lottery";
 import {
   CAP_MESSAGE,
   RESERVE_NEURONS,
@@ -101,7 +100,7 @@ async function answerAsk(request: Request, env: LiveEnv, question: string): Prom
   }
   if (!env.AI || !env.WORKSPACES_DB) {
     return json({
-      text: "General AI answers are not configured on this server yet. I can still help with live weather, market prices, lottery draws, the moon, and space.",
+      text: "General AI answers are not configured on this server yet. I can still help with live weather, market prices, the moon, and space.",
       capped: true,
     });
   }
@@ -124,7 +123,7 @@ async function answerAsk(request: Request, env: LiveEnv, question: string): Prom
     return json({ text: result.text, model: true });
   } catch {
     return json({
-      text: "I could not reach the language model right now. Please try again in a moment, or ask about the weather, a market price, the lottery, the moon, or space.",
+      text: "I could not reach the language model right now. Please try again in a moment, or ask about the weather, a market price, the moon, or space.",
     });
   }
 }
@@ -156,10 +155,6 @@ export async function handleLive(request: Request, env: LiveEnv): Promise<Respon
     if (request.method !== "GET" && request.method !== "POST") return json({ error: "Method not allowed." }, 405);
     const prefer = url.searchParams.get("kind") === "crypto" ? "crypto" : url.searchParams.get("kind") === "stock" ? "stock" : "auto";
     return json(await answerQuote(question, prefer));
-  }
-  if (path === "/live/lottery") {
-    if (request.method !== "GET" && request.method !== "POST") return json({ error: "Method not allowed." }, 405);
-    return json(await answerLottery(question));
   }
   if (path === "/live/ask") {
     if (request.method !== "POST" && request.method !== "GET") return json({ error: "Method not allowed." }, 405);

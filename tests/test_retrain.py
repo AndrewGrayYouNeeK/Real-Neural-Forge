@@ -105,15 +105,12 @@ class TestDiscovery:
         specs, errors = discover(REPO_ROOT / "config")
         assert errors == []
         by_id = {spec.id: spec for spec in specs}
-        assert {"default", "lottery", "weather"} <= set(by_id)
+        assert {"default", "weather"} <= set(by_id)
+        assert "lottery" not in by_id
         assert by_id["default"].fetch is None
         weather = by_id["weather"].fetch
-        lottery = by_id["lottery"].fetch
         assert weather is not None and weather.argv[-1].endswith(
             "scripts/fetch_weather.py"
-        )
-        assert lottery is not None and lottery.argv[-1].endswith(
-            "scripts/fetch_powerball.py"
         )
 
     def test_picks_up_a_new_file_and_skips_notes(self, tmp_path: Path):
@@ -125,9 +122,9 @@ class TestDiscovery:
         _write_config(tmp_path, "notes.yaml", {"title": "not a dataset"})
         _write_config(
             tmp_path,
-            "lottery.yaml",
+            "skipped.yaml",
             {
-                "dataset": {"id": "lottery", "enabled": False},
+                "dataset": {"id": "skipped", "enabled": False},
                 "model": {"name": "time_series_transformer"},
                 "training": {"epochs": 1},
             },
@@ -172,21 +169,21 @@ class TestDiscovery:
         assert specs[0].fetch.argv == [sys.executable, str(script.resolve())]
 
     def test_csv_path_stem_finds_a_fetch_script(self, tmp_path: Path):
-        script = tmp_path / "scripts" / "fetch_powerball.py"
+        script = tmp_path / "scripts" / "fetch_temps.py"
         script.parent.mkdir()
         script.write_text("print('ok')\n", encoding="utf-8")
         _write_config(
             tmp_path,
-            "lottery.yaml",
+            "temps.yaml",
             {
                 "model": {"name": "m"},
                 "training": {"epochs": 1},
-                "data": {"source": "csv", "path": "data/powerball.csv"},
+                "data": {"source": "csv", "path": "data/temps.csv"},
             },
         )
         specs, errors = discover(tmp_path / "config")
         assert errors == []
-        assert specs[0].id == "lottery"
+        assert specs[0].id == "temps"
         assert specs[0].fetch is not None
         assert specs[0].fetch.argv[-1] == str(script.resolve())
 
