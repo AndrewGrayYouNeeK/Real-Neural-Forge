@@ -836,7 +836,7 @@ class TestForecastDashboard:
         assert 'id="chat-log"' in html
         assert 'id="chat-form"' in html
         assert 'id="chat-input"' in html
-        assert "Predict tomorrow's weather" in html
+        assert "What will the weather be tomorrow?" in html
         assert "Next lottery numbers" in html
         assert "Moon phase" in html
         assert "Train a model on my data" in html
@@ -865,7 +865,11 @@ class TestForecastDashboard:
         assert "Bearer " in app_js
         assert "/voice/speak" in app_js
         assert "/starters/" in app_js
-        assert "/starters/${starterId}/forecast" in app_js
+        assert "/live/weather" in app_js
+        assert "/live/quote" in app_js
+        assert "/live/lottery" in app_js
+        assert "/live/ask" in app_js
+        assert "/starters/weather/forecast" in app_js
         assert "/space/near-earth" in app_js
         assert "/space/solar-system" in app_js
         assert "/lunar" in app_js

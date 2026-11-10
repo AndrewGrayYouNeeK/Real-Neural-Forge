@@ -60,6 +60,9 @@
       "bucket_name": "neural-forge-workspaces"
     }
   ],
+  "ai": {
+    "binding": "AI"
+  },
   "vars": {
     "NEURAL_FORGE_CONFIG": "config/config.yaml",
     "NEURAL_FORGE_CHECKPOINT_URL": "https://github.com/AndrewGrayYouNeeK/Real-Neural-Forge/releases/download/champions/champion-default.pt",
