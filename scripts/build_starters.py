@@ -131,24 +131,6 @@ def crypto_rows() -> tuple[list[tuple[str, float]], str]:
     return _log_returns(closes), source
 
 
-def lottery_rows() -> tuple[list[tuple[str, float]], str]:
-    from src.data.lottery import SOURCE_API, parse_winning_numbers
-
-    query = urllib.parse.urlencode({"$limit": 220, "$order": "draw_date DESC"})
-    payload = json.loads(_get(f"{SOURCE_API}?{query}").decode("utf-8"))
-    rows: list[tuple[str, float]] = []
-    for item in payload:
-        draw_date = str(item.get("draw_date", ""))[:10]
-        _whites, powerball = parse_winning_numbers(str(item.get("winning_numbers", "")))
-        rows.append((draw_date, float(powerball)))
-    rows.sort()
-    source = (
-        "Powerball number (1-26) from the NY Open Data resource d6yy-54nr. "
-        "The sample is the latest 180 draws. It is not a way to pick numbers."
-    )
-    return rows, source
-
-
 def near_earth_rows() -> tuple[list[tuple[str, float]], str]:
     path = ROOT / "space_snapshot" / "near_earth_events.csv"
     counts: Counter[str] = Counter()
@@ -266,7 +248,6 @@ def main() -> None:
         "weather": weather_rows,
         "stocks": stock_rows,
         "crypto": crypto_rows,
-        "lottery": lottery_rows,
         "near-earth": near_earth_rows,
         "lunar": lunar_rows,
     }
@@ -274,7 +255,6 @@ def main() -> None:
         "weather": "Central Park temperature",
         "stocks": "AAPL daily return",
         "crypto": "Bitcoin daily return",
-        "lottery": "Powerball sample",
         "near-earth": "Near-Earth approaches",
         "lunar": "Moon illumination",
     }
@@ -282,7 +262,6 @@ def main() -> None:
         "weather": "A short NOAA sample of daily maximum temperature. Predict the next day, or train your own copy.",
         "stocks": "Recent AAPL daily log returns. The starter model forecasts the next return on this sample.",
         "crypto": "Recent BTCUSDT daily log returns. The starter model forecasts the next return on this sample.",
-        "lottery": "Recent Powerball numbers. This is a demo that the draw is close to chance, not a picker.",
         "near-earth": "How many catalogued objects pass within 0.05 AU of Earth each day in the saved snapshot.",
         "lunar": "Computed moon illumination for 180 days. Predict the next fraction from the sample.",
     }

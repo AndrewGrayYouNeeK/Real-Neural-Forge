@@ -27,12 +27,9 @@ A production-ready transformer pipeline for time-series prediction, built with P
 ├── config/
 │   ├── config.yaml
 │   ├── forecast.yaml
-│   ├── lottery.yaml
 │   └── weather.yaml
 ├── scripts/
-│   ├── fetch_powerball.py
-│   ├── fetch_weather.py
-│   └── run_lottery_experiment.py
+│   └── fetch_weather.py
 ├── frontend/
 │   ├── index.html
 │   ├── app.js
@@ -121,7 +118,7 @@ The image declares a `HEALTHCHECK` against `/health`, so `docker ps` shows the c
 
 `GET /space/near-earth` and `GET /space/solar-system` read event files under `data/space/`. Those files are not in the build context. The image bakes the current snapshot from `space_snapshot/` into `/app/data/space/`, and the same files stay at `/app/space_snapshot/` so a `./data` bind mount can be filled on startup when those files are missing. The API then refreshes them in the background and once a day. A failed fetch leaves the previous files in place, which are the baked snapshot until a refresh succeeds. Set `NEURAL_FORGE_SPACE_REFRESH=0` to serve the snapshot only.
 
-The Powerball scorecard (`predictions/powerball/scorecard.json`), the forecast JSON under `results/` (including the near-Earth and solar-system outlooks), and the default dashboard series are already in the image. The default series is synthetic (`config/config.yaml`), so it does not need a CSV from `data/`. `GET /comparison` stays empty until a comparison experiment is stored in the runtime database. That database is created on startup and is not a published dataset.
+The forecast JSON under `results/` (including the near-Earth and solar-system outlooks) and the default dashboard series are already in the image. The default series is synthetic (`config/config.yaml`), so it does not need a CSV from `data/`. `GET /comparison` stays empty until a comparison experiment is stored in the runtime database. That database is created on startup and is not a published dataset.
 
 The API and dashboard will be available at <http://localhost:8000>.
 
@@ -204,7 +201,7 @@ For reproducible runs, set `data.seed` (seeds the synthetic dataset) and `traini
 
 `retrain.metric` is `mae`, `rmse`, or `mse` (default `mae`, lower is better). `retrain.baselines` defaults to `persistence` and `mean`. A positive integer `data.season_length` also adds a seasonal naive baseline. `retrain.val_fraction` (default `0.2`) is the latest-window holdout when `data.val_split` is `0`.
 
-Fresh data is optional. Set `data.fetch` to a list of strings, a string split with `shlex` (no shell), or a mapping with `command` / `script` / `argv` and `timeout_seconds`. `data.fetch_script` and a top-level `fetch` key work the same way. If none of those is set, a conventional script is used when the file exists: `scripts/fetch_<id>.py`, `scripts/fetch_<file stem>.py`, `scripts/<id>_fetch.py`, `scripts/fetch_<id>.sh`, or the same names under `data/`. The stem of `data.path` is included, so `config/lottery.yaml` (`data/powerball.csv`) runs `scripts/fetch_powerball.py` and `config/weather.yaml` runs `scripts/fetch_weather.py`. `.py` scripts run with the current interpreter, with the repo root on `PYTHONPATH`.
+Fresh data is optional. Set `data.fetch` to a list of strings, a string split with `shlex` (no shell), or a mapping with `command` / `script` / `argv` and `timeout_seconds`. `data.fetch_script` and a top-level `fetch` key work the same way. If none of those is set, a conventional script is used when the file exists: `scripts/fetch_<id>.py`, `scripts/fetch_<file stem>.py`, `scripts/<id>_fetch.py`, `scripts/fetch_<id>.sh`, or the same names under `data/`. The stem of `data.path` is included, so `config/weather.yaml` runs `scripts/fetch_weather.py`. `.py` scripts run with the current interpreter, with the repo root on `PYTHONPATH`.
 
 To train from CSV instead of synthetic data:
 
@@ -580,7 +577,7 @@ Cloudflare Workers builds this repository for `real-neural-forge` and, if a buil
 
 ## Automatic retraining
 
-`.github/workflows/retrain.yml` runs every Monday at 06:00 UTC and can be started from the Actions tab. For each enabled config it fetches fresh data when a fetch command or conventional script exists, retrains on CPU, and scores the new checkpoint on the latest temporal holdout. The checkpoint is promoted only when its metric is strictly better than the current champion and strictly better than every baseline. The first champion still has to beat the baselines. A run that loses, including one that errors, still writes `forecast-<id>.json` with that decision so a briefing can read it. `config/weather.yaml` and `config/lottery.yaml` are included with the shipped config. The Powerball series is a negative control and should lose to the mean baseline, so it stays unpromoted while its forecast file is still published.
+`.github/workflows/retrain.yml` runs every Monday at 06:00 UTC and can be started from the Actions tab. For each enabled config it fetches fresh data when a fetch command or conventional script exists, retrains on CPU, and scores the new checkpoint on the latest temporal holdout. The checkpoint is promoted only when its metric is strictly better than the current champion and strictly better than every baseline. The first champion still has to beat the baselines. A run that loses, including one that errors, still writes `forecast-<id>.json` with that decision so a briefing can read it. `config/weather.yaml` is included with the shipped config.
 
 Nothing large is committed. The rolling GitHub Release `champions` (a prerelease, and not the repository's latest software release) stores:
 
@@ -693,9 +690,9 @@ Visitor rows (users, sessions, datasets, configs, models, jobs, predictions) liv
 
 The owner's existing experiment database, champion checkpoints, and public forecast stay where they are. The API token authenticates as that owner. New accounts do not read or write those files.
 
-Each new account is seeded with six starter kits (Central Park temperature, AAPL returns, Bitcoin returns, a Powerball sample, near-Earth approach counts, and moon illumination). The bytes are one shared object per kit under `bases/starters/` in R2, published from `starters/` in the image the first time a base is missing. The account stores a reference. Replacing a dataset or editing a template writes a private copy. Training saves a new private checkpoint. The shared base and the owner's files are not modified. The dashboard's Getting started panel calls `POST /workspace/starters/{id}/predict` and `POST /workspace/starters/{id}/train`.
+Each new account is seeded with five starter kits (Central Park temperature, AAPL returns, Bitcoin returns, near-Earth approach counts, and moon illumination). The bytes are one shared object per kit under `bases/starters/` in R2, published from `starters/` in the image the first time a base is missing. The account stores a reference. Replacing a dataset or editing a template writes a private copy. Training saves a new private checkpoint. The shared base and the owner's files are not modified. The dashboard's Getting started panel calls `POST /workspace/starters/{id}/predict` and `POST /workspace/starters/{id}/train`.
 
-Public read-only routes stay open without a session: `/series/recent`, `/predict` and `/forecast` on the loaded champion, `/space/near-earth`, `/space/solar-system`, `/lunar`, `/lottery/lunar-analysis`, `/powerball/scorecard`, and the YouNeeK routes. `GET /experiments`, `GET /training/status`, and `POST /train` return only the caller's own work when the owner token is set.
+Public read-only routes stay open without a session: `/series/recent`, `/predict` and `/forecast` on the loaded champion, `/space/near-earth`, `/space/solar-system`, `/lunar`, and the YouNeeK routes. `GET /experiments`, `GET /training/status`, and `POST /train` return only the caller's own work when the owner token is set.
 
 Fair-use caps live in `config/config.yaml` under `limits` and can be overridden without a code change by the environment variables below. A visitor can have one queued or running job. The container runs one job at a time from that queue. Defaults are aimed at the Workers Paid plan: 2 MB datasets, 5 epochs, 90 seconds, 8 jobs waiting globally.
 
@@ -783,127 +780,6 @@ mypy src/ workers_ci/ --ignore-missing-imports
 - **Retrain** (`.github/workflows/retrain.yml`) fetches, retrains, and promotes champion checkpoints weekly. It also runs from the Actions tab. Forecast JSON and checkpoints are release assets, not commits.
 - **Dependabot** (`.github/dependabot.yml`) opens weekly grouped PRs for GitHub Actions and the pip locks. Pip updates resolve with the Python in `.python-version` (3.10) so they stay installable on the whole CI matrix.
 - **actionlint** lints `.github/workflows/` in CI.
-
-## Lottery sanity check
-
-This demo trains the time-series transformer on historical Powerball numbers and scores it against chance. A Powerball draw is a fresh sample from a fixed range, so an honest forecast names the next number about `1/26` of the time. The run is a check that the evaluation says so.
-
-### Data and licence
-
-Winning numbers come from New York State's open dataset **Lottery Powerball Winning Numbers: Beginning 2010** (`d6yy-54nr`), published by the New York State Gaming Commission:
-
-- Page: <https://data.ny.gov/Government-Finance/Lottery-Powerball-Winning-Numbers-Beginning-2010/d6yy-54nr>
-- API: `https://data.ny.gov/resource/d6yy-54nr.json`
-
-Use of the file follows the [OPEN-NY Terms of Use](https://data.ny.gov/api/views/77gx-ii52/files/ef0c1840-ad54-4240-92fd-6397c49fde46?filename=OPEN-NY_20Terms_20of_20Use.pdf) (last modified March 8, 2013). Those terms grant a non-exclusive, revocable licence to use content published on data.ny.gov. They do not require attribution, share-alike, or pre-approval. The dataset view does not name a separate SPDX licence.
-
-`python scripts/fetch_powerball.py` downloads the resource and writes `data/powerball.csv`. `data/` is gitignored, so the script is what makes the file reproducible. The CSV keeps draws from **2015-10-07** onward, the first draw of the current matrix (five white balls from 1–69, Powerball from 1–26). This pull skipped **592** earlier draws that used a different range and kept **1,422** draws, **2015-10-07** through **2026-10-19**.
-
-The training target is the Powerball, the last of the six `winning_numbers` fields. White balls are written too, sorted ascending, so the file is complete. A sorted white-ball position is an order statistic, so the chance rate in this demo is the Powerball's **1/26**.
-
-On this file the sample mean is **13.484** (a discrete uniform on 1–26 has mean 13.5) and the population standard deviation is **7.661** (uniform 7.5). The lag-1 correlation is **-0.067**, which accounts for **0.4%** of the variance. The Powerball equals the previous draw on **47/1,421** steps (**3.31%**), beside the **3.85%** chance rate.
-
-### Training
-
-`config/lottery.yaml` uses the shipped transformer (d_model 64, 4 heads, 3 encoder layers, feed-forward 256) on windows of 32 past Powerballs. The holdout is temporal, the CSV default: `split_mode: temporal` and `val_split: 0.2`. That is **1,112** training windows and **278** held-out draws, the most recent ones. Inputs and targets are z-scored with statistics from the training windows only. Reported MAE, RMSE, and MSE are in original Powerball units, after the inverse transform. Seeds 0, 1, and 2 fix initialisation and batch order.
-
-Checkpoints are written to `checkpoints/lottery/seed-<n>/` and are gitignored. They do not replace `checkpoints/best_model.pt`. The experiment database is `data/lottery_experiments.db`, separate from the API store. The trainer keeps the checkpoint with the lowest scaled validation MSE, and the table below uses that same holdout, so the model's squared error is slightly optimistic.
-
-```bash
-python scripts/fetch_powerball.py
-python scripts/run_lottery_experiment.py --seeds 0 1 2
-```
-
-The second command rewrites `results/lottery_sanity.json`. The figures in this section are that file for the 1,422-draw extract ending 2026-10-19. A later fetch appends new draws, and a rerun will move the counts inside sampling noise.
-
-### Results
-
-Chance on 278 draws is **10.7/278 (3.85%)**. The null standard error is **0.0115** (about 3.2 hits). Roughly ±2 standard errors is a band of about 4 to 17 hits. The three seeds share one holdout, so the z-scores repeat a single comparison.
-
-| Predictor | MAE | RMSE | Exact match | z vs chance |
-| --- | ---: | ---: | ---: | ---: |
-| Transformer seed 0 | 6.789 | 7.865 | 13/278 (4.68%) | 0.72 |
-| Transformer seed 1 | 6.835 | 7.869 | 9/278 (3.24%) | -0.53 |
-| Transformer seed 2 | 6.825 | 7.867 | 13/278 (4.68%) | 0.72 |
-| Historical mean | 6.870 | 7.897 | 17/278 (6.12%) | 1.97 |
-| Persistence (last draw) | 9.471 | 11.622 | 6/278 (2.16%) | -1.46 |
-| Uniform expected | 8.888 | 10.889 | 10.7/278 (3.85%) | 0.00 |
-| Uniform sample (seed 0) | 8.295 | 10.348 | 10/278 (3.60%) | -0.22 |
-
-Exact match rounds the forecast to the nearest integer, with halves rounded to even, then clips it to 1–26. The historical mean is the mean of every draw before the first held-out target (**13.559**). That value rounds to **14**, and a forecast that always says 14 hits **17** holdout draws. Persistence repeats the previous Powerball. "Uniform expected" is the average error of a fresh uniform draw from 1–26 on these targets. "Uniform sample" is one seeded draw of those guesses.
-
-MSE skill against the historical mean is **0.83%**, **0.71%**, and **0.76%** on seeds 0, 1, and 2. Scaled validation loss at the chosen checkpoint is about **1.07**, the floor for a z-scored target whose conditional mean is flat. MAE and RMSE do beat persistence and a uniform guess: those baselines sit farther from the average, and squared error rewards a forecast that stays on the average. Early stopping ran **13**, **14**, and **7** epochs out of 20.
-
-### Takeaway
-
-The next Powerball is unpredictable. Rounded forecasts from three seeds hit the true number **9**, **13**, and **13** times out of 278, against **10.7** hits expected from a uniform 1–26 guess, and every rate sits inside two null standard errors of chance. The rounded historical mean, a forecast that always says 14, records more hits than the network. A lag-1 correlation of -0.067 leaves the transformer copying that mean. Lottery draws are independent for any purpose that needs the next number, and this evaluation reports that result.
-
-## Monthly Powerball scorecard
-
-The same draw file feeds a public log. On the 1st of each month a GitHub Actions workflow (`.github/workflows/powerball-monthly.yml`, 16:00 UTC, or a manual run) writes one ticket per strategy for every Monday, Wednesday, and Saturday in that month, then scores any logged draw whose winning numbers are now in the file. The job opens a pull request with `GITHUB_TOKEN`. It does not push to `main`, and it does not buy a ticket.
-
-Logs live in [`predictions/powerball/`](predictions/powerball/). [`scorecard.json`](predictions/powerball/scorecard.json) is rebuilt from those logs. A month file is not rewritten after it exists, so a later result cannot change the ticket. The dashboard reads `GET /powerball/scorecard` and shows an empty card when the file is absent.
-
-Each draw date carries seven tickets. Five white balls are unique and sorted, from 1–69, plus a Powerball from 1–26.
-
-- **model** — the transformer, trained on the six numbers only.
-- **model_weather** — the same model with draw-day weather on the dates already inside the input window.
-- **most_hit**, **hot_pairs**, **neighbors**, **overdue** — counts, co-occurrence, one step off the last draw (the Powerball stays as drawn), and the longest gaps.
-- **random** — one uniform ticket. The seed is `crc32("powerball-control-{month}-{YYYY-MM-DD}")`, so the control is public and stable.
-
-Model and pattern tickets are the one forecast from data through the day before the month, copied onto every draw that month. Only the random ticket changes with the date. Weather on the draw being forecast is not an input. A gap of more than two days stays missing; those rows are dropped, not filled with zeros.
-
-### Weather
-
-Powerball draws are held in Tallahassee. The weather model uses NOAA NCEI Daily Summaries for GHCNd station **USW00093805** (Tallahassee airport): daily maximum temperature, minimum temperature, and precipitation, metric units. Central Park **USW00094728** maximum temperature is added only when every training draw has an observation within two days. Both series are U.S. government works (17 U.S.C. § 105). On the 1,422-draw file ending **2026-10-19**, Tallahassee had no gap over two days, and Central Park covered every draw, so the weather model saw ten inputs: the six numbers, three Tallahassee fields, and Central Park.
-
-### Does weather change the forecast?
-
-Weather leaves the Powerball forecast where the plain model already had it. `results/lottery_weather_holdout.json` trains both models on the same 1,422 weather-complete draws. The temporal holdout is the last **281** windows (1,125 fit, seed 0, at most 12 epochs). The checkpoint is the lowest scaled validation loss on that holdout, so the squared error is slightly optimistic, and the protocol is the same for both models.
-
-| Forecast | Powerball MAE | Powerball hits | z vs 1/26 | Mean white matches |
-| --- | ---: | ---: | ---: | ---: |
-| Plain model | 6.836 | 18/281 (6.41%) | 2.23 | 0.356 |
-| Weather model | 6.832 | 18/281 (6.41%) | 2.23 | 0.367 |
-| Always 14 | 6.865 | 18/281 (6.41%) | 2.23 | — |
-| Chance | — | 10.8/281 (3.85%) | 0.00 | 0.362 |
-
-Weather minus plain is **−0.0048** MAE. The hit counts are equal. Mean white-ball matches sit on **25/69 = 0.362**. The holdout contains **18** Powerballs equal to 14, and the training mean **13.540** rounds to 14, so 18 hits is what that constant forecast scores. Neither network hit a full ticket. Draws do not depend on the weather in Tallahassee, and this comparison does not find that they do.
-
-### First logged months
-
-These files were written on **2026-10-21**. October is a backfill: its tickets use draws through **2026-09-30** only, even though October results were already public. November uses draws through **2026-10-19** (the latest row in the file; the 21 October draw was not published yet) and is the coming month. The October draw on the 21st and the four after it are still unscored. November has nothing to score.
-
-The same model and pattern tickets are repeated for all 13 dates in the month. October:
-
-| Strategy | Whites | Powerball |
-| --- | --- | ---: |
-| model | 12 23 35 48 59 | 13 |
-| model_weather | 12 23 35 48 60 | 14 |
-| most_hit | 21 23 28 61 64 | 14 |
-| hot_pairs | 3 16 21 32 37 | 14 |
-| neighbors | 5 7 24 34 45 | 13 |
-| overdue | 1 22 34 43 51 | 19 |
-
-November:
-
-| Strategy | Whites | Powerball |
-| --- | --- | ---: |
-| model | 12 24 37 47 58 | 13 |
-| model_weather | 12 23 36 47 59 | 13 |
-| most_hit | 21 28 32 61 64 | 14 |
-| hot_pairs | 3 16 21 32 37 | 14 |
-| neighbors | 9 32 33 43 49 | 23 |
-| overdue | 27 43 60 63 66 | 21 |
-
-Eight October draws had results. Chance on eight tickets is **2.90** white-ball matches and **0.31** Powerball hits. The plain model scored 5 white matches and 0 Powerball hits. The weather model scored 4 and 1. The one weather hit is 3 October, Powerball 14, the $4 Powerball-only tier, and the most-hit and hot-pair tickets hit that same 14. The random control scored 5 white matches and 0 Powerball hits. Eight draws cannot separate any of these from chance. The scorecard says the same thing in [`predictions/powerball/scorecard.json`](predictions/powerball/scorecard.json).
-
-```bash
-python -m scripts.run_powerball_month --month 2026-10 --holdout-output results/lottery_weather_holdout.json
-python -m scripts.run_powerball_month --month 2026-11 --no-fetch
-```
-
-The second command leaves an existing month file alone and rebuilds the scorecard. `config/lottery_tickets.yaml` is the model used for both tickets. Checkpoints from these runs are not written.
 
 ## Space
 
@@ -1753,7 +1629,7 @@ Test months are 2024-01 through 2026-09. Training took 1.3 seconds and stopped a
 
 Persistence is the best one-step forecast. The training-window slope is 0.068 nats per year (R² 0.841), a doubling time of 10.3 years, much slower than the CS categories above.
 
-**Quantum randomness.** A sanity check in the same spirit as a lottery draw. The keyless ANU QRNG endpoint did not respond, and the current API requires a key, so it is not used. The series is the concatenated symbol codes from [ProCreations/quantum-randomness](https://huggingface.co/datasets/ProCreations/quantum-randomness) (`quantum_random_1000_final.csv`, MIT): 1,024 short slices attributed to the ANU QRNG, 6,144 symbols over an alphabet of 64. Timestamps in the file are microseconds apart inside one dump. The trainer maps the symbol index onto a synthetic day axis so the shared year code has a defined scale; those dates are not a sampling clock, and a doubling time on them is not a physical result.
+**Quantum randomness.** A sanity check on a random symbol series. The keyless ANU QRNG endpoint did not respond, and the current API requires a key, so it is not used. The series is the concatenated symbol codes from [ProCreations/quantum-randomness](https://huggingface.co/datasets/ProCreations/quantum-randomness) (`quantum_random_1000_final.csv`, MIT): 1,024 short slices attributed to the ANU QRNG, 6,144 symbols over an alphabet of 64. Timestamps in the file are microseconds apart inside one dump. The trainer maps the symbol index onto a synthetic day axis so the shared year code has a defined scale; those dates are not a sampling clock, and a doubling time on them is not a physical result.
 
 ```bash
 python -m scripts.fetch_quantum_random

@@ -20,7 +20,6 @@ STARTER_UNITS = {
     "weather": "°C",
     "stocks": "daily log return",
     "crypto": "daily log return",
-    "lottery": "Powerball number",
     "near-earth": "daily approaches",
     "lunar": "illumination fraction",
 }

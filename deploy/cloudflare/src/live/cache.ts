@@ -2,7 +2,6 @@
 
 export const WEATHER_TTL_SECONDS = 30 * 60;
 export const PRICE_TTL_SECONDS = 60;
-export const LOTTERY_TTL_SECONDS = 6 * 60 * 60;
 export const GEOCODE_TTL_SECONDS = 24 * 60 * 60;
 
 const CACHE_ORIGIN = "https://live-cache.forge.invalid/";

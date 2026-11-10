@@ -8,7 +8,7 @@ import os
 from contextlib import asynccontextmanager
 from datetime import date
 from pathlib import Path
-from typing import Any, cast
+from typing import Any
 
 import torch
 import yaml
@@ -20,7 +20,6 @@ from pydantic import BaseModel, Field
 from src import __version__
 from src.dashboard_data import recent_series, validation_predictions
 from src.data.lunar import lunar_now, lunar_on
-from src.evaluation.lunar_lottery import read_lunar_analysis
 from src.forecasting.spec import MAX_HORIZON, forecast_spec_from_config
 from src.inference.predictor import ForecastBatch, Predictor
 from src.models.registry import ModelRegistry, build_model
@@ -35,7 +34,7 @@ from src.space.solar_system import solar_system_report
 from src.storage.experiments import ExperimentStore, db_path_from_config
 from src.training.trainer import TimeSeriesTrainer
 from src.utils.config import load_config
-from src.utils.paths import REPO_ROOT, resolve_repo_path
+from src.utils.paths import REPO_ROOT
 from src.voice.routes import router as voice_router
 from src.workspace.errors import WorkspaceError
 from src.workspace.routes import router as workspace_router
@@ -487,27 +486,6 @@ def list_experiments(
     return {"experiments": member_experiments(actor, limit)}
 
 
-POWERBALL_SCORECARD = "predictions/powerball/scorecard.json"
-
-
-def read_powerball_scorecard(path: str | Path | None = None) -> dict[str, Any]:
-    """Return the public scorecard, or an empty card when the file is absent."""
-    destination = resolve_repo_path(POWERBALL_SCORECARD if path is None else path)
-    if not destination.is_file():
-        return {
-            "available": False,
-            "summary": "No Powerball scorecard has been published.",
-        }
-    loaded = json.loads(destination.read_text())
-    if not isinstance(loaded, dict):
-        raise HTTPException(
-            status_code=500, detail="Powerball scorecard is not a JSON object."
-        )
-    payload = cast(dict[str, Any], loaded)
-    payload["available"] = True
-    return payload
-
-
 @app.get("/space/near-earth", tags=["space"])
 def space_near_earth(days: int = Query(730, ge=1, le=730)) -> dict[str, Any]:
     """Upcoming Earth and Moon approaches, reentries, and monthly forecasts.
@@ -531,12 +509,6 @@ def space_solar_system(days: int = Query(730, ge=1, le=730)) -> dict[str, Any]:
     return solar_system_report(days=days)
 
 
-@app.get("/powerball/scorecard", tags=["lottery"])
-def powerball_scorecard() -> dict[str, Any]:
-    """Logged tickets scored against published draws. A missing file is not an error."""
-    return read_powerball_scorecard()
-
-
 @app.get("/lunar", tags=["lunar"])
 def lunar_calendar(when: str | None = Query(None, alias="date")) -> dict[str, Any]:
     """Moon phase and the Chinese lunisolar date.
@@ -553,19 +525,6 @@ def lunar_calendar(when: str | None = Query(None, alias="date")) -> dict[str, An
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=f"Invalid date: {exc}") from exc
     return lunar_on(day).as_dict()
-
-
-@app.get("/lottery/lunar-analysis", tags=["lottery"])
-def lottery_lunar_analysis() -> dict[str, Any]:
-    """Published check of lunar features against lottery draws.
-
-    A missing file is not an error. The report is the output of
-    ``python -m src.evaluation.lunar_lottery``.
-    """
-    try:
-        return read_lunar_analysis()
-    except ValueError as exc:
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
 @app.get("/starters/{starter_id}/forecast", tags=["starters"])

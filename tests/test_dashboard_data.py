@@ -85,9 +85,9 @@ class TestRecentSeries:
         assert nan_row["predicted"] is None
 
     def test_draw_date_and_configured_date_column(self, tmp_path):
-        draws = tmp_path / "powerball.csv"
+        draws = tmp_path / "series.csv"
         draws.write_text(
-            "draw_date,powerball\n"
+            "draw_date,value\n"
             "2024-01-01,4\n"
             "2024-01-03,8\n"
             "2024-01-06,12\n"
@@ -100,8 +100,8 @@ class TestRecentSeries:
             "data": {
                 "source": "csv",
                 "path": str(draws),
-                "feature_columns": ["powerball"],
-                "target_column": "powerball",
+                "feature_columns": ["value"],
+                "target_column": "value",
                 "seq_len": 2,
             },
         }
@@ -150,12 +150,12 @@ class TestRecentSeries:
     def test_unknown_source_without_file_raises(self):
         cfg = {
             "model": {"input_dim": 1, "output_dim": 1},
-            "data": {"source": "lottery", "seq_len": 4},
+            "data": {"source": "not-a-source", "seq_len": 4},
         }
         try:
             recent_series(cfg, PersistencePredictor(), points=8)
         except ValueError as exc:
-            assert "lottery" in str(exc)
+            assert "not-a-source" in str(exc)
         else:
             raise AssertionError("expected ValueError")
 

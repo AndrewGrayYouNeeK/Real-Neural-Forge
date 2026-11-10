@@ -439,24 +439,6 @@ async function forecastReply(kind, question) {
   }
 }
 
-async function lotteryReply(question) {
-  try {
-    const result = await fetchJson(liveUrl("/live/lottery", question));
-    if (result && typeof result.text === "string" && result.text.trim()) {
-      return { text: result.text.trim() };
-    }
-  } catch (error) {
-    return {
-      text:
-        "I could not load the latest lottery draws right now. Draws are random either way — no model can pick the next winning numbers. " +
-        (error.message || ""),
-    };
-  }
-  return {
-    text: "I could not load the latest lottery draws right now. Draws are random either way — no model can pick the next winning numbers.",
-  };
-}
-
 async function moonReply() {
   try {
     const moon = await fetchJson("/lunar");
@@ -468,14 +450,6 @@ async function moonReply() {
       }.`,
       `Chinese lunar date: ${moon.chinese_date}. Eclipse: ${eclipse}.`,
     ];
-    try {
-      const study = await fetchJson("/lottery/lunar-analysis");
-      if (study && typeof study.answer_in_brief === "string" && study.answer_in_brief) {
-        lines.push(study.answer_in_brief);
-      }
-    } catch {
-      // The lunar lottery study is optional garnish here.
-    }
     return { text: lines.join("\n") };
   } catch (error) {
     return { text: `The lunar feed is unavailable right now. ${error.message}` };
@@ -900,7 +874,6 @@ function helpReply() {
       "Here is what I can actually do, in plain words:\n" +
       "• Weather — a live forecast (high, low, rain, and conditions in °F) for a place you name, or your approximate location\n" +
       "• Markets and crypto — a live price for a ticker or coin, with the caveat that it is not advice\n" +
-      "• Lottery — the latest Powerball and Mega Millions draws from published results; I will not pretend I can pick winners\n" +
       "• Moon phase, near-Earth approaches, and the solar system\n" +
       "• Training a small model on your CSV — use the Train on my CSV chip for the one-click flow\n" +
       "• GQ voice — the speaker button on each reply, once you have an account\n" +
@@ -912,7 +885,7 @@ function helpReply() {
 function greetReply() {
   return {
     text:
-      "Hello! I am Neural Forge. Ask me for a live weather forecast, a market or crypto price, the latest lottery draws, the moon, space, or a general question. You can also tell me to train a model on your data. What would you like to know?",
+      "Hello! I am Neural Forge. Ask me for a live weather forecast, a market or crypto price, the moon, space, or a general question. You can also tell me to train a model on your data. What would you like to know?",
   };
 }
 
@@ -926,11 +899,6 @@ const INTENTS = [
     name: "help",
     test: /\b(what can you do|what do you do|how do (i|you) use|help me|what are you)\b/i,
     handler: helpReply,
-  },
-  {
-    name: "lottery",
-    test: /\b(lottery|lotto|powerball|mega millions|winning numbers|lucky numbers)\b/i,
-    handler: lotteryReply,
   },
   { name: "moon", test: /\b(moon|lunar|eclipse)\b/i, handler: moonReply },
   {
@@ -991,11 +959,11 @@ async function askLive(question) {
     return {
       text:
         (error && error.message) ||
-        "I could not reach the general-answer model right now. I can still help with live weather, market prices, lottery draws, the moon, near-Earth space, and training.",
+        "I could not reach the general-answer model right now. I can still help with live weather, market prices, the moon, near-Earth space, and training.",
     };
   }
   return {
-    text: "I could not reach the general-answer model right now. I can still help with live weather, market prices, lottery draws, the moon, near-Earth space, and training.",
+    text: "I could not reach the general-answer model right now. I can still help with live weather, market prices, the moon, near-Earth space, and training.",
   };
 }
 
@@ -1644,7 +1612,7 @@ setSidebarControls();
 
 addMessage(
   "assistant",
-  "Hi! I am Neural Forge. Ask me in plain words for a live weather forecast, a market or crypto price, the latest lottery draws, the moon, space, training, or a general question. Every reply comes with a speaker button that reads it aloud in GQ voice."
+  "Hi! I am Neural Forge. Ask me in plain words for a live weather forecast, a market or crypto price, the moon, space, training, or a general question. Every reply comes with a speaker button that reads it aloud in GQ voice."
 );
 
 refreshAccount()

@@ -16,7 +16,7 @@ argument lists, never a shell.
 4. A conventional script, if the file exists: ``scripts/fetch_<id>.py``,
    ``scripts/fetch_<stem>.py``, ``scripts/<id>_fetch.py``, ``scripts/fetch_<id>.sh``,
    or the same names under ``data/``. The CSV stem of ``data.path`` is tried too,
-   so ``data/powerball.csv`` finds ``scripts/fetch_powerball.py``.
+   so ``data/temps.csv`` finds ``scripts/fetch_temps.py``.
 """
 
 from __future__ import annotations
