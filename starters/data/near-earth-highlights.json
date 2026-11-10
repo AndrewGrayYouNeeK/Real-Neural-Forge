@@ -1,0 +1,66 @@
+[
+  {
+    "name": "(2026 UA1)",
+    "designation": "2026 UA1",
+    "date": "2026-10-23T17:35",
+    "dist_ld": 0.5769,
+    "dist_au": "0.00148245341194015",
+    "kind": "asteroid"
+  },
+  {
+    "name": "(2025 UK9)",
+    "designation": "2025 UK9",
+    "date": "2026-10-31T02:35",
+    "dist_ld": 0.8185,
+    "dist_au": "0.0021032915876806",
+    "kind": "asteroid"
+  },
+  {
+    "name": "137108 (1999 AN10)",
+    "designation": "137108",
+    "date": "2027-08-07T07:11",
+    "dist_ld": 1.0142,
+    "dist_au": "0.0026060207695371",
+    "kind": "asteroid"
+  },
+  {
+    "name": "(2025 EL12)",
+    "designation": "2025 EL12",
+    "date": "2027-09-16T03:09",
+    "dist_ld": 1.2964,
+    "dist_au": "0.0033312207956322",
+    "kind": "asteroid"
+  },
+  {
+    "name": "(2024 RH16)",
+    "designation": "2024 RH16",
+    "date": "2027-08-26T14:21",
+    "dist_ld": 1.5402,
+    "dist_au": "0.00395770905083606",
+    "kind": "asteroid"
+  },
+  {
+    "name": "(2019 DP)",
+    "designation": "2019 DP",
+    "date": "2027-08-30T08:34",
+    "dist_ld": 1.6243,
+    "dist_au": "0.00417361539397823",
+    "kind": "asteroid"
+  },
+  {
+    "name": "(2019 XF2)",
+    "designation": "2019 XF2",
+    "date": "2026-12-04T00:35",
+    "dist_ld": 3.0954,
+    "dist_au": "0.00795386356544704",
+    "kind": "asteroid"
+  },
+  {
+    "name": "(2024 JH1)",
+    "designation": "2024 JH1",
+    "date": "2027-04-24T17:54",
+    "dist_ld": 3.2217,
+    "dist_au": "0.00827820864241736",
+    "kind": "asteroid"
+  }
+]

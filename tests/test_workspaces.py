@@ -183,7 +183,7 @@ def test_accounts_are_isolated_and_starters_are_copy_on_write(workspace_client):
 
     edited = client.put(
         f"/workspace/configs/{weather_config}",
-        json={"body": template_before.replace("epochs: 4", "epochs: 3", 1)},
+        json={"body": template_before.replace("epochs: 8", "epochs: 3", 1)},
     )
     assert edited.status_code == 200, edited.text
     assert edited.json()["shared"] is False
@@ -222,7 +222,7 @@ def test_accounts_are_isolated_and_starters_are_copy_on_write(workspace_client):
 
     b_config = client.get("/workspace/configs").json()["configs"]
     b_weather = next(row for row in b_config if row["starter_id"] == "weather")
-    assert "epochs: 4" in b_weather["body"]
+    assert "epochs: 8" in b_weather["body"]
     assert b_weather["shared"] is True
 
     _login(client, "a@example.com")

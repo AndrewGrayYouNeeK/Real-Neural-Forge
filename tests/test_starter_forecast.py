@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import pytest
 from fastapi.testclient import TestClient
 
 from src.api import app
 from src.workspace.starter_forecast import clear_forecast_cache, starter_forecast
+from src.workspace.starters import default_demos
 
 
 def setup_function() -> None:
@@ -20,15 +22,19 @@ def test_weather_forecast_uses_central_park_sample() -> None:
     assert payload["dataset"] == "Central Park temperature"
     assert payload["source"] == "csv"
     assert payload["checkpoint_loaded"] is True
-    assert payload["forecast"]
+    assert len(payload["forecast"]) == 7
     value = payload["forecast"][0]["value"]
     assert isinstance(value, (int, float))
     # The NOAA sample highs are ordinary Celsius temperatures, not a 0–1 sine wave.
-    assert 0 < float(value) < 50
+    assert -20 < float(value) < 45
     history = payload["history"]
     assert history
-    assert history[-1]["time"] == "2024-06-30"
-    assert history[-1]["actual"] == 29.4
+    assert history[-1]["time"] == "2026-10-31"
+    assert history[-1]["actual"] == pytest.approx(14.4)
+    assert payload["demo"] is True
+    assert payload["forecast"][0]["p10"] is not None
+    assert payload["forecast"][0]["p10"] <= payload["forecast"][0]["p50"]
+    assert payload["forecast"][0]["p50"] <= payload["forecast"][0]["p90"]
 
 
 def test_stocks_and_crypto_forecasts() -> None:
@@ -76,4 +82,31 @@ def test_public_starter_catalog_lists_the_five_samples() -> None:
         starter for starter in body["starters"] if starter["id"] == "weather"
     )
     assert weather["unit"] == "°C"
+    assert weather["demo"] is True
     assert "NOAA" in weather["source"]
+    demos = [starter["id"] for starter in body["starters"] if starter.get("demo")]
+    assert demos == ["weather", "near-earth"]
+
+
+def test_default_demos_use_real_weather_and_near_earth_series() -> None:
+    demos = list(default_demos())
+    assert [starter.id for starter in demos] == ["weather", "near-earth"]
+    weather = next(starter for starter in demos if starter.id == "weather")
+    weather_lines = weather.dataset_path.read_text(encoding="utf-8").splitlines()
+    assert len(weather_lines) == 731
+    assert weather_lines[1].startswith("2024-11-01,")
+    assert weather_lines[-1].startswith("2026-10-31,")
+    near_starter = next(starter for starter in demos if starter.id == "near-earth")
+    near_lines = near_starter.dataset_path.read_text(encoding="utf-8").splitlines()
+    assert len(near_lines) == 366
+    assert near_lines[1].startswith("2026-10-22,")
+    near = starter_forecast("near-earth", points=16)
+    assert near["demo"] is True
+    assert len(near["forecast"]) == 7
+    history = near["history"]
+    assert history[0]["time"] >= "2026-10-22"
+    assert history[-1]["time"] < "2028-01-01"
+    highlights = near["highlights"]
+    assert highlights
+    assert highlights[0]["kind"] == "asteroid"
+    assert "lottery" not in near["summary"].lower()

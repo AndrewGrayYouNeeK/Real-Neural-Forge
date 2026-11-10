@@ -12,6 +12,7 @@ Run from the repository root after dependencies are installed:
 
 from __future__ import annotations
 
+import argparse
 import csv
 import json
 import math
@@ -36,14 +37,25 @@ DATA = ROOT / "starters" / "data"
 TEMPLATES = ROOT / "starters" / "templates"
 MODELS = ROOT / "starters" / "models"
 ROWS = 180
+# Weather and near-Earth are the landing-page demos. They keep a longer
+# real series and a slightly wider network than the other samples.
+DEMO_IDS = ("weather", "near-earth")
+DEMO_ROWS = {"weather": 730, "near-earth": 365}
 
 
-def _write_series(path: Path, rows: list[tuple[str, float]]) -> None:
+def _write_series(
+    path: Path,
+    rows: list[tuple[str, float]],
+    *,
+    limit: int = ROWS,
+    tail: bool = True,
+) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
+    chosen = rows[-limit:] if tail else rows[:limit]
     with path.open("w", encoding="utf-8", newline="") as handle:
         writer = csv.writer(handle)
         writer.writerow(["date", "value"])
-        for day, value in rows[-ROWS:]:
+        for day, value in chosen:
             writer.writerow([day, f"{value:.6f}"])
 
 
@@ -62,10 +74,12 @@ def weather_rows() -> tuple[list[tuple[str, float]], str]:
         parse_noaa_daily_summaries,
     )
 
+    start_date = "2024-01-01"
+    end_date = "2026-10-31"
     url = build_station_url(
         station=STATION_ID,
-        start_date="2024-01-01",
-        end_date="2024-06-30",
+        start_date=start_date,
+        end_date=end_date,
         data_types=("TMAX",),
     )
     frame = parse_noaa_daily_summaries(
@@ -75,9 +89,12 @@ def weather_rows() -> tuple[list[tuple[str, float]], str]:
         (day.strftime("%Y-%m-%d"), float(value))
         for day, value in zip(frame["date"], frame["temperature_c"], strict=True)
     ]
+    kept = rows[-DEMO_ROWS["weather"] :]
     source = (
         "Daily maximum temperature in °C at Central Park, NOAA GHCNd USW00094728, "
-        "2024-01-01 through 2024-06-30. Public-domain U.S. government work."
+        f"{kept[0][0]} through {kept[-1][0]} "
+        f"(the latest {len(kept)} continuous days in the {start_date} to {end_date} "
+        "download). Public-domain U.S. government work."
     )
     return rows, source
 
@@ -134,12 +151,17 @@ def crypto_rows() -> tuple[list[tuple[str, float]], str]:
 def near_earth_rows() -> tuple[list[tuple[str, float]], str]:
     path = ROOT / "space_snapshot" / "near_earth_events.csv"
     counts: Counter[str] = Counter()
+    events: list[dict[str, str]] = []
     with path.open(encoding="utf-8", newline="") as handle:
         for record in csv.DictReader(handle):
-            if record.get("body") == "Earth":
-                counts[record["date"][:10]] += 1
+            if record.get("body") != "Earth":
+                continue
+            day = record["date"][:10]
+            counts[day] += 1
+            events.append(record)
     if not counts:
         raise RuntimeError("near-earth snapshot has no Earth approaches")
+    DATA.mkdir(parents=True, exist_ok=True)
     start = date.fromisoformat(min(counts))
     end = date.fromisoformat(max(counts))
     rows: list[tuple[str, float]] = []
@@ -148,9 +170,39 @@ def near_earth_rows() -> tuple[list[tuple[str, float]], str]:
         key = day.isoformat()
         rows.append((key, float(counts[key])))
         day += timedelta(days=1)
+    window = DEMO_ROWS["near-earth"]
+    kept = rows[:window]
+    window_end = kept[-1][0]
+    closest: list[tuple[float, dict[str, str]]] = []
+    for record in events:
+        if record["date"][:10] > window_end:
+            continue
+        try:
+            distance = float(record["dist_ld"])
+        except (TypeError, ValueError):
+            continue
+        closest.append((distance, record))
+    closest.sort(key=lambda item: item[0])
+    highlights = []
+    for distance, record in closest[:8]:
+        highlights.append(
+            {
+                "name": record.get("name") or record.get("designation") or "Object",
+                "designation": record.get("designation") or "",
+                "date": record.get("date") or "",
+                "dist_ld": round(distance, 4),
+                "dist_au": record.get("dist_au") or "",
+                "kind": record.get("kind") or "asteroid",
+            }
+        )
+    (DATA / "near-earth-highlights.json").write_text(
+        json.dumps(highlights, indent=2) + "\n",
+        encoding="utf-8",
+    )
     source = (
         "Daily count of catalogued Earth approaches within 0.05 AU, "
-        "taken from the committed JPL snapshot in space_snapshot/near_earth_events.csv."
+        f"from the committed JPL snapshot, {kept[0][0]} through {window_end}. "
+        "These are predicted approaches of objects known when the snapshot was saved."
     )
     return rows, source
 
@@ -171,6 +223,7 @@ def lunar_rows() -> tuple[list[tuple[str, float]], str]:
 
 
 def write_template(starter_id: str) -> None:
+    demo = starter_id in DEMO_IDS
     document = {
         "dataset": {"enabled": False, "id": f"starter-{starter_id}"},
         "retrain": {"enabled": False},
@@ -178,19 +231,19 @@ def write_template(starter_id: str) -> None:
             "name": "time_series_transformer",
             "input_dim": 1,
             "output_dim": 1,
-            "d_model": 16,
-            "nhead": 2,
-            "num_encoder_layers": 1,
-            "dim_feedforward": 32,
+            "d_model": 32 if demo else 16,
+            "nhead": 4 if demo else 2,
+            "num_encoder_layers": 2 if demo else 1,
+            "dim_feedforward": 64 if demo else 32,
             "dropout": 0.0,
-            "max_seq_len": 64,
+            "max_seq_len": 128 if demo else 64,
         },
         "data": {
             "source": "csv",
             "path": f"starters/data/{starter_id}.csv",
             "feature_columns": ["value"],
             "target_column": "value",
-            "seq_len": 16,
+            "seq_len": 28 if demo else 16,
             "val_split": 0.2,
             "split_mode": "temporal",
             "normalize": True,
@@ -200,8 +253,8 @@ def write_template(starter_id: str) -> None:
             "experiment_name": f"starter-{starter_id}",
             "batch_size": 32,
             "learning_rate": 0.001,
-            "epochs": 4,
-            "patience": 2,
+            "epochs": 8 if demo else 4,
+            "patience": 3 if demo else 2,
             "device": "cpu",
             "checkpoint_dir": f"starters/models/{starter_id}",
             "log_interval": 1,
@@ -211,7 +264,11 @@ def write_template(starter_id: str) -> None:
             "device": "cpu",
             "checkpoint_path": f"starters/models/{starter_id}.pt",
         },
-        "forecast": {"horizon": 1, "strategy": "direct"},
+        "forecast": {
+            "horizon": 7 if demo else 1,
+            "strategy": "recursive" if demo else "direct",
+            "nominal_coverage": 0.8,
+        },
         "storage": {"db_path": f"starters/models/{starter_id}-experiments.db"},
     }
     TEMPLATES.mkdir(parents=True, exist_ok=True)
@@ -244,6 +301,14 @@ def train_one(starter_id: str) -> None:
 
 
 def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--only",
+        default="",
+        help="Comma-separated starter ids to rebuild. Other catalog entries stay.",
+    )
+    args = parser.parse_args()
+    selected = {part.strip() for part in args.only.split(",") if part.strip()}
     builders = {
         "weather": weather_rows,
         "stocks": stock_rows,
@@ -259,18 +324,33 @@ def main() -> None:
         "lunar": "Moon illumination",
     }
     summaries = {
-        "weather": "A short NOAA sample of daily maximum temperature. Predict the next day, or train your own copy.",
+        "weather": "Two years of real NOAA daily maximum temperature at Central Park. The sample model forecasts the next week.",
         "stocks": "Recent AAPL daily log returns. The starter model forecasts the next return on this sample.",
         "crypto": "Recent BTCUSDT daily log returns. The starter model forecasts the next return on this sample.",
-        "near-earth": "How many catalogued objects pass within 0.05 AU of Earth each day in the saved snapshot.",
+        "near-earth": "Real JPL close-approach counts for the year beginning 2026-10-22, with the closest catalogued objects in that window.",
         "lunar": "Computed moon illumination for 180 days. Predict the next fraction from the sample.",
+    }
+    units = {
+        "weather": "°C",
+        "stocks": "daily log return",
+        "crypto": "daily log return",
+        "near-earth": "daily approaches",
+        "lunar": "illumination fraction",
     }
     catalog = []
     for starter_id, builder in builders.items():
+        if selected and starter_id not in selected:
+            continue
         rows, source = builder()
-        if len(rows) < ROWS:
-            raise RuntimeError(f"{starter_id} produced {len(rows)} rows, need {ROWS}")
-        _write_series(DATA / f"{starter_id}.csv", rows)
+        limit = DEMO_ROWS.get(starter_id, ROWS)
+        if len(rows) < limit:
+            raise RuntimeError(f"{starter_id} produced {len(rows)} rows, need {limit}")
+        _write_series(
+            DATA / f"{starter_id}.csv",
+            rows,
+            limit=limit,
+            tail=starter_id != "near-earth",
+        )
         write_template(starter_id)
         train_one(starter_id)
         catalog.append(
@@ -279,12 +359,36 @@ def main() -> None:
                 "name": names[starter_id],
                 "summary": summaries[starter_id],
                 "source": source,
+                "unit": units[starter_id],
+                "demo": starter_id in DEMO_IDS,
                 "dataset": f"starters/data/{starter_id}.csv",
                 "template": f"starters/templates/{starter_id}.yaml",
                 "model": f"starters/models/{starter_id}.pt",
             }
         )
-    (ROOT / "starters" / "catalog.json").write_text(
+    catalog_path = ROOT / "starters" / "catalog.json"
+    if selected and catalog_path.is_file():
+        existing = json.loads(catalog_path.read_text(encoding="utf-8"))
+        by_id = {
+            str(row["id"]): row
+            for row in existing.get("starters", [])
+            if isinstance(row, dict) and "id" in row
+        }
+        for entry in catalog:
+            by_id[entry["id"]] = entry
+        ordered = []
+        seen: set[str] = set()
+        for row in existing.get("starters", []):
+            if not isinstance(row, dict) or "id" not in row:
+                continue
+            starter_id = str(row["id"])
+            ordered.append(by_id[starter_id])
+            seen.add(starter_id)
+        for entry in catalog:
+            if entry["id"] not in seen:
+                ordered.append(entry)
+        catalog = ordered
+    catalog_path.write_text(
         json.dumps({"starters": catalog}, indent=2) + "\n",
         encoding="utf-8",
     )

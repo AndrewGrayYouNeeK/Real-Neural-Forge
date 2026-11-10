@@ -3,8 +3,10 @@
     {
       "id": "weather",
       "name": "Central Park temperature",
-      "summary": "A short NOAA sample of daily maximum temperature. Predict the next day, or train your own copy.",
-      "source": "Daily maximum temperature in \u00b0C at Central Park, NOAA GHCNd USW00094728, 2024-01-01 through 2024-06-30. Public-domain U.S. government work.",
+      "summary": "Two years of real NOAA daily maximum temperature at Central Park. The sample model forecasts the next week.",
+      "source": "Daily maximum temperature in \u00b0C at Central Park, NOAA GHCNd USW00094728, 2024-11-01 through 2026-10-31 (the latest 730 continuous days in the 2024-01-01 to 2026-10-31 download). Public-domain U.S. government work.",
+      "unit": "\u00b0C",
+      "demo": true,
       "dataset": "starters/data/weather.csv",
       "template": "starters/templates/weather.yaml",
       "model": "starters/models/weather.pt"
@@ -30,8 +32,10 @@
     {
       "id": "near-earth",
       "name": "Near-Earth approaches",
-      "summary": "How many catalogued objects pass within 0.05 AU of Earth each day in the saved snapshot.",
-      "source": "Daily count of catalogued Earth approaches within 0.05 AU, taken from the committed JPL snapshot in space_snapshot/near_earth_events.csv.",
+      "summary": "Real JPL close-approach counts for the year beginning 2026-10-22, with the closest catalogued objects in that window.",
+      "source": "Daily count of catalogued Earth approaches within 0.05 AU, from the committed JPL snapshot, 2026-10-22 through 2027-10-21. These are predicted approaches of objects known when the snapshot was saved.",
+      "unit": "daily approaches",
+      "demo": true,
       "dataset": "starters/data/near-earth.csv",
       "template": "starters/templates/near-earth.yaml",
       "model": "starters/models/near-earth.pt"
