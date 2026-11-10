@@ -28,6 +28,7 @@ from src.accounts.actor import (
 )
 from src.accounts.limits import Limits, load_limits
 from src.accounts.passwords import hash_password, validate_password, verify_password
+from src.evaluation.tracking import record_payload
 from src.inference.predictor import Predictor
 from src.models.registry import build_model
 from src.voice.store import migrate_voice
@@ -783,6 +784,7 @@ def _predict_with_model(
     prediction = point[0].tolist()
     record_id = new_id("prd_")
     result = {"prediction": prediction}
+    record_payload(str(model["id"]), result)
     store.insert_prediction(
         {
             "id": record_id,

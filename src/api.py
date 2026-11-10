@@ -20,6 +20,7 @@ from pydantic import BaseModel, Field
 from src import __version__
 from src.dashboard_data import recent_series, validation_predictions
 from src.data.lunar import lunar_now, lunar_on
+from src.evaluation.tracking import record_payload
 from src.forecasting.spec import MAX_HORIZON, forecast_spec_from_config
 from src.inference.predictor import ForecastBatch, Predictor
 from src.models.registry import ModelRegistry, build_model
@@ -817,6 +818,15 @@ def _loaded_spec():
     return predictor.spec
 
 
+def _loaded_model_id() -> str:
+    cfg = _state.get("config")
+    model = cfg.get("model") if isinstance(cfg, dict) else None
+    name = model.get("name") if isinstance(model, dict) else None
+    if not isinstance(name, str) or not name.strip():
+        return "loaded:model"
+    return f"loaded:{name.strip()}"
+
+
 def _require_predictor() -> Predictor:
     predictor: Predictor | None = _state.get("predictor")
     if predictor is None:
@@ -910,13 +920,13 @@ def _run_forecast(body: PredictRequest, *, horizon: int) -> ForecastBatch:
 def predict(body: PredictRequest) -> PredictResponse:
     steps = 1 if body.horizon is None else body.horizon
     result = _run_forecast(body, horizon=steps)
-    return PredictResponse(
-        **_forecast_payload(
-            result,
-            include_path=False,
-            include_intervals=body.include_intervals or steps > 1,
-        )
+    payload = _forecast_payload(
+        result,
+        include_path=False,
+        include_intervals=body.include_intervals or steps > 1,
     )
+    record_payload(_loaded_model_id(), payload)
+    return PredictResponse(**payload)
 
 
 @app.post(
@@ -928,6 +938,6 @@ def predict(body: PredictRequest) -> PredictResponse:
 def forecast(body: PredictRequest) -> ForecastResponse:
     steps = _loaded_spec().horizon if body.horizon is None else body.horizon
     result = _run_forecast(body, horizon=steps)
-    return ForecastResponse(
-        **_forecast_payload(result, include_path=True, include_intervals=True)
-    )
+    payload = _forecast_payload(result, include_path=True, include_intervals=True)
+    record_payload(_loaded_model_id(), payload)
+    return ForecastResponse(**payload)

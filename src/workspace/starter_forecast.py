@@ -8,16 +8,20 @@ and run the same recent-history forecast used by the dashboard.
 from __future__ import annotations
 
 import json
+import sqlite3
+from datetime import date, timedelta
 from typing import Any
 
 import torch
 
 from src.dashboard_data import recent_series
+from src.evaluation.tracking import default_tracker, steps_from_payload
 from src.forecasting.spec import forecast_spec_from_config
 from src.inference.predictor import Predictor
 from src.models.registry import build_model
 from src.workspace.errors import WorkspaceError
 from src.workspace.starters import Starter, load_starters, starter_by_id
+from src.workspace.store import SqlError
 
 # Display units for the starter target, used in plain-language replies.
 STARTER_UNITS = {
@@ -142,7 +146,66 @@ def starter_forecast(starter_id: str, *, points: int = 120) -> dict[str, Any]:
     if highlights:
         payload["highlights"] = highlights
     payload["checkpoint_loaded"] = True
+    _track_starter(starter.id, payload)
     return payload
+
+
+def _track_starter(starter_id: str, payload: dict[str, Any]) -> None:
+    """Score earlier sample forecasts, then store this one. Never raises."""
+    try:
+        history = payload.get("history")
+        rows = history if isinstance(history, list) else []
+        actuals: dict[str, float] = {}
+        for row in rows:
+            if not isinstance(row, dict) or not isinstance(row.get("time"), str):
+                continue
+            actual = row.get("actual")
+            if isinstance(actual, bool) or not isinstance(actual, int | float):
+                continue
+            actuals[row["time"][:10]] = float(actual)
+        tracker = default_tracker()
+        if actuals:
+            tracker.score_actuals(starter_id, actuals)
+        steps = steps_from_payload(payload)
+        targets = _daily_targets(rows, len(steps))
+        if targets is not None:
+            for step, target in zip(steps, targets, strict=True):
+                step["target_time"] = target
+        if steps:
+            tracker.record(starter_id, steps)
+    except (
+        OSError,
+        RuntimeError,
+        TypeError,
+        ValueError,
+        KeyError,
+        SqlError,
+        sqlite3.Error,
+    ):
+        # A sample forecast is still returned when the outcome log is unavailable.
+        return
+
+
+def _daily_targets(history: list[Any], horizon: int) -> list[str] | None:
+    if horizon < 1 or len(history) < 2:
+        return None
+    times: list[date] = []
+    for row in history[-3:]:
+        if not isinstance(row, dict) or not isinstance(row.get("time"), str):
+            return None
+        try:
+            times.append(date.fromisoformat(row["time"][:10]))
+        except ValueError:
+            return None
+    gaps = [
+        (later - earlier).days for earlier, later in zip(times, times[1:], strict=False)
+    ]
+    if any(gap != 1 for gap in gaps):
+        return None
+    return [
+        (times[-1] + timedelta(days=offset)).isoformat()
+        for offset in range(1, horizon + 1)
+    ]
 
 
 def public_starter_catalog() -> dict[str, Any]:
