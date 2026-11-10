@@ -10,6 +10,8 @@ const state = {
   experiments: [],
   series: null,
   trainingWatch: null,
+  csvTrainPending: false,
+  csvTrainJobId: null,
 };
 
 const SPEAK_LABEL = "Listen";
@@ -572,11 +574,262 @@ function isTrainStartRequest(question) {
   );
 }
 
+function isCsvTrainRequest(question) {
+  return /\b(train on my csv|upload (a |my )?csv|train on (a |this |my )?csv)\b/i.test(
+    question || ""
+  );
+}
+
+function formatBytesCap(bytes) {
+  const number = asNumber(bytes);
+  if (number == null) return "a small size limit";
+  if (number >= 1_000_000) {
+    const mb = Math.round((number / 1_000_000) * 10) / 10;
+    return `${mb} MB`;
+  }
+  const kb = Math.max(1, Math.round(number / 1000));
+  return `${kb} KB`;
+}
+
+function capLine(limits) {
+  if (!limits) {
+    return "Training runs are short and files are size-capped so this shared server stays on a small plan.";
+  }
+  return (
+    `Runs are capped at ${limits.max_epochs} epochs and ${limits.max_run_seconds} seconds, ` +
+    `and a CSV must stay under ${formatBytesCap(limits.max_dataset_bytes)}, ` +
+    "so this shared server stays on a small plan."
+  );
+}
+
+async function loadTrainLimits() {
+  try {
+    const data = await fetchJson("/workspace/limits");
+    return data && data.limits ? data.limits : null;
+  } catch {
+    return null;
+  }
+}
+
+function openSignUpModal() {
+  openSignInModal();
+  if (state.account) return;
+  document.getElementById("sign-in-form").hidden = true;
+  document.getElementById("sign-up-form").hidden = false;
+  const field = document.getElementById("sign-up-email");
+  if (field) field.focus();
+}
+
+function promptCsvPicker() {
+  const input = document.getElementById("csv-train-file");
+  if (!input) return;
+  input.value = "";
+  input.click();
+}
+
+function attachReplyActions(message, buttons) {
+  const actions = message.querySelector(".message-actions");
+  if (!actions) return;
+  for (const [label, action] of buttons || []) {
+    actions.append(makeButton(label, action));
+  }
+  scrollToBottom();
+}
+
+async function resumeCsvTrainIfPending() {
+  if (!state.csvTrainPending || !state.account) return;
+  state.csvTrainPending = false;
+  closeSignInModal();
+  const limits = await loadTrainLimits();
+  const message = addReply(
+    "You're in. Choose a CSV with a header row and at least 32 numeric values in the column you want to forecast. " +
+      capLine(limits)
+  );
+  attachReplyActions(message, [["Choose a CSV", promptCsvPicker]]);
+  promptCsvPicker();
+}
+
+async function csvTrainIntro() {
+  const limits = await loadTrainLimits();
+  const caps = capLine(limits);
+  if (!state.account) {
+    state.csvTrainPending = true;
+    return {
+      text:
+        "I can train a small model on a CSV in your private workspace, then forecast what comes next. " +
+        "Create a free account (or sign in), choose a file with a header row, pick the numeric column to learn, and I’ll queue a capped run. " +
+        caps +
+        " Nothing is started until you upload a file.",
+      actions: [
+        ["Create a free account", openSignUpModal],
+        ["Sign in", openSignInModal],
+      ],
+    };
+  }
+  setTimeout(promptCsvPicker, 0);
+  return {
+    text:
+      "Choose a CSV with a header row. I’ll list the numeric columns, you pick one, and I’ll train a small model in your private workspace. " +
+      caps,
+    actions: [["Choose a CSV", promptCsvPicker]],
+  };
+}
+
+async function uploadCsvFile(file) {
+  const response = await fetch(
+    `/workspace/datasets?name=${encodeURIComponent(file.name || "dataset.csv")}`,
+    {
+      method: "POST",
+      credentials: "same-origin",
+      headers: authHeaders({ "Content-Type": "text/csv" }),
+      body: file,
+    }
+  );
+  const text = await response.text();
+  let data = {};
+  if (text) {
+    try {
+      data = JSON.parse(text);
+    } catch {
+      data = {};
+    }
+  }
+  if (!response.ok) {
+    const error = new Error(errorMessage(response, data, text));
+    error.status = response.status;
+    throw error;
+  }
+  return data;
+}
+
+async function startDatasetTrain(datasetId, column) {
+  const pending = addMessage("assistant", `Queueing a training run on “${column}”…`);
+  try {
+    const result = await fetchJson(`/workspace/datasets/${datasetId}/train`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ target_column: column }),
+    });
+    pending.remove();
+    state.csvTrainJobId = result.id;
+    addReply(
+      `Training is queued in your private workspace on the “${result.target_column}” column. ` +
+        `${capLine(result.limits)} I’ll post the first forecast here when the run finishes. ` +
+        "Progress also shows under Experiments in the Tools sidebar."
+    );
+    watchTraining();
+    refreshExperiments().catch(() => {});
+    refreshWorkspace().catch(() => {});
+  } catch (error) {
+    pending.remove();
+    addReply(`Training did not start. ${error.message}`);
+  }
+}
+
+async function handleCsvTrainFile(file) {
+  if (!state.account) {
+    state.csvTrainPending = true;
+    const message = addReply(
+      "Training needs a free account first. Create one, then I’ll ask for the CSV again."
+    );
+    attachReplyActions(message, [
+      ["Create a free account", openSignUpModal],
+      ["Sign in", openSignInModal],
+    ]);
+    return;
+  }
+  addMessage("user", `Upload ${file.name || "dataset.csv"}`);
+  const pending = addMessage("assistant", "Uploading your CSV…");
+  try {
+    const data = await uploadCsvFile(file);
+    pending.remove();
+    await refreshWorkspace().catch(() => {});
+    const columns = (data.columns || []).filter((column) => column.usable);
+    if (!columns.length) {
+      addReply(
+        "I need a CSV with a header row and at least 32 numeric values in one column. Empty files and non-numeric columns can’t be trained."
+      );
+      return;
+    }
+    if (columns.length === 1) {
+      addReply(
+        `I found a numeric column named “${columns[0].name}” (${columns[0].numeric_rows} rows). I’ll train a small capped model on it now.`
+      );
+      await startDatasetTrain(data.id, columns[0].name);
+      return;
+    }
+    const suggested = data.suggested_target;
+    const names = columns.map((column) => column.name).join(", ");
+    const message = addReply(
+      `I found these numeric columns: ${names}. Which should I train on?`
+    );
+    attachReplyActions(
+      message,
+      columns.map((column) => [
+        column.name === suggested ? `${column.name} (suggested)` : column.name,
+        () => startDatasetTrain(data.id, column.name),
+      ])
+    );
+  } catch (error) {
+    pending.remove();
+    if (error.status === 401) {
+      state.account = null;
+      state.csvTrainPending = true;
+      refreshAuthModal();
+      const message = addReply(
+        "Training needs a free account first. Create one, then I’ll ask for the CSV again."
+      );
+      attachReplyActions(message, [
+        ["Create a free account", openSignUpModal],
+        ["Sign in", openSignInModal],
+      ]);
+      return;
+    }
+    addReply(`I could not use that file. ${error.message}`);
+  }
+}
+
+async function announceCsvTrainResult(status) {
+  if (status.status === "failed") {
+    const detail = status.result && status.result.error;
+    addReply(`Training finished with an error. ${detail || "The run failed."}`);
+    return;
+  }
+  const modelId = status.result && status.result.model_id;
+  if (!modelId) {
+    addReply("Training finished. Check Experiments in the Tools sidebar for the run.");
+    refreshWorkspace().catch(() => {});
+    return;
+  }
+  try {
+    const forecast = await fetchJson(`/workspace/models/${modelId}/predict-latest`, {
+      method: "POST",
+    });
+    const value = Array.isArray(forecast.prediction)
+      ? forecast.prediction[0]
+      : forecast.prediction;
+    const column = forecast.target_column || "value";
+    addReply(
+      `Training finished. The next value I forecast for “${column}” is ${formatMetric(value)}. ` +
+        "The run and this prediction are in your private workspace under Tools."
+    );
+    refreshWorkspace().catch(() => {});
+  } catch (error) {
+    addReply(
+      `Training finished, but I could not build the first forecast. ${error.message} ` +
+        "The run is under Experiments in the Tools sidebar."
+    );
+  }
+}
+
 async function trainReply(question) {
+  if (isCsvTrainRequest(question)) {
+    return csvTrainIntro();
+  }
   if (!isTrainStartRequest(question)) {
     return {
       text:
-        "I can train a small model on a CSV in your private workspace, and you can compare the runs under Experiments in the Tools sidebar. Open Tools → My workspace to upload a file, or say “start training” when you want a run to begin. Until then, nothing is started.",
+        "I can train a small model on a CSV in your private workspace, and you can compare the runs under Experiments in the Tools sidebar. Use the Train on my CSV chip to upload a file and pick a column, or say “start training” when you want a run to begin. Until then, nothing is started.",
     };
   }
   let current = null;
@@ -649,7 +902,7 @@ function helpReply() {
       "• Markets and crypto — a live price for a ticker or coin, with the caveat that it is not advice\n" +
       "• Lottery — the latest Powerball and Mega Millions draws from published results; I will not pretend I can pick winners\n" +
       "• Moon phase, near-Earth approaches, and the solar system\n" +
-      "• Training a model on your data, if you ask me to start a run\n" +
+      "• Training a small model on your CSV — use the Train on my CSV chip for the one-click flow\n" +
       "• GQ voice — the speaker button on each reply, once you have an account\n" +
       "• General questions — a short AI answer, within a daily free allowance\n\n" +
       "If the AI allowance is used up, I will say so and still help with the live topics above.",
@@ -1190,16 +1443,21 @@ function watchTraining() {
     try {
       const status = await fetchJson("/training/status");
       state.training = status;
-      if (status.status !== "running") {
+      const busy = status.status === "running" || status.status === "queued";
+      if (!busy) {
         clearInterval(state.trainingWatch);
         state.trainingWatch = null;
         refreshExperiments().catch(() => {});
         refreshStatusLine().catch(() => {});
+        if (state.csvTrainJobId) {
+          state.csvTrainJobId = null;
+          announceCsvTrainResult(status).catch(() => {});
+        }
       }
     } catch {
       // Keep watching; transient errors are fine.
     }
-  }, 8000);
+  }, 5000);
 }
 
 /* ------------------------------------------------------------------ wire-up */
@@ -1249,6 +1507,7 @@ document.getElementById("sign-in-form").addEventListener("submit", async (event)
     clearNotice();
     await refreshAccount();
     await refreshAccountDependents();
+    await resumeCsvTrainIfPending();
   } catch (error) {
     reportError(error);
   }
@@ -1276,6 +1535,7 @@ document.getElementById("sign-up-form").addEventListener("submit", async (event)
     clearNotice();
     await refreshAccount();
     await refreshAccountDependents();
+    await resumeCsvTrainIfPending();
   } catch (error) {
     reportError(error);
   }
@@ -1331,28 +1591,20 @@ document.getElementById("dataset-upload-form").addEventListener("submit", async 
     return;
   }
   try {
-    const response = await fetch(
-      `/workspace/datasets?name=${encodeURIComponent(file.name || "dataset.csv")}`,
-      {
-        method: "POST",
-        credentials: "same-origin",
-        headers: authHeaders({ "Content-Type": "text/csv" }),
-        body: file,
-      }
-    );
-    const text = await response.text();
-    const data = text ? JSON.parse(text) : {};
-    if (!response.ok) {
-      const error = new Error(errorMessage(response, data, text));
-      error.status = response.status;
-      throw error;
-    }
+    await uploadCsvFile(file);
     input.value = "";
     clearNotice();
     await refreshWorkspace();
   } catch (error) {
     reportError(error);
   }
+});
+
+document.getElementById("csv-train-file").addEventListener("change", (event) => {
+  const input = event.currentTarget;
+  const file = input.files && input.files[0];
+  input.value = "";
+  if (file) handleCsvTrainFile(file);
 });
 
 const sidebarToggle = document.getElementById("sidebar-toggle");

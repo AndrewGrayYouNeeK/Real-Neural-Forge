@@ -45,7 +45,8 @@
           <summary>My workspace</summary>
           <div class="side-panel-body">
             <p id="workspace-note" class="hint">
-              Sign in to see your sample datasets and models.
+              Sign in to see your sample datasets and models, or use Train on my
+              CSV in the chat to start a capped run.
             </p>
             <div id="workspace-signed-in" hidden>
               <h3>Starter samples</h3>
@@ -281,6 +282,15 @@
         </div>
       </div>
     </div>
+
+    <input
+      id="csv-train-file"
+      class="visually-hidden"
+      type="file"
+      accept=".csv,text/csv"
+      tabindex="-1"
+      aria-hidden="true"
+    />
 
     <script src="/assets/chart.js"></script>
     <script src="/assets/app.js"></script>

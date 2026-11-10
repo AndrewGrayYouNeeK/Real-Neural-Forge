@@ -315,36 +315,199 @@ def logout(request: Request) -> None:
         store.delete_session(_token_hash(raw))
 
 
-def _csv_values(data: bytes) -> list[float]:
+def _decode_csv(data: bytes) -> str:
     try:
-        text = data.decode("utf-8")
+        return data.decode("utf-8-sig")
     except UnicodeError as exc:
         raise WorkspaceError(422, "Dataset must be UTF-8 CSV.") from exc
-    reader = csv.DictReader(io.StringIO(text))
-    if not reader.fieldnames or "value" not in reader.fieldnames:
-        raise WorkspaceError(422, "CSV must include a numeric value column.")
+
+
+def _csv_rows(data: bytes) -> tuple[list[str], list[dict[str, str]]]:
+    reader = csv.DictReader(io.StringIO(_decode_csv(data)))
+    names = [
+        str(name).strip() for name in (reader.fieldnames or []) if str(name).strip()
+    ]
+    if not names:
+        raise WorkspaceError(422, "CSV must include a header row.")
+    rows: list[dict[str, str]] = []
+    for raw in reader:
+        rows.append({name: (raw.get(name) or "").strip() for name in names})
+    return names, rows
+
+
+def _parse_number(raw: str) -> float | None:
+    if raw == "":
+        return None
+    try:
+        number = float(raw)
+    except ValueError:
+        return None
+    if number != number or number in {float("inf"), float("-inf")}:
+        return None
+    return number
+
+
+def inspect_csv_columns(
+    data: bytes, *, minimum_rows: int = _MIN_CSV_ROWS
+) -> list[dict[str, Any]]:
+    """Describe each header and whether it can be used as a training target."""
+    names, rows = _csv_rows(data)
+    columns: list[dict[str, Any]] = []
+    for name in names:
+        numeric = 0
+        invalid = 0
+        empty = 0
+        for row in rows:
+            parsed = _parse_number(row.get(name, ""))
+            if parsed is None:
+                if row.get(name, "") == "":
+                    empty += 1
+                else:
+                    invalid += 1
+            else:
+                numeric += 1
+        columns.append(
+            {
+                "name": name,
+                "numeric_rows": numeric,
+                "empty_rows": empty,
+                "invalid_rows": invalid,
+                "usable": invalid == 0 and empty == 0 and numeric >= minimum_rows,
+            }
+        )
+    return columns
+
+
+def suggested_target(columns: list[dict[str, Any]]) -> str | None:
+    usable = [str(column["name"]) for column in columns if column.get("usable")]
+    if not usable:
+        return None
+    preferred = {
+        "value",
+        "close",
+        "price",
+        "target",
+        "y",
+        "temp",
+        "temperature",
+        "count",
+    }
+    for name in usable:
+        if name.lower() in preferred:
+            return name
+    return usable[0]
+
+
+def _csv_column_values(data: bytes, column: str) -> list[float]:
+    names, rows = _csv_rows(data)
+    if column not in names:
+        raise WorkspaceError(422, f"CSV has no column named {column!r}.")
     values: list[float] = []
-    for row in reader:
-        raw = (row.get("value") or "").strip()
-        try:
-            number = float(raw)
-        except ValueError as exc:
-            raise WorkspaceError(422, "The value column must be numeric.") from exc
-        if number != number or number in {float("inf"), float("-inf")}:
-            raise WorkspaceError(422, "The value column must be finite.")
-        values.append(number)
+    for row in rows:
+        parsed = _parse_number(row.get(column, ""))
+        if parsed is None:
+            raise WorkspaceError(422, f"The {column} column must be numeric.")
+        values.append(parsed)
     return values
 
 
-def _validate_upload(data: bytes, limits: Limits, *, minimum_rows: int) -> list[float]:
+def _csv_values(data: bytes) -> list[float]:
+    return _csv_column_values(data, "value")
+
+
+def _validate_upload(
+    data: bytes, limits: Limits, *, minimum_rows: int
+) -> list[dict[str, Any]]:
     if not data:
         raise WorkspaceError(422, "Dataset is empty.")
     if len(data) > limits.max_dataset_bytes:
         raise WorkspaceError(413, "Dataset is larger than the configured limit.")
-    values = _csv_values(data)
-    if len(values) < minimum_rows:
-        raise WorkspaceError(422, f"CSV needs at least {minimum_rows} numeric rows.")
-    return values
+    columns = inspect_csv_columns(data, minimum_rows=minimum_rows)
+    if not any(column.get("usable") for column in columns):
+        raise WorkspaceError(
+            422,
+            f"CSV needs a header row and at least {minimum_rows} numeric values in one column.",
+        )
+    return columns
+
+
+def _resolve_target_column(
+    target_column: str | None, columns: list[dict[str, Any]]
+) -> str:
+    usable = [str(column["name"]) for column in columns if column.get("usable")]
+    if not usable:
+        raise WorkspaceError(
+            422, f"CSV needs at least {_MIN_CSV_ROWS} numeric rows in one column."
+        )
+    if target_column is None or not str(target_column).strip():
+        chosen = suggested_target(columns)
+        if chosen is None:
+            raise WorkspaceError(422, "CSV needs a numeric column to train on.")
+        return chosen
+    wanted = str(target_column).strip()
+    if wanted in usable:
+        return wanted
+    matches = [name for name in usable if name.lower() == wanted.lower()]
+    if len(matches) == 1:
+        return matches[0]
+    raise WorkspaceError(422, f"Choose a numeric column: {', '.join(usable)}.")
+
+
+def _custom_train_config(column: str, *, name: str, limits: Limits) -> dict[str, Any]:
+    """A small, capped template so visitor CSV runs stay on the cheap plan."""
+    del name
+    epochs = min(4, limits.max_epochs)
+    seq_len = min(16, limits.max_seq_len)
+    batch = min(32, limits.max_batch_size)
+    return {
+        "dataset": {"enabled": False, "id": "workspace-csv"},
+        "retrain": {"enabled": False},
+        "model": {
+            "name": "time_series_transformer",
+            "input_dim": 1,
+            "output_dim": 1,
+            "d_model": 16,
+            "nhead": 2,
+            "num_encoder_layers": 1,
+            "dim_feedforward": 32,
+            "dropout": 0.0,
+            "max_seq_len": 64,
+        },
+        "data": {
+            "source": "csv",
+            "feature_columns": [column],
+            "target_column": column,
+            "seq_len": seq_len,
+            "val_split": 0.2,
+            "split_mode": "temporal",
+            "normalize": True,
+            "seed": 0,
+        },
+        "training": {
+            "experiment_name": "workspace-csv",
+            "batch_size": batch,
+            "learning_rate": 0.001,
+            "epochs": epochs,
+            "patience": 2,
+            "device": "cpu",
+            "log_interval": 1,
+            "seed": 0,
+        },
+        "inference": {"device": "cpu"},
+        "forecast": {"horizon": 1, "strategy": "direct"},
+        "storage": {},
+    }
+
+
+def _limit_summary(limits: Limits) -> dict[str, int]:
+    return {
+        "max_dataset_bytes": limits.max_dataset_bytes,
+        "max_epochs": limits.max_epochs,
+        "max_run_seconds": limits.max_run_seconds,
+        "max_active_jobs_per_user": limits.max_active_jobs_per_user,
+        "max_samples": limits.max_samples,
+        "max_seq_len": limits.max_seq_len,
+    }
 
 
 def _dataset_public(row: dict[str, Any]) -> dict[str, Any]:
@@ -412,7 +575,7 @@ def upload_dataset(
     limits = limits_for(config)
     if store.count_datasets(actor.user_id) >= limits.max_datasets_per_user:
         raise WorkspaceError(429, "This account has reached its dataset limit.")
-    _validate_upload(data, limits, minimum_rows=_MIN_CSV_ROWS)
+    columns = _validate_upload(data, limits, minimum_rows=_MIN_CSV_ROWS)
     dataset_id = new_id("dst_")
     key = user_dataset_key(actor.user_id, dataset_id)
     store.put_blob(key, data)
@@ -430,7 +593,12 @@ def upload_dataset(
         "updated_at": now,
     }
     store.insert_dataset(row)
-    return _dataset_public(row)
+    return {
+        **_dataset_public(row),
+        "columns": columns,
+        "suggested_target": suggested_target(columns),
+        "limits": _limit_summary(limits),
+    }
 
 
 def _safe_name(name: str) -> str:
@@ -560,8 +728,10 @@ def _owned_starter(
     return store, starter, dataset, model
 
 
-def _window_from_dataset(data: bytes, seq_len: int) -> list[list[float]]:
-    values = _csv_values(data)
+def _window_from_dataset(
+    data: bytes, seq_len: int, column: str = "value"
+) -> list[list[float]]:
+    values = _csv_column_values(data, column)
     if len(values) < seq_len:
         raise WorkspaceError(422, "The sample is shorter than the model window.")
     return [[value] for value in values[-seq_len:]]
@@ -778,6 +948,115 @@ def enqueue_member_config(
         base_config=base_config,
         limits=limits_for(config),
     )
+
+
+def enqueue_dataset(
+    actor: Actor,
+    dataset_id: str,
+    target_column: str | None,
+    config: dict[str, Any] | None,
+) -> dict[str, Any]:
+    """Queue a capped training run on one numeric column of an uploaded CSV."""
+    store = require_store()
+    row = store.get_dataset(actor.user_id, dataset_id)
+    if row is None:
+        raise WorkspaceError(404, "Dataset not found.")
+    blob = store.get_blob(str(row["object_key"]))
+    if blob is None:
+        raise WorkspaceError(404, "Dataset bytes are missing.")
+    limits = limits_for(config)
+    columns = inspect_csv_columns(blob, minimum_rows=_MIN_CSV_ROWS)
+    chosen = _resolve_target_column(target_column, columns)
+    body = yaml.safe_dump(
+        _custom_train_config(chosen, name=str(row["name"]), limits=limits),
+        sort_keys=False,
+    )
+    now = utc_now()
+    config_id = new_id("cfg_")
+    store.insert_config(
+        {
+            "id": config_id,
+            "user_id": actor.user_id,
+            "name": f"Train {row['name']} ({chosen})",
+            "starter_id": None,
+            "body": body,
+            "created_at": now,
+            "updated_at": now,
+        }
+    )
+    queued = _enqueue(
+        actor,
+        name=f"Train {row['name']} ({chosen})",
+        dataset_id=str(row["id"]),
+        config_id=config_id,
+        starter_id=None,
+        base_config=None,
+        limits=limits,
+    )
+    return {
+        **queued,
+        "dataset_id": str(row["id"]),
+        "config_id": config_id,
+        "target_column": chosen,
+        "columns": columns,
+        "limits": _limit_summary(limits),
+    }
+
+
+def _dataset_for_model(
+    store: WorkspaceStore, actor: Actor, model: dict[str, Any]
+) -> dict[str, Any] | None:
+    job_id = model.get("job_id")
+    if isinstance(job_id, str) and job_id:
+        job = store.get_job(actor.user_id, job_id)
+        dataset_id = job.get("dataset_id") if job is not None else None
+        if isinstance(dataset_id, str) and dataset_id:
+            found = store.get_dataset(actor.user_id, dataset_id)
+            if found is not None:
+                return found
+    starter_id = model.get("starter_id")
+    if isinstance(starter_id, str) and starter_id:
+        return store.dataset_for_starter(actor.user_id, starter_id)
+    return None
+
+
+def predict_latest_model(
+    actor: Actor, model_id: str, config: dict[str, Any] | None
+) -> dict[str, Any]:
+    """Forecast the next step from the latest window of the model's dataset."""
+    store = require_store()
+    model = store.get_model(actor.user_id, model_id)
+    if model is None:
+        raise WorkspaceError(404, "Model not found.")
+    dataset = _dataset_for_model(store, actor, model)
+    if dataset is None:
+        raise WorkspaceError(422, "This model has no dataset to forecast from.")
+    blob = store.get_blob(str(dataset["object_key"]))
+    if blob is None:
+        raise WorkspaceError(404, "Dataset bytes are missing.")
+    try:
+        cfg = json.loads(str(model["config_json"]))
+    except json.JSONDecodeError as exc:
+        raise WorkspaceError(500, "Model config is unreadable.") from exc
+    data_cfg = cfg.get("data") if isinstance(cfg, dict) else None
+    if not isinstance(data_cfg, dict):
+        data_cfg = {}
+    target = str(data_cfg.get("target_column") or "value")
+    seq_len = int(data_cfg.get("seq_len", 16) or 16)
+    sequence = _window_from_dataset(blob, seq_len, target)
+    result = _predict_with_model(
+        store,
+        actor,
+        model,
+        sequence,
+        starter_id=model.get("starter_id")
+        if isinstance(model.get("starter_id"), str)
+        else None,
+        limits=limits_for(config),
+    )
+    result["target_column"] = target
+    result["dataset_id"] = dataset["id"]
+    return result
 
 
 def training_active() -> bool:

@@ -16,6 +16,7 @@ from src.workspace.service import (
     cancel_job,
     clear_session_cookie,
     delete_dataset,
+    enqueue_dataset,
     enqueue_starter,
     get_dataset,
     get_job,
@@ -30,6 +31,7 @@ from src.workspace.service import (
     login,
     login_owner,
     logout,
+    predict_latest_model,
     predict_model,
     predict_starter,
     replace_dataset,
@@ -55,6 +57,10 @@ class ConfigUpdate(BaseModel):
 class PredictBody(BaseModel):
     model_id: str
     sequence: list[list[float]]
+
+
+class DatasetTrainBody(BaseModel):
+    target_column: str | None = None
 
 
 def _raise(exc: WorkspaceError) -> NoReturn:
@@ -136,11 +142,8 @@ def auth_me(
 
 
 @router.get("/workspace/limits", tags=["workspace"])
-def workspace_limits(
-    request: Request,
-    authorization: str | None = Header(default=None),
-) -> dict[str, Any]:
-    _actor(request, authorization)
+def workspace_limits() -> dict[str, Any]:
+    """Public caps for the one-click CSV flow. No account data is returned."""
     return {"limits": limits_for(runtime.config).as_dict()}
 
 
@@ -194,6 +197,21 @@ async def workspace_upload_dataset(
     data = await _read_upload(request)
     config = _app_config()
     return _call(lambda: upload_dataset(actor, name, data, config))
+
+
+@router.post("/workspace/datasets/{dataset_id}/train", tags=["workspace"])
+def workspace_dataset_train(
+    dataset_id: str,
+    request: Request,
+    body: DatasetTrainBody | None = None,
+    authorization: str | None = Header(default=None),
+) -> dict[str, Any]:
+    actor = _actor(request, authorization)
+    payload = body or DatasetTrainBody()
+    config = _app_config()
+    return _call(
+        lambda: enqueue_dataset(actor, dataset_id, payload.target_column, config)
+    )
 
 
 @router.get("/workspace/datasets/{dataset_id}", tags=["workspace"])
@@ -315,6 +333,16 @@ def workspace_predict(
     return _call(
         lambda: predict_model(actor, body.model_id, body.sequence, _app_config())
     )
+
+
+@router.post("/workspace/models/{model_id}/predict-latest", tags=["workspace"])
+def workspace_predict_latest(
+    model_id: str,
+    request: Request,
+    authorization: str | None = Header(default=None),
+) -> dict[str, Any]:
+    actor = _actor(request, authorization)
+    return _call(lambda: predict_latest_model(actor, model_id, _app_config()))
 
 
 async def _read_upload(request: Request) -> bytes:

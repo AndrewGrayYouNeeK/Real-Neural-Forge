@@ -130,6 +130,15 @@ def test_generic_training_questions_do_not_start_a_run() -> None:
     assert not start.search("Train on my CSV")
 
 
+def test_train_on_my_csv_opens_the_upload_flow() -> None:
+    source = APP_JS.read_text(encoding="utf-8")
+    assert "function isCsvTrainRequest" in source
+    assert "/workspace/datasets/" in source
+    assert "target_column" in source
+    assert "Create a free account" in source
+    assert "so this shared server stays on a small plan." in source
+
+
 def test_live_endpoints_are_wired_in_the_chat() -> None:
     source = APP_JS.read_text(encoding="utf-8")
     assert "/live/weather" in source

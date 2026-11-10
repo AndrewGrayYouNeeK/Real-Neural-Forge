@@ -844,6 +844,7 @@ class TestForecastDashboard:
         assert "Next lottery numbers" in html
         assert "Moon phase" in html
         assert "Train on my CSV" in html
+        assert 'id="csv-train-file"' in html
         assert 'id="account-btn"' in html
         assert 'id="sign-in-modal"' in html
         assert 'id="owner-modal" hidden' in html
@@ -876,6 +877,9 @@ class TestForecastDashboard:
         assert "/live/lottery" in app_js
         assert "/live/ask" in app_js
         assert "/starters/weather/forecast" in app_js
+        assert "/workspace/datasets/" in app_js
+        assert "/predict-latest" in app_js
+        assert "isCsvTrainRequest" in app_js
         assert "/space/near-earth" in app_js
         assert "/space/solar-system" in app_js
         assert "/lunar" in app_js
