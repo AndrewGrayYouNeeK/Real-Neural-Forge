@@ -100,6 +100,10 @@ def test_public_routes_stay_open_and_private_routes_do_not(workspace_client):
     client, _root = workspace_client
     client.cookies.clear()
     assert client.get("/health").status_code == 200
+    limits = client.get("/workspace/limits")
+    assert limits.status_code == 200, limits.text
+    assert limits.json()["limits"]["max_epochs"] >= 1
+    assert limits.json()["limits"]["max_dataset_bytes"] >= 1
     assert client.get("/lunar").status_code == 200
     assert client.get("/space/near-earth").status_code == 200
     assert client.get("/space/solar-system").status_code == 200
@@ -377,3 +381,151 @@ def test_training_queue_cannot_touch_another_user_or_the_owner(workspace_client)
             "SELECT id, role FROM users WHERE role = 'owner'"
         ).fetchall()
     assert [row["id"] for row in owners] == ["owner"]
+
+
+def _numeric_csv(
+    column: str = "temp", rows: int = 40, extra: list[str] | None = None
+) -> bytes:
+    headers = ["date", column, *(extra or [])]
+    lines = [",".join(headers)]
+    for index in range(rows):
+        values = [f"2024-01-{(index % 28) + 1:02d}", f"{10 + index * 0.25}"]
+        for offset, _name in enumerate(extra or []):
+            values.append(str(100 + index + offset))
+        lines.append(",".join(values))
+    return ("\n".join(lines) + "\n").encode()
+
+
+def test_one_click_csv_train_flow_is_capped_and_private(workspace_client):
+    client, _root = workspace_client
+    client.cookies.clear()
+    guest = client.post(
+        "/workspace/datasets?name=temps.csv",
+        content=_numeric_csv(),
+        headers={"Content-Type": "text/csv"},
+    )
+    assert guest.status_code == 401
+    guest_train = client.post(
+        "/workspace/datasets/dst_missing/train", json={"target_column": "temp"}
+    )
+    assert guest_train.status_code == 401
+
+    _signup(client, "csv.user@example.com")
+    _login(client, "csv.user@example.com")
+
+    too_short = client.post(
+        "/workspace/datasets?name=short.csv",
+        content=_numeric_csv(rows=10),
+        headers={"Content-Type": "text/csv"},
+    )
+    assert too_short.status_code == 422
+
+    no_numbers = client.post(
+        "/workspace/datasets?name=labels.csv",
+        content=b"date,label\n" + b"2024-01-01,hot\n" * 40,
+        headers={"Content-Type": "text/csv"},
+    )
+    assert no_numbers.status_code == 422
+
+    uploaded = client.post(
+        "/workspace/datasets?name=temps.csv",
+        content=_numeric_csv(extra=["humidity"]),
+        headers={"Content-Type": "text/csv"},
+    )
+    assert uploaded.status_code == 201, uploaded.text
+    body = uploaded.json()
+    names = {column["name"]: column for column in body["columns"]}
+    assert "temp" in names and names["temp"]["usable"] is True
+    assert "humidity" in names and names["humidity"]["usable"] is True
+    assert names["date"]["usable"] is False
+    assert body["suggested_target"] == "temp"
+    assert body["limits"]["max_epochs"] >= 1
+    dataset_id = body["id"]
+
+    missing = client.post(
+        f"/workspace/datasets/{dataset_id}/train",
+        json={"target_column": "not-a-column"},
+    )
+    assert missing.status_code == 422
+    assert "temp" in missing.json()["detail"]
+
+    queued = client.post(
+        f"/workspace/datasets/{dataset_id}/train",
+        json={"target_column": "humidity"},
+    )
+    assert queued.status_code == 200, queued.text
+    payload = queued.json()
+    assert payload["status"] == "queued"
+    assert payload["dataset_id"] == dataset_id
+    assert payload["target_column"] == "humidity"
+    assert payload["limits"]["max_run_seconds"] >= 1
+    job_id = payload["id"]
+    config_id = payload["config_id"]
+
+    again = client.post(
+        f"/workspace/datasets/{dataset_id}/train",
+        json={"target_column": "temp"},
+    )
+    assert again.status_code == 409
+
+    stored = client.get("/workspace/configs").json()["configs"]
+    custom = next(row for row in stored if row["id"] == config_id)
+    parsed = yaml.safe_load(custom["body"])
+    assert parsed["data"]["target_column"] == "humidity"
+    assert parsed["data"]["feature_columns"] == ["humidity"]
+    assert parsed["data"]["source"] == "csv"
+    assert parsed["training"]["epochs"] <= payload["limits"]["max_epochs"]
+    assert parsed["training"]["device"] == "cpu"
+
+    class FakeTrainer:
+        def __init__(self, path: str) -> None:
+            self.path = Path(path)
+
+        def train(self, epoch_callback=None):
+            del epoch_callback
+            cfg = yaml.safe_load(self.path.read_text(encoding="utf-8"))
+            assert cfg["data"]["source"] == "csv"
+            assert Path(cfg["data"]["path"]).name == "series.csv"
+            assert cfg["data"]["target_column"] == "humidity"
+            assert cfg["training"]["epochs"] <= 5
+            directory = Path(cfg["training"]["checkpoint_dir"])
+            assert not directory.is_relative_to(REPO_ROOT)
+            directory.mkdir(parents=True, exist_ok=True)
+            (directory / "best_model.pt").write_bytes(b"private-weights")
+            return {
+                "best_loss": 0.1,
+                "metrics": {"mae": 0.2},
+                "history": [{"epoch": 1, "train_loss": 0.1}],
+                "elapsed_seconds": 0.01,
+                "best_epoch": 1,
+            }
+
+    store = runtime.store
+    assert store is not None
+    job = store.get_job(store.user_by_email("csv.user@example.com")["id"], job_id)
+    assert job is not None
+    execute_member_job(store, job, trainer_factory=FakeTrainer)
+    finished = client.get(f"/workspace/jobs/{job_id}")
+    assert finished.json()["status"] == "completed"
+    model_id = finished.json()["result"]["model_id"]
+    assert model_id
+
+    # The fake checkpoint is not a real model, but starter predict-latest is.
+    starters = client.get("/workspace/starters").json()["starters"]
+    weather = next(card for card in starters if card["id"] == "weather")
+    latest = client.post(f"/workspace/models/{weather['model_id']}/predict-latest")
+    assert latest.status_code == 200, latest.text
+    assert isinstance(latest.json()["prediction"], list)
+    assert latest.json()["target_column"]
+    assert latest.json()["dataset_id"] == weather["dataset_id"]
+
+    _signup(client, "csv.other@example.com")
+    _login(client, "csv.other@example.com")
+    assert (
+        client.post(
+            f"/workspace/datasets/{dataset_id}/train",
+            json={"target_column": "humidity"},
+        ).status_code
+        == 404
+    )
+    assert client.get(f"/workspace/jobs/{job_id}").status_code == 404
