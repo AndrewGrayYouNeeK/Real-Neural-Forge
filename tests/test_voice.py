@@ -460,6 +460,25 @@ def test_member_status_reports_balance_and_packs(voice_client, monkeypatch):
     assert starter["chars"] == 25000
     assert starter["price_usd"] == 6.0
     assert body["checkout_available"] is False
+    assert body["checkout_test_mode"] is False
+
+
+def test_checkout_test_mode_is_reported_without_exposing_the_secret(
+    voice_client, monkeypatch: pytest.MonkeyPatch
+):
+    client, _root = voice_client
+    client.cookies.clear()
+    monkeypatch.setenv("STRIPE_SECRET_KEY", "sk_test_not_a_real_secret")
+    body = client.get("/voice/status").json()
+    assert body["checkout_available"] is True
+    assert body["checkout_test_mode"] is True
+    dumped = str(body)
+    assert "sk_test_not_a_real_secret" not in dumped
+    monkeypatch.setenv("STRIPE_SECRET_KEY", "sk_live_not_a_real_secret")
+    live = client.get("/voice/status").json()
+    assert live["checkout_available"] is True
+    assert live["checkout_test_mode"] is False
+    assert "sk_live_not_a_real_secret" not in str(live)
 
 
 def test_voice_store_cache_keys_are_safe(voice_client):

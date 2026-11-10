@@ -58,3 +58,20 @@ def test_public_weather_forecast_endpoint() -> None:
     assert body["unit"] == "°C"
     assert body["forecast"]
     assert body["name"] == "Central Park temperature"
+
+
+def test_public_starter_catalog_lists_the_five_samples() -> None:
+    client = TestClient(app, raise_server_exceptions=True)
+    response = client.get("/starters")
+    assert response.status_code == 200
+    body = response.json()
+    ids = [starter["id"] for starter in body["starters"]]
+    assert ids == ["weather", "stocks", "crypto", "near-earth", "lunar"]
+    assert "lottery" not in ids
+    names = {starter["id"]: starter["name"] for starter in body["starters"]}
+    assert names["weather"] == "Central Park temperature"
+    assert "AAPL" in names["stocks"]
+    assert "Bitcoin" in names["crypto"]
+    weather = next(starter for starter in body["starters"] if starter["id"] == "weather")
+    assert weather["unit"] == "°C"
+    assert "NOAA" in weather["source"]

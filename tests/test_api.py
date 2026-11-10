@@ -845,6 +845,15 @@ class TestForecastDashboard:
         assert "lottery" not in html.lower()
         assert "Moon phase" in html
         assert "Train on my CSV" in html
+        assert 'id="pricing"' in html
+        assert "What's free, and what uses credits" in html
+        assert "Payments are not live." in html
+        assert "will not charge a real" in html
+        assert "Try a sample model" in html
+        assert "Try the Central Park temperature sample" in html
+        assert "Try the Bitcoin sample" in html
+        assert 'href="/docs"' in html
+        assert "API docs" in html
         assert 'id="csv-train-file"' in html
         assert 'id="account-btn"' in html
         assert 'id="sign-in-modal"' in html
@@ -908,6 +917,24 @@ class TestLunarEndpoints:
         assert client.get("/powerball/scorecard").status_code == 404
         assert client.get("/lottery/lunar-analysis").status_code == 404
         assert client.get("/starters/lottery/forecast").status_code == 404
+
+    def test_api_docs_page_is_public(self, client):
+        page = client.get("/docs")
+        assert page.status_code == 200
+        html = page.text
+        assert "API docs and examples" in html
+        assert "curl -sS https://forge.youneek.dev/health" in html
+        assert "/starters/weather/forecast" in html
+        assert "/workspace/limits" in html
+        assert "/live/ask" in html
+        assert "/openapi.json" in html
+        assert "Payments are not live" in html
+        assert "lottery" not in html.lower()
+        schema = client.get("/openapi.json")
+        assert schema.status_code == 200
+        assert "/docs" not in schema.json().get("paths", {})
+        explorer = client.get("/openapi/docs")
+        assert explorer.status_code == 200
 
 
 class TestAppVersion:
