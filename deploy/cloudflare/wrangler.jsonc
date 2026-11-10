@@ -68,6 +68,7 @@
     "NEURAL_FORGE_CHECKPOINT_URL": "https://github.com/AndrewGrayYouNeeK/Real-Neural-Forge/releases/download/champions/champion-default.pt",
     "NEURAL_FORGE_STORAGE": "cloudflare",
     "NEURAL_FORGE_BINDINGS_URL": "http://bindings.neuralforge",
+    "NEURAL_FORGE_PUBLIC_URL": "https://forge.youneek.dev",
     "NEURAL_FORGE_OWNER_EMAIL": "andrew@youneek.xyz"
   }
 }

@@ -284,6 +284,7 @@ def test_checkout_opens_a_stripe_session(voice_client, monkeypatch: pytest.Monke
         captured["price"] = pack.price_usd
         captured["user_id"] = actor.user_id
         captured["secret"] = secret
+        captured["base_url"] = base_url
         return {"id": "cs_test_1", "url": "https://checkout.stripe.com/c/pay/cs_test_1"}
 
     monkeypatch.setattr(voice_service, "create_checkout_session", fake_session)
@@ -295,8 +296,93 @@ def test_checkout_opens_a_stripe_session(voice_client, monkeypatch: pytest.Monke
     assert captured["pack_id"] == "standard"
     assert captured["user_id"] == user_id
     assert captured["secret"] == STRIPE_SECRET
+    assert captured["base_url"].startswith("https://")
     unknown = client.post("/voice/checkout", json={"pack_id": "nope"})
     assert unknown.status_code == 404
+
+
+def test_checkout_uses_forwarded_https_host(
+    voice_client, monkeypatch: pytest.MonkeyPatch
+):
+    client, _root = voice_client
+    _signup(client, "forwarded@example.com")
+    monkeypatch.setenv("STRIPE_SECRET_KEY", STRIPE_SECRET)
+    monkeypatch.delenv("NEURAL_FORGE_PUBLIC_URL", raising=False)
+    captured: dict = {}
+
+    def fake_session(pack, actor, secret, base_url):
+        del pack, actor, secret
+        captured["base_url"] = base_url
+        return {
+            "id": "cs_test_fwd",
+            "url": "https://checkout.stripe.com/c/pay/cs_test_fwd",
+        }
+
+    monkeypatch.setattr(voice_service, "create_checkout_session", fake_session)
+    response = client.post(
+        "/voice/checkout",
+        json={"pack_id": "starter"},
+        headers={
+            "X-Forwarded-Proto": "http",
+            "X-Forwarded-Host": "forge.youneek.dev",
+        },
+    )
+    assert response.status_code == 200, response.text
+    assert captured["base_url"] == "https://forge.youneek.dev"
+
+
+def test_checkout_prefers_configured_public_url_when_forwarded_is_internal(
+    voice_client, monkeypatch: pytest.MonkeyPatch
+):
+    client, _root = voice_client
+    _signup(client, "public-url@example.com")
+    monkeypatch.setenv("STRIPE_SECRET_KEY", STRIPE_SECRET)
+    monkeypatch.setenv("NEURAL_FORGE_PUBLIC_URL", "https://forge.youneek.dev")
+    captured: dict = {}
+
+    def fake_session(pack, actor, secret, base_url):
+        del pack, actor, secret
+        captured["base_url"] = base_url
+        return {
+            "id": "cs_test_env",
+            "url": "https://checkout.stripe.com/c/pay/cs_test_env",
+        }
+
+    monkeypatch.setattr(voice_service, "create_checkout_session", fake_session)
+    response = client.post(
+        "/voice/checkout",
+        json={"pack_id": "starter"},
+        headers={
+            "X-Forwarded-Proto": "http",
+            "X-Forwarded-Host": "0.0.0.0:8000",
+        },
+    )
+    assert response.status_code == 200, response.text
+    assert captured["base_url"] == "https://forge.youneek.dev"
+
+
+def test_checkout_maps_stripe_errors_to_json(
+    voice_client, monkeypatch: pytest.MonkeyPatch
+):
+    client, _root = voice_client
+    _signup(client, "stripe-error@example.com")
+    monkeypatch.setenv("STRIPE_SECRET_KEY", STRIPE_SECRET)
+    monkeypatch.setenv("NEURAL_FORGE_PUBLIC_URL", "https://forge.youneek.dev")
+
+    def failing_create(**kwargs):
+        del kwargs
+        raise voice_service.stripe.InvalidRequestError(
+            message="Not a valid URL",
+            param="success_url",
+        )
+
+    monkeypatch.setattr(voice_service.stripe.checkout.Session, "create", failing_create)
+    response = client.post("/voice/checkout", json={"pack_id": "starter"})
+    assert response.status_code == 502, response.text
+    detail = response.json()["detail"]
+    assert "Not a valid URL" in str(detail)
+    assert "Internal Server Error" not in response.text
+    assert "sk_" not in response.text
 
 
 def test_webhook_verifies_the_signature_before_crediting(
@@ -407,3 +493,34 @@ def test_cache_store_failure_is_json_503(voice_client, monkeypatch: pytest.Monke
     assert "application/json" in spoken.headers["content-type"]
     assert "temporarily unavailable" in spoken.json()["detail"]
     assert spoken.text != "Internal Server Error"
+
+
+def test_resolve_checkout_base_url_upgrades_http_and_rejects_internal(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    from src.voice.config import normalize_public_url, resolve_checkout_base_url
+
+    monkeypatch.delenv("NEURAL_FORGE_PUBLIC_URL", raising=False)
+    assert (
+        normalize_public_url("http://forge.youneek.dev") == "https://forge.youneek.dev"
+    )
+    assert normalize_public_url("http://localhost:8000") == "http://localhost:8000"
+    assert normalize_public_url("http://0.0.0.0:8000") is None
+    assert normalize_public_url("http://bindings.neuralforge") is None
+    assert (
+        resolve_checkout_base_url(
+            forwarded_proto="https",
+            forwarded_host="forge.youneek.dev",
+            request_base_url="http://0.0.0.0:8000",
+        )
+        == "https://forge.youneek.dev"
+    )
+    monkeypatch.setenv("NEURAL_FORGE_PUBLIC_URL", "https://forge.youneek.dev")
+    assert (
+        resolve_checkout_base_url(
+            forwarded_proto="http",
+            forwarded_host="0.0.0.0:8000",
+            request_base_url="http://0.0.0.0:8000",
+        )
+        == "https://forge.youneek.dev"
+    )
