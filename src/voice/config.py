@@ -85,7 +85,7 @@ def stripe_secret() -> str | None:
 def stripe_is_test_mode() -> bool:
     """True only when a Stripe test secret is configured. Never logs the secret."""
     secret = stripe_secret()
-    return bool(secret) and secret.startswith("sk_test_")
+    return secret is not None and secret.startswith("sk_test_")
 
 
 def webhook_secret() -> str | None:
