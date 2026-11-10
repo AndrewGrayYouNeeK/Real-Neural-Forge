@@ -163,13 +163,11 @@ def voice_status(actor: Actor | None, config: dict[str, Any] | None) -> dict[str
     }
 
 
-def _unavailable_voice(exc: Exception) -> WorkspaceError:
-    error = WorkspaceError(
+def _unavailable_voice() -> WorkspaceError:
+    return WorkspaceError(
         503,
         "GQ voice is temporarily unavailable. Text on the site is unaffected.",
     )
-    error.__cause__ = exc
-    return error
 
 
 def speak(actor: Actor, text: str, config: dict[str, Any] | None) -> dict[str, Any]:
@@ -222,15 +220,24 @@ def speak(actor: Actor, text: str, config: dict[str, Any] | None) -> dict[str, A
                     "Voice & credits page. Text on Neural Forge stays free.",
                 )
     except (SqlError, StorageError) as exc:
-        raise _unavailable_voice(exc)
+        raise _unavailable_voice() from exc
     audio = synthesize_speech(cleaned, cfg)
     try:
         store.cache_put(digest, audio)
         if actor.is_owner:
             store.record_usage(
-                actor.user_id, SPEAK_USAGE_KIND, len(cleaned), cached=False, balance=None
+                actor.user_id,
+                SPEAK_USAGE_KIND,
+                len(cleaned),
+                cached=False,
+                balance=None,
             )
-            return {"audio": audio, "cached": False, "chars": len(cleaned), "balance": None}
+            return {
+                "audio": audio,
+                "cached": False,
+                "chars": len(cleaned),
+                "balance": None,
+            }
         balance = store.spend(actor.user_id, len(cleaned))
         if balance is None:  # pragma: no cover - the check above makes this a race
             raise WorkspaceError(

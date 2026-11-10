@@ -360,7 +360,8 @@ def test_webhook_needs_a_configured_secret(voice_client, monkeypatch):
     assert response.status_code == 503
 
 
-def test_member_status_reports_balance_and_packs(voice_client):
+def test_member_status_reports_balance_and_packs(voice_client, monkeypatch):
+    monkeypatch.delenv("STRIPE_SECRET_KEY", raising=False)
     client, _root = voice_client
     _signup(client, "status@example.com")
     body = client.get("/voice/status").json()

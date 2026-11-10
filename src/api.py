@@ -38,7 +38,6 @@ from src.utils.config import load_config
 from src.utils.paths import REPO_ROOT, resolve_repo_path
 from src.voice.routes import router as voice_router
 from src.workspace.errors import WorkspaceError
-from src.workspace.starter_forecast import starter_forecast
 from src.workspace.routes import router as workspace_router
 from src.workspace.runtime import runtime
 from src.workspace.service import (
@@ -52,6 +51,7 @@ from src.workspace.service import (
     training_active,
     watch_authorized,
 )
+from src.workspace.starter_forecast import starter_forecast
 from src.youneek import parse_moment, snapshot
 
 logger = logging.getLogger("uvicorn.error")
@@ -566,7 +566,6 @@ def lottery_lunar_analysis() -> dict[str, Any]:
         return read_lunar_analysis()
     except ValueError as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
-
 
 
 @app.get("/starters/{starter_id}/forecast", tags=["starters"])
