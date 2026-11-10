@@ -548,6 +548,25 @@ function approachHighlightLine(highlights) {
   return `Closest catalogued approaches in this saved snapshot: ${bits.join("; ")}.`;
 }
 
+function uncertaintyText(uncertainty) {
+  if (!uncertainty || typeof uncertainty !== "object") return "";
+  const lows = Array.isArray(uncertainty.p10) ? uncertainty.p10 : [];
+  const highs = Array.isArray(uncertainty.p90) ? uncertainty.p90 : [];
+  const low = asNumber(lows[0]);
+  const high = asNumber(highs[0]);
+  const lines = [];
+  if (low != null && high != null && low !== high) {
+    lines.push(`Likely range: ${formatMetric(low)} to ${formatMetric(high)}.`);
+  }
+  const confidence = asNumber(uncertainty.confidence);
+  if (confidence != null) {
+    const percent = Math.round(confidence * 100);
+    const state = uncertainty.calibrated ? "calibrated" : "not calibrated yet";
+    lines.push(`Confidence ${percent}% (${state}).`);
+  }
+  return lines.join(" ");
+}
+
 function sampleReplyParts(starterId, series, steps) {
   const lines = sampleModelLines(starterId, series, steps);
   const extra = approachHighlightLine(series.highlights);
@@ -556,7 +575,22 @@ function sampleReplyParts(starterId, series, steps) {
     const path = stepText(steps);
     if (path) lines.push(path);
   }
+  const band = uncertaintyText(series.uncertainty);
+  if (band) lines.push(band);
   return { text: lines.join("\n\n"), chart: forecastChart(series, steps) };
+}
+
+async function baselineComparison(modelId) {
+  try {
+    const report = await fetchJson(`/evaluation/${encodeURIComponent(modelId)}/backtest`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: "{}",
+    });
+    return report && typeof report.comparison === "string" ? report.comparison : "";
+  } catch {
+    return "";
+  }
 }
 
 async function loadDefaultDemos() {
@@ -575,7 +609,9 @@ async function loadDefaultDemos() {
       const series = await fetchJson(`/starters/${id}/forecast?points=90`);
       const steps = normalizeForecast(series);
       const reply = sampleReplyParts(id, series, steps);
-      addReply(reply.text, reply.chart);
+      const comparison = await baselineComparison(id);
+      const text = comparison ? `${reply.text}\n\n${comparison}` : reply.text;
+      addReply(text, reply.chart);
     } catch {
       // The sample chips still open the same model if this preload fails.
     }
@@ -587,7 +623,10 @@ async function sampleModelReply(question) {
   try {
     const series = await fetchJson(`/starters/${starterId}/forecast?points=120`);
     const steps = normalizeForecast(series);
-    return sampleReplyParts(starterId, series, steps);
+    const reply = sampleReplyParts(starterId, series, steps);
+    const comparison = await baselineComparison(starterId);
+    if (comparison) reply.text = `${reply.text}\n\n${comparison}`;
+    return reply;
   } catch (error) {
     return {
       text:
@@ -970,10 +1009,21 @@ async function announceCsvTrainResult(status) {
       ? forecast.prediction[0]
       : forecast.prediction;
     const column = forecast.target_column || "value";
-    addReply(
+    const lines = [
       `Training finished. The next value I forecast for “${column}” is ${formatMetric(value)}. ` +
-        "The run and this prediction are in your private workspace under Tools."
-    );
+        "The run and this prediction are in your private workspace under Tools.",
+    ];
+    const band = uncertaintyText(forecast.uncertainty);
+    if (band) lines.push(band);
+    try {
+      const metrics = await fetchJson(`/workspace/models/${modelId}/metrics`);
+      if (metrics && typeof metrics.comparison === "string" && metrics.comparison) {
+        lines.push(metrics.comparison);
+      }
+    } catch {
+      // The point forecast still stands when the backtest is unavailable.
+    }
+    addReply(lines.join("\n\n"));
     refreshWorkspace().catch(() => {});
   } catch (error) {
     addReply(

@@ -31,6 +31,7 @@ from src.workspace.service import (
     login,
     login_owner,
     logout,
+    model_metrics,
     predict_latest_model,
     predict_model,
     predict_starter,
@@ -264,6 +265,16 @@ def workspace_update_config(
 ) -> dict[str, Any]:
     actor = _actor(request, authorization)
     return _call(lambda: update_config(actor, config_id, body.body, _app_config()))
+
+
+@router.get("/workspace/models/{model_id}/metrics", tags=["workspace"])
+def workspace_model_metrics(
+    model_id: str,
+    request: Request,
+    authorization: str | None = Header(default=None),
+) -> dict[str, Any]:
+    actor = _actor(request, authorization)
+    return _call(lambda: model_metrics(actor, model_id))
 
 
 @router.get("/workspace/models", tags=["workspace"])

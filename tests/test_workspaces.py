@@ -532,3 +532,17 @@ def test_one_click_csv_train_flow_is_capped_and_private(workspace_client):
         == 404
     )
     assert client.get(f"/workspace/jobs/{job_id}").status_code == 404
+
+
+def test_workspace_model_metrics_compare_with_simple_baselines(workspace_client):
+    client, _root = workspace_client
+    _signup(client, "metrics@example.com")
+    starters = client.get("/workspace/starters").json()["starters"]
+    lunar = next(row for row in starters if row["id"] == "lunar")
+    response = client.get(f"/workspace/models/{lunar['model_id']}/metrics")
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert set(body["baselines"]) == {"naive", "seasonal_naive", "moving_average"}
+    assert "than the best simple baseline" in body["comparison"]
+    assert body["metrics"]["mae"] >= 0
+    assert "lottery" not in response.text.lower()

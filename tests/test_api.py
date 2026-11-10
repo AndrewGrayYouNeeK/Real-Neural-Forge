@@ -900,6 +900,8 @@ class TestForecastDashboard:
         assert "/starters/weather/forecast" in app_js
         assert "loadDefaultDemos" in app_js
         assert "/starters/${id}/forecast" in app_js
+        assert "uncertaintyText" in app_js
+        assert "baselineComparison" in app_js
         assert "/workspace/datasets/" in app_js
         assert "/predict-latest" in app_js
         assert "isCsvTrainRequest" in app_js

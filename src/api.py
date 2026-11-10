@@ -20,6 +20,7 @@ from pydantic import BaseModel, Field
 from src import __version__
 from src.dashboard_data import recent_series, validation_predictions
 from src.data.lunar import lunar_now, lunar_on
+from src.evaluation.routes import router as evaluation_router
 from src.evaluation.tracking import record_payload, uncertainty_for
 from src.forecasting.spec import MAX_HORIZON, forecast_spec_from_config
 from src.inference.predictor import ForecastBatch, Predictor
@@ -272,6 +273,7 @@ if FRONTEND_DIR.exists():
     app.mount("/assets", StaticFiles(directory=FRONTEND_DIR), name="assets")
 
 app.include_router(workspace_router)
+app.include_router(evaluation_router)
 app.include_router(voice_router)
 
 
