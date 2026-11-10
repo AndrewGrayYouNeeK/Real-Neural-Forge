@@ -3,10 +3,10 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Neural Forge — Ask what comes next</title>
+    <title>Neural Forge — Train a small model on your numbers</title>
     <meta
       name="description"
-      content="Neural Forge is a small AI you can just talk to. Ask about weather, markets, the lottery, space, the moon — or have it train on your own numbers."
+      content="Train a small model on your numbers. Ask what comes next — weather, markets, lottery, near-Earth objects, or your own data. Free to read. Train and voice credits when you want more."
     />
     <link rel="icon" href="/favicon.ico" sizes="any" />
     <link rel="stylesheet" href="/assets/styles.css" />
@@ -134,12 +134,28 @@
 
         <main class="chat-main">
           <section class="hero" id="welcome" aria-labelledby="welcome-heading">
-            <h1 id="welcome-heading">Ask Neural Forge anything.</h1>
+            <h1 id="welcome-heading">
+              Train a small model on your numbers.
+              <span class="hero-lead">Ask what comes next.</span>
+            </h1>
             <p class="hero-copy">
-              Just talk to it in plain words. Ask about tomorrow's weather, the
-              markets, the lottery, asteroids, the moon — or have it train on
-              your own numbers. Reading everything is free.
+              Weather, markets, lottery, near-Earth objects, or your own data.
+              Free to read. Train when you want more. Listening uses voice credits.
             </p>
+            <ul class="hero-points">
+              <li>
+                <strong>Train on a CSV</strong>
+                in a private workspace, on your series.
+              </li>
+              <li>
+                <strong>Compare experiments</strong>
+                and keep the runs you care about.
+              </li>
+              <li>
+                <strong>Ask in the chat</strong>
+                for live answers or your model's forecast.
+              </li>
+            </ul>
           </section>
 
           <p id="notice" class="notice" role="alert"></p>
@@ -165,8 +181,8 @@
             <button class="chip" type="button" data-question="How are the markets doing?">
               How are the markets?
             </button>
-            <button class="chip" type="button" data-question="Train a model on my data">
-              Train a model on my data
+            <button class="chip" type="button" data-question="Train on my CSV">
+              Train on my CSV
             </button>
           </nav>
 
@@ -177,7 +193,7 @@
               name="question"
               type="text"
               autocomplete="off"
-              placeholder="Ask about weather, markets, lottery, space, the moon…"
+              placeholder="Ask about your data, or weather, markets, lottery, space…"
             />
             <button class="btn primary" type="submit">Ask</button>
           </form>
