@@ -465,6 +465,14 @@ body {
   color: #041018;
 }
 
+.mode-pill[data-state="listening"],
+.mode-pill[data-state="thinking"],
+.mode-pill[data-state="speaking"] {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #041018;
+}
+
 .chat-form input {
   flex: 1;
   min-width: 0;

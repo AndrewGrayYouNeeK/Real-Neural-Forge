@@ -1279,11 +1279,227 @@ async function handleQuestion(question) {
       scrollToBottom();
     }
     clearNotice();
+    return typeof reply.text === "string" ? reply.text : "";
   } catch (error) {
     pending.remove();
     addReply(`Something went wrong on my side. ${error.message || error}`);
     reportError(error);
+    return "";
   }
+}
+
+/* --------------------------------------------------------------- talk mode */
+
+const TALK_UNSUPPORTED =
+  "This browser can't use hands-free speech recognition, so Talk mode stays off. You can still type, and the speaker button reads replies in GQ voice.";
+const TALK_NO_CREDIT =
+  "You are out of GQ voice credit, so Talk mode will keep answering in text. Reading stays free.";
+
+const talk = {
+  active: false,
+  state: "idle",
+  recognition: null,
+  audio: null,
+  turn: 0,
+  voiceOff: false,
+  toldVoice: false,
+};
+
+function speechRecognitionCtor() {
+  return window.SpeechRecognition || window.webkitSpeechRecognition || null;
+}
+
+function speechPlainText(value) {
+  // Money, dates, and units are normalized on the server before GQ voice.
+  return String(value || "").replace(/\s+/g, " ").trim();
+}
+
+function setTalkState(state) {
+  talk.state = state;
+  const button = document.getElementById("talk-toggle");
+  if (!button) return;
+  const labels = {
+    idle: "Talk",
+    listening: "Listening",
+    thinking: "Thinking",
+    speaking: "Speaking",
+  };
+  button.textContent = labels[state] || "Talk";
+  button.dataset.state = state;
+  button.setAttribute("aria-pressed", talk.active ? "true" : "false");
+  button.setAttribute(
+    "aria-label",
+    talk.active ? `${button.textContent}. Tap to stop or interrupt.` : "Start Talk mode"
+  );
+}
+
+function stopTalkAudio() {
+  const audio = talk.audio;
+  talk.audio = null;
+  if (!audio) return;
+  audio.pause();
+  if (audio.src) URL.revokeObjectURL(audio.src);
+}
+
+function stopTalk() {
+  talk.active = false;
+  talk.turn += 1;
+  const recognition = talk.recognition;
+  talk.recognition = null;
+  if (recognition) {
+    recognition.onend = null;
+    recognition.onresult = null;
+    recognition.onerror = null;
+    try {
+      recognition.abort();
+    } catch {
+      // Already stopped.
+    }
+  }
+  stopTalkAudio();
+  setTalkState("idle");
+}
+
+function startListening() {
+  if (!talk.active) return;
+  const Recognition = speechRecognitionCtor();
+  if (!Recognition) {
+    stopTalk();
+    addReply(TALK_UNSUPPORTED);
+    return;
+  }
+  stopTalkAudio();
+  const recognition = new Recognition();
+  talk.recognition = recognition;
+  recognition.lang = "en-US";
+  recognition.interimResults = false;
+  recognition.continuous = false;
+  recognition.onresult = (event) => {
+    const first = event.results && event.results[0] && event.results[0][0];
+    const transcript = first && first.transcript ? String(first.transcript) : "";
+    setTalkState("thinking");
+    onTalkUtterance(transcript).catch(() => {
+      if (talk.active) startListening();
+    });
+  };
+  recognition.onerror = (event) => {
+    if (!talk.active) return;
+    const code = event && event.error;
+    if (code === "not-allowed" || code === "service-not-allowed") {
+      stopTalk();
+      addReply("The microphone is blocked. Allow it in the browser, or keep typing.");
+    }
+  };
+  recognition.onend = () => {
+    if (talk.active && talk.state === "listening") startListening();
+  };
+  setTalkState("listening");
+  try {
+    recognition.start();
+  } catch {
+    // Starting twice throws. The open session keeps listening.
+  }
+}
+
+async function speakTalkTurn(text) {
+  const mine = talk.turn;
+  const spoken = speechPlainText(text).slice(0, MAX_VOICE_CHARS);
+  if (!talk.active || mine !== talk.turn) return;
+  if (!spoken || talk.voiceOff) {
+    startListening();
+    return;
+  }
+  if (!(await voicePlaybackAllowed())) {
+    if (!talk.active || mine !== talk.turn) return;
+    if (!state.toldVoiceResting) {
+      state.toldVoiceResting = true;
+      addReply(VOICE_RESTING_MESSAGE);
+    }
+    startListening();
+    return;
+  }
+  setTalkState("speaking");
+  let response;
+  try {
+    response = await fetch("/voice/speak", {
+      method: "POST",
+      credentials: "same-origin",
+      headers: authHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify({ text: spoken }),
+    });
+  } catch {
+    if (talk.active && mine === talk.turn) startListening();
+    return;
+  }
+  if (!talk.active || mine !== talk.turn) return;
+  if (response.status === 401 || response.status === 402) {
+    talk.voiceOff = true;
+    if (!talk.toldVoice) {
+      talk.toldVoice = true;
+      addReply(
+        response.status === 401
+          ? "GQ voice needs a free account, so Talk mode will keep answering in text."
+          : TALK_NO_CREDIT
+      );
+    }
+    startListening();
+    return;
+  }
+  if (!response.ok) {
+    startListening();
+    return;
+  }
+  const audio = new Audio(URL.createObjectURL(await response.blob()));
+  talk.audio = audio;
+  await new Promise((resolve) => {
+    const finish = () => resolve();
+    audio.addEventListener("ended", finish, { once: true });
+    audio.addEventListener("pause", finish, { once: true });
+    audio.play().catch(finish);
+  });
+  if (talk.audio === audio) {
+    URL.revokeObjectURL(audio.src);
+    talk.audio = null;
+  }
+  if (talk.active && talk.state === "speaking" && mine === talk.turn) startListening();
+}
+
+async function onTalkUtterance(transcript) {
+  const question = String(transcript || "").trim();
+  if (!talk.active) return;
+  if (!question) {
+    startListening();
+    return;
+  }
+  setTalkState("thinking");
+  const answerText = await handleQuestion(question);
+  if (!talk.active) return;
+  await speakTalkTurn(answerText);
+}
+
+function beginTalk() {
+  if (!speechRecognitionCtor()) {
+    addReply(TALK_UNSUPPORTED);
+    return;
+  }
+  talk.active = true;
+  talk.voiceOff = false;
+  talk.toldVoice = false;
+  startListening();
+}
+
+function onTalkClick() {
+  if (!talk.active) {
+    beginTalk();
+    return;
+  }
+  if (talk.state === "speaking") {
+    talk.turn += 1;
+    stopTalkAudio();
+    startListening();
+    return;
+  }
+  stopTalk();
 }
 
 /* ------------------------------------------------------------------ voice */
@@ -1739,6 +1955,7 @@ setChatMode(chatMode());
 document.getElementById("unhinged-toggle").addEventListener("click", () => {
   setChatMode(chatMode() === "unhinged" ? "normal" : "unhinged");
 });
+document.getElementById("talk-toggle").addEventListener("click", onTalkClick);
 
 document.getElementById("chat-form").addEventListener("submit", (event) => {
   event.preventDefault();

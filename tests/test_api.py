@@ -842,6 +842,7 @@ class TestForecastDashboard:
         assert 'id="chat-input"' in html
         assert 'id="unhinged-toggle"' in html
         assert "Unhinged" in html
+        assert 'id="talk-toggle"' in html
         assert "What will the weather be tomorrow?" in html
         assert "Next lottery numbers" not in html
         assert "lottery" not in html.lower()
@@ -897,6 +898,16 @@ class TestForecastDashboard:
         assert "Voice is resting for today, text still works." in app_js
         assert "neuralForgeChatMode" in app_js
         assert "mode: chatMode()" in app_js
+        assert "function speechRecognitionCtor" in app_js
+        assert "window.SpeechRecognition" in app_js
+        assert "window.webkitSpeechRecognition" in app_js
+        assert "function speechPlainText" in app_js
+        assert "Listening" in app_js
+        assert "Thinking" in app_js
+        assert "Speaking" in app_js
+        assert "TALK_UNSUPPORTED" in app_js
+        assert "TALK_NO_CREDIT" in app_js
+        assert "onTalkClick" in app_js
         assert "/starters/weather/forecast" in app_js
         assert "loadDefaultDemos" in app_js
         assert "/starters/${id}/forecast" in app_js
