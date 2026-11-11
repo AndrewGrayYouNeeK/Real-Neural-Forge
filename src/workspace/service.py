@@ -28,7 +28,9 @@ from src.accounts.actor import (
 )
 from src.accounts.limits import Limits, load_limits
 from src.accounts.passwords import hash_password, validate_password, verify_password
-from src.evaluation.tracking import record_payload, uncertainty_for
+from src.evaluation.backtest import rolling_origin_backtest
+from src.evaluation.run import _predictor_fn, save_backtest, stored_backtest
+from src.evaluation.tracking import default_tracker, record_payload, uncertainty_for
 from src.inference.predictor import Predictor
 from src.models.registry import build_model
 from src.voice.store import migrate_voice
@@ -852,6 +854,84 @@ def predict_model(
         else None,
         limits=limits_for(config),
     )
+
+
+def model_metrics(actor: Actor, model_id: str) -> dict[str, Any]:
+    """Coverage and a cached rolling-origin backtest for one private model."""
+    store = require_store()
+    model = store.get_model(actor.user_id, model_id)
+    if model is None:
+        raise WorkspaceError(404, "Model not found.")
+    try:
+        report = stored_backtest(model_id)
+    except (OSError, RuntimeError, TypeError, ValueError, SqlError):
+        report = None
+    if report is None:
+        report = _backtest_owned_model(store, model)
+    coverage: list[dict[str, Any]] = []
+    try:
+        coverage = [row.as_dict() for row in default_tracker().coverage(model_id)]
+    except (OSError, RuntimeError, TypeError, ValueError, SqlError):
+        coverage = []
+    return {
+        "model_id": model_id,
+        "comparison": report.get("comparison"),
+        "metrics": report.get("metrics"),
+        "baselines": report.get("baselines"),
+        "best_baseline": report.get("best_baseline"),
+        "coverage": coverage,
+        "backtest": report,
+    }
+
+
+def _backtest_actor(model: dict[str, Any]) -> Actor:
+    return Actor(
+        user_id=str(model["user_id"]),
+        email="",
+        role="member",
+        via="session",
+    )
+
+
+def _backtest_owned_model(
+    store: WorkspaceStore, model: dict[str, Any]
+) -> dict[str, Any]:
+    actor = _backtest_actor(model)
+    dataset = _dataset_for_model(store, actor, model)
+    if dataset is None:
+        raise WorkspaceError(422, "This model has no dataset to backtest.")
+    blob = store.get_blob(str(dataset["object_key"]))
+    if blob is None:
+        raise WorkspaceError(404, "Dataset bytes are missing.")
+    try:
+        cfg = json.loads(str(model["config_json"]))
+    except json.JSONDecodeError as exc:
+        raise WorkspaceError(500, "Model config is unreadable.") from exc
+    if not isinstance(cfg, dict):
+        raise WorkspaceError(500, "Model config is unreadable.")
+    if int(cfg.get("model", {}).get("input_dim", 1) or 1) != 1:
+        raise WorkspaceError(422, "Backtests currently score one-column series.")
+    raw_data = cfg.get("data")
+    data_cfg: dict[str, Any] = raw_data if isinstance(raw_data, dict) else {}
+    target = str(data_cfg.get("target_column") or "value")
+    seq_len = int(data_cfg.get("seq_len", 16) or 16)
+    values = _csv_column_values(blob, target)
+    built = build_model(cfg, ensemble=False)
+    with tempfile.TemporaryDirectory(prefix="nf-backtest-") as temporary:
+        path = Path(temporary) / "model.pt"
+        path.write_bytes(store.get_blob(str(model["object_key"])) or b"")
+        if not path.stat().st_size:
+            raise WorkspaceError(404, "Model weights are missing.")
+        predictor = Predictor.from_checkpoint(built, path, device="cpu")
+        report = rolling_origin_backtest(
+            values,
+            _predictor_fn(predictor, seq_len),
+            horizon=1,
+            min_train=max(16, seq_len),
+        )
+    report["model_id"] = str(model["id"])
+    save_backtest(str(model["id"]), report)
+    return report
 
 
 def list_predictions(actor: Actor) -> dict[str, Any]:
