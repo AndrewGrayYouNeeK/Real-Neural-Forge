@@ -11,6 +11,7 @@ import {
   SYSTEM_PROMPT,
   UNHINGED_PROMPT,
   UNHINGED_TEMPERATURE,
+  chatInputs,
   chatMode,
   estimateNeurons,
   extractModelText,
@@ -161,7 +162,7 @@ describe("AI quota", () => {
     const seen: string[] = [];
     const ai = {
       async run(_model: string, inputs: Record<string, unknown>) {
-        const messages = inputs.messages as { content: string }[];
+        const messages = (inputs.input || inputs.messages) as { content: string }[];
         seen.push(messages[0].content);
         return { response: "ok" };
       },
@@ -173,7 +174,7 @@ describe("AI quota", () => {
     const temperatures: unknown[] = [];
     const rewriting = {
       async run(_model: string, inputs: Record<string, unknown>) {
-        const messages = inputs.messages as { content: string }[];
+        const messages = (inputs.input || inputs.messages) as { content: string }[];
         prompts.push(messages[1].content);
         temperatures.push(inputs.temperature);
         return { response: "still 72°F" };
@@ -191,7 +192,7 @@ describe("AI quota", () => {
     expect(prompts[0]).toContain("exactly as written");
     expect(prompts[0]).toContain("fuck");
     expect(prompts[0].toLowerCase()).toContain("joke");
-    expect(temperatures).toEqual([UNHINGED_TEMPERATURE]);
+    expect(temperatures).toEqual([undefined]);
     expect(userContent("hey", "   ")).toBe("hey");
     expect(sanitizeFacts(123)).toBe("");
   });
@@ -208,6 +209,47 @@ describe("AI quota", () => {
     const result = await runChatModel(ai, "hi");
     expect(seen).toEqual([PRIMARY_MODEL, FALLBACK_MODEL]);
     expect(result.modelId).toBe(FALLBACK_MODEL);
+    const primary = chatInputs(PRIMARY_MODEL, UNHINGED_PROMPT, "hey", "unhinged");
+    expect(primary.temperature).toBeUndefined();
+    expect(primary.messages).toBeUndefined();
+    expect(primary.input).toEqual([
+      { role: "system", content: UNHINGED_PROMPT },
+      { role: "user", content: "hey" },
+    ]);
+    expect(primary.reasoning).toEqual({ effort: "low" });
+    expect(primary.max_output_tokens).toBe(160);
+    const fallback = chatInputs(FALLBACK_MODEL, UNHINGED_PROMPT, "hey", "unhinged");
+    expect(fallback.temperature).toBe(UNHINGED_TEMPERATURE);
+    expect(fallback.messages).toBeTruthy();
+    const logged: string[] = [];
+    const original = console.error;
+    console.error = (line?: unknown) => {
+      logged.push(String(line));
+    };
+    try {
+      const failing = {
+        async run(model: string) {
+          if (model === PRIMARY_MODEL) {
+            const error = new Error("responses rejected") as Error & { status?: number };
+            error.status = 400;
+            throw error;
+          }
+          return { response: "from 8b" };
+        },
+      };
+      const rescued = await runChatModel(failing, "hey", "unhinged");
+      expect(rescued.modelId).toBe(FALLBACK_MODEL);
+      expect(rescued.text).toBe("from 8b");
+      expect(logged.join("\n")).toContain("responses rejected");
+      expect(logged.join("\n")).toContain("400");
+      expect(logged.join("\n")).not.toContain("hey");
+    } finally {
+      console.error = original;
+    }
+    expect(UNHINGED_PROMPT).toContain("foul-mouthed comedian");
+    expect(UNHINGED_PROMPT).toContain("cuss a lot");
+    expect(UNHINGED_PROMPT).toContain("User: hey");
+    expect(UNHINGED_PROMPT).toContain("I told my calendar to fuck off");
     expect(SAFETY_DAILY_NEURONS).toBe(25000);
     expect(FREE_DAILY_NEURONS).toBe(10000);
     expect(GLOBAL_DAILY_NEURONS).toBe(SAFETY_DAILY_NEURONS);

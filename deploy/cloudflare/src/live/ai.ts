@@ -392,13 +392,26 @@ export function usageNeurons(result: unknown, prompt: string, answer: string, mo
   return estimateNeurons(input, output, model);
 }
 
-async function completeChat(
-  ai: AiLike,
+function usesResponsesApi(model: string): boolean {
+  return model.includes("gpt-oss");
+}
+
+export function chatInputs(
   model: string,
   system: string,
   content: string,
   mode: ChatMode,
-): Promise<{ text: string; neurons: number; modelId: string }> {
+): Record<string, unknown> {
+  if (usesResponsesApi(model)) {
+    return {
+      input: [
+        { role: "system", content: system },
+        { role: "user", content },
+      ],
+      reasoning: { effort: "low" },
+      max_output_tokens: MAX_OUTPUT_TOKENS,
+    };
+  }
   const inputs: Record<string, unknown> = {
     messages: [
       { role: "system", content: system },
@@ -407,7 +420,32 @@ async function completeChat(
     max_tokens: MAX_OUTPUT_TOKENS,
   };
   if (mode === "unhinged") inputs.temperature = UNHINGED_TEMPERATURE;
-  const result = await ai.run(model, inputs);
+  return inputs;
+}
+
+function errorDetails(error: unknown): { message: string; status: number | null } {
+  if (error instanceof Error) {
+    const status = (error as { status?: unknown }).status;
+    return { message: error.message, status: typeof status === "number" ? status : null };
+  }
+  if (error && typeof error === "object") {
+    const record = error as { message?: unknown; status?: unknown };
+    return {
+      message: typeof record.message === "string" ? record.message : "primary model failed",
+      status: typeof record.status === "number" ? record.status : null,
+    };
+  }
+  return { message: String(error), status: null };
+}
+
+async function completeChat(
+  ai: AiLike,
+  model: string,
+  system: string,
+  content: string,
+  mode: ChatMode,
+): Promise<{ text: string; neurons: number; modelId: string }> {
+  const result = await ai.run(model, chatInputs(model, system, content, mode));
   const text = extractModelText(result);
   if (!text) throw new Error("empty model response");
   const prompt = `${system}\n${content}`;
@@ -430,6 +468,15 @@ export async function runChatModel(
     return await completeChat(ai, primary, system, content, mode);
   } catch (error) {
     if (fallback === primary) throw error;
+    const details = errorDetails(error);
+    console.error(
+      JSON.stringify({
+        event: "ai.primary_failed",
+        model: primary,
+        message: details.message,
+        status: details.status,
+      }),
+    );
   }
   return completeChat(ai, fallback, system, content, mode);
 }
