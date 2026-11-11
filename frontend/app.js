@@ -13,7 +13,11 @@ const state = {
   trainingWatch: null,
   csvTrainPending: false,
   csvTrainJobId: null,
+  voiceResting: false,
+  toldVoiceResting: false,
 };
+
+const VOICE_RESTING_MESSAGE = "Voice is resting for today, text still works.";
 
 const SPEAK_LABEL = "Listen";
 const SPEAK_BUSY_LABEL = "Loading GQ…";
@@ -250,6 +254,20 @@ function showSpeakStop(button, token) {
   button.textContent = "Stop";
 }
 
+function rememberVoiceBudget(result) {
+  if (result && result.voice_resting) state.voiceResting = true;
+}
+
+async function voicePlaybackAllowed() {
+  if (state.voiceResting) return false;
+  try {
+    rememberVoiceBudget(await fetchJson("/live/budget"));
+  } catch {
+    // A missed status check does not block a listen the chat has not marked resting.
+  }
+  return !state.voiceResting;
+}
+
 async function speakMessage(message, speakButton) {
   if (
     speakButton.dataset.state === "playing" &&
@@ -264,6 +282,10 @@ async function speakMessage(message, speakButton) {
   const text = (message.dataset.speech || "").trim();
   if (!text) {
     showHint(message, "There is nothing in this reply to read aloud.");
+    return;
+  }
+  if (!(await voicePlaybackAllowed())) {
+    showHint(message, VOICE_RESTING_MESSAGE);
     return;
   }
   const token = ++speakToken;
@@ -1158,10 +1180,17 @@ async function askLive(question, options) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
     });
+    rememberVoiceBudget(result);
     const text = result && typeof result.text === "string" ? result.text.trim() : "";
     if (result && result.capped) return { text, capped: true };
     if (facts && !(result && result.model === true)) return { text, failed: true };
-    if (text) return { text };
+    if (text) {
+      return {
+        text,
+        voiceResting: Boolean(result && result.voice_resting),
+        voiceMessage: typeof result.voice_message === "string" ? result.voice_message : "",
+      };
+    }
   } catch (error) {
     return { text: (error && error.message) || ASK_UNAVAILABLE, failed: true };
   }
@@ -1188,6 +1217,10 @@ async function handleQuestion(question) {
     const reply = await answer(question);
     pending.remove();
     const replyMessage = addReply(reply.text, reply.chart);
+    if (reply.voiceResting && !state.toldVoiceResting) {
+      state.toldVoiceResting = true;
+      showHint(replyMessage, reply.voiceMessage || VOICE_RESTING_MESSAGE);
+    }
     if (reply.actions) {
       const actions = replyMessage.querySelector(".message-actions");
       for (const [label, action] of reply.actions) {

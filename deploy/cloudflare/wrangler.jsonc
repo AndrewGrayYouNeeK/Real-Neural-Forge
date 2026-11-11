@@ -69,6 +69,13 @@
     "NEURAL_FORGE_STORAGE": "cloudflare",
     "NEURAL_FORGE_BINDINGS_URL": "http://bindings.neuralforge",
     "NEURAL_FORGE_PUBLIC_URL": "https://forge.youneek.dev",
-    "NEURAL_FORGE_OWNER_EMAIL": "andrew@youneek.xyz"
+    "NEURAL_FORGE_OWNER_EMAIL": "andrew@youneek.xyz",
+    "NEURAL_FORGE_AI_MODEL": "@cf/openai/gpt-oss-120b",
+    "NEURAL_FORGE_AI_FALLBACK_MODEL": "@cf/meta/llama-3.1-8b-instruct-fp8-fast",
+    "NEURAL_FORGE_AI_DAILY_NEURONS": "25000",
+    "NEURAL_FORGE_AI_FREE_DAILY_NEURONS": "10000",
+    "NEURAL_FORGE_AI_PER_IP_DAILY_NEURONS": "3200",
+    "NEURAL_FORGE_AI_PER_IP_DAILY_REQUESTS": "40",
+    "NEURAL_FORGE_AI_RESERVE_NEURONS": "80"
   }
 }

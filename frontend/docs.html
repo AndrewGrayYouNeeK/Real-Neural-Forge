@@ -125,6 +125,17 @@ curl -sS -X POST https://forge.youneek.dev/live/ask \
         question.
       </p>
       <p>
+        General answers use GPT-OSS 120B. A successful reply adds
+        <code>voice_resting</code> and <code>voice_message</code>. After the
+        free daily neuron budget, <code>voice_resting</code> is true for
+        everyone except the owner and <code>voice_message</code> is
+        “Voice is resting for today, text still works.” Text still arrives.
+        <code>GET /live/budget</code> reports the same flag without spending a
+        reply. Past the hard daily safety cap the reply is
+        “Daily limit reached, back tomorrow.” The owner skips the per-visitor
+        cap and still counts toward that global cap.
+      </p>
+      <p>
         Related container routes include
         <code>GET /lunar</code>,
         <code>GET /space/near-earth</code>, and
