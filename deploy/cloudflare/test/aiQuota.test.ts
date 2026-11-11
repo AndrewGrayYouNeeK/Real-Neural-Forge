@@ -4,6 +4,7 @@ import {
   GLOBAL_DAILY_NEURONS,
   PER_IP_DAILY_REQUESTS,
   RESERVE_NEURONS,
+  SYSTEM_PROMPT,
   estimateNeurons,
   extractModelText,
   sanitizeQuestion,
@@ -104,5 +105,18 @@ describe("AI quota", () => {
     expect(sanitizeQuestion("  hello\n\nworld  ".repeat(80)).length).toBeLessThanOrEqual(500);
     expect(estimateNeurons(300, 150)).toBeGreaterThan(0);
     expect(extractModelText({ response: " George Washington " })).toBe("George Washington");
+  });
+
+  it("allows casual profanity and still forbids harm and secrets", () => {
+    const prompt = SYSTEM_PROMPT.toLowerCase();
+    expect(prompt).toContain("casual profanity is fine");
+    expect(prompt).not.toMatch(/no (cussing|swearing|profanity)|do not swear|don't swear/);
+    expect(prompt).toContain("secrets");
+    expect(prompt).toContain("hate speech");
+    expect(prompt).toContain("slurs");
+    expect(prompt).toContain("harassment");
+    expect(prompt).toContain("threats");
+    expect(prompt).toContain("minors");
+    expect(prompt).toContain("illegal instructions");
   });
 });
