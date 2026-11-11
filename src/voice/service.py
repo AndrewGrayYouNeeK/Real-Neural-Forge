@@ -33,6 +33,12 @@ from src.voice.config import (
     webhook_secret,
 )
 from src.voice.store import VoiceStore, utc_day
+from src.voice.text import (
+    NORMALIZER_VERSION,
+    speech_text,
+    split_for_speech,
+    truncate_speech,
+)
 from src.workspace.bindings import StorageError
 from src.workspace.errors import WorkspaceError
 from src.workspace.service import require_store
@@ -54,50 +60,137 @@ def voice_store() -> VoiceStore:
 
 
 def _cache_digest(cfg: VoiceConfig, text: str) -> str:
-    return hashlib.sha256(f"{cfg.voice_id}\x00{text}".encode()).hexdigest()
+    """Key on the voice, the model, the delivery settings, and the normalized text.
+
+    Old clips were cached from the raw string, so a settings or normalizer
+    change must miss that cache instead of replaying a stuttering take.
+    """
+    material = "\n".join(
+        (
+            cfg.voice_id,
+            cfg.model_id,
+            NORMALIZER_VERSION,
+            cfg.settings.cache_token(),
+            cfg.apply_text_normalization,
+            text,
+        )
+    )
+    return hashlib.sha256(material.encode()).hexdigest()
+
+
+def _tts_body(
+    text: str,
+    cfg: VoiceConfig,
+    *,
+    previous_text: str,
+    next_text: str,
+    previous_request_ids: list[str],
+) -> dict[str, Any]:
+    body: dict[str, Any] = {
+        "text": text,
+        "model_id": cfg.model_id,
+        "voice_settings": cfg.settings.as_dict(),
+        "apply_text_normalization": cfg.apply_text_normalization,
+    }
+    if previous_text:
+        body["previous_text"] = previous_text
+    if next_text:
+        body["next_text"] = next_text
+    if previous_request_ids:
+        body["previous_request_ids"] = previous_request_ids[-3:]
+    return body
+
+
+def _id3v2_skip(data: bytes) -> int:
+    if len(data) < 10 or data[:3] != b"ID3":
+        return 0
+    size = (
+        ((data[6] & 0x7F) << 21)
+        | ((data[7] & 0x7F) << 14)
+        | ((data[8] & 0x7F) << 7)
+        | (data[9] & 0x7F)
+    )
+    end = 10 + size
+    return end if end <= len(data) else 0
+
+
+def concat_mp3(parts: list[bytes]) -> bytes:
+    """Join same-format MP3 clips. Later ID3 tags are dropped so playback is one stream."""
+    if not parts:
+        return b""
+    audio = bytearray(parts[0])
+    for part in parts[1:]:
+        audio.extend(part[_id3v2_skip(part) :])
+    return bytes(audio)
 
 
 def synthesize_speech(text: str, cfg: VoiceConfig) -> bytes:
-    """Call ElevenLabs text-to-speech. The API key comes only from the environment."""
+    """Call ElevenLabs text-to-speech. The API key comes only from the environment.
+
+    Long replies are split on sentence boundaries. Each chunk is synthesized
+    with the surrounding text and the previous request ids, then joined into
+    one MP3 so the caller still receives a single clip.
+    """
     key = api_key()
     if key is None:
         raise WorkspaceError(
             503,
             "GQ voice is not configured. Everything on the site stays free to read.",
         )
+    chunks = split_for_speech(text)
+    if not chunks:
+        raise WorkspaceError(422, "Text to speak must not be empty.")
     url = (
         _ELEVENLABS_URL.format(voice_id=urllib.parse.quote(cfg.voice_id, safe=""))
         + f"?output_format={_OUTPUT_FORMAT}"
     )
-    request = urllib.request.Request(
-        url,
-        data=json.dumps({"text": text, "model_id": cfg.model_id}).encode("utf-8"),
-        headers={
-            "xi-api-key": key,
-            "Content-Type": "application/json",
-            "Accept": "audio/mpeg",
-        },
-        method="POST",
-    )
-    try:
-        with urllib.request.urlopen(request, timeout=_SYNTHESIS_TIMEOUT_SECONDS) as hit:
-            audio: bytes = hit.read()
-    except (
-        urllib.error.HTTPError,
-        urllib.error.URLError,
-        TimeoutError,
-        OSError,
-    ) as exc:
-        raise WorkspaceError(
-            502,
-            "GQ voice is temporarily unavailable. Text on the site is unaffected.",
-        ) from exc
-    if not audio:
-        raise WorkspaceError(
-            502,
-            "GQ voice returned no audio. Text on the site is unaffected.",
+    parts: list[bytes] = []
+    request_ids: list[str] = []
+    for index, chunk in enumerate(chunks):
+        previous = chunks[index - 1] if index else ""
+        following = chunks[index + 1] if index + 1 < len(chunks) else ""
+        body = _tts_body(
+            chunk,
+            cfg,
+            previous_text=previous[-200:],
+            next_text=following[:200],
+            previous_request_ids=request_ids,
         )
-    return audio
+        request = urllib.request.Request(
+            url,
+            data=json.dumps(body).encode("utf-8"),
+            headers={
+                "xi-api-key": key,
+                "Content-Type": "application/json",
+                "Accept": "audio/mpeg",
+            },
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(
+                request, timeout=_SYNTHESIS_TIMEOUT_SECONDS
+            ) as hit:
+                audio: bytes = hit.read()
+                request_id = hit.headers.get("request-id")
+        except (
+            urllib.error.HTTPError,
+            urllib.error.URLError,
+            TimeoutError,
+            OSError,
+        ) as exc:
+            raise WorkspaceError(
+                502,
+                "GQ voice is temporarily unavailable. Text on the site is unaffected.",
+            ) from exc
+        if not audio:
+            raise WorkspaceError(
+                502,
+                "GQ voice returned no audio. Text on the site is unaffected.",
+            )
+        parts.append(audio)
+        if isinstance(request_id, str) and request_id.strip():
+            request_ids.append(request_id.strip())
+    return concat_mp3(parts)
 
 
 def _require_available(cfg: VoiceConfig) -> None:
@@ -185,7 +278,7 @@ def speak(actor: Actor, text: str, config: dict[str, Any] | None) -> dict[str, A
     """Synthesize (or replay) audio, charging member credit only on a fresh call."""
     cfg = load_voice_config(config)
     _require_available(cfg)
-    cleaned = text.strip() if isinstance(text, str) else ""
+    cleaned = truncate_speech(speech_text(text), cfg.max_chars_per_request)
     if not cleaned:
         raise WorkspaceError(422, "Text to speak must not be empty.")
     if len(cleaned) > cfg.max_chars_per_request:

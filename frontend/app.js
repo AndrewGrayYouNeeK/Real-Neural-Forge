@@ -82,8 +82,11 @@ function formatMetric(value) {
   const number = asNumber(value);
   if (number == null) return "—";
   const abs = Math.abs(number);
-  if (abs !== 0 && (abs < 0.001 || abs >= 10000)) return number.toExponential(2);
-  return number.toLocaleString(undefined, { maximumSignificantDigits: 4 });
+  const digits = abs !== 0 && abs < 0.001 ? 6 : 4;
+  return number.toLocaleString(undefined, {
+    maximumSignificantDigits: digits,
+    notation: "standard",
+  });
 }
 
 function reportError(error) {
@@ -217,18 +220,56 @@ function showHint(message, text, buttons) {
   scrollToBottom();
 }
 
-function setSpeakBusy(speakButton, busy) {
-  speakButton.disabled = busy;
-  speakButton.textContent = busy ? SPEAK_BUSY_LABEL : `🔊 ${SPEAK_LABEL}`;
+let currentAudio = null;
+let speakToken = 0;
+let activeSpeakButton = null;
+
+function resetSpeakButton(button) {
+  if (!button) return;
+  button.disabled = false;
+  button.dataset.state = "idle";
+  button.textContent = `🔊 ${SPEAK_LABEL}`;
+}
+
+function stopCurrentAudio() {
+  const audio = currentAudio;
+  currentAudio = null;
+  if (!audio) return;
+  audio.pause();
+  if (audio.src) URL.revokeObjectURL(audio.src);
+}
+
+function showSpeakStop(button, token) {
+  if (activeSpeakButton && activeSpeakButton !== button) {
+    resetSpeakButton(activeSpeakButton);
+  }
+  activeSpeakButton = button;
+  button.disabled = false;
+  button.dataset.state = "playing";
+  button.dataset.token = String(token);
+  button.textContent = "Stop";
 }
 
 async function speakMessage(message, speakButton) {
+  if (
+    speakButton.dataset.state === "playing" &&
+    Number(speakButton.dataset.token) === speakToken
+  ) {
+    speakToken += 1;
+    stopCurrentAudio();
+    resetSpeakButton(speakButton);
+    activeSpeakButton = null;
+    return;
+  }
   const text = (message.dataset.speech || "").trim();
   if (!text) {
     showHint(message, "There is nothing in this reply to read aloud.");
     return;
   }
-  setSpeakBusy(speakButton, true);
+  const token = ++speakToken;
+  stopCurrentAudio();
+  showSpeakStop(speakButton, token);
+  let playing = false;
   try {
     const response = await fetch("/voice/speak", {
       method: "POST",
@@ -236,6 +277,7 @@ async function speakMessage(message, speakButton) {
       headers: authHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify({ text: text.slice(0, MAX_VOICE_CHARS) }),
     });
+    if (token !== speakToken) return;
     if (response.status === 401) {
       showHint(
         message,
@@ -264,13 +306,34 @@ async function speakMessage(message, speakButton) {
       return;
     }
     const audio = new Audio(URL.createObjectURL(await response.blob()));
-    audio.addEventListener("ended", () => URL.revokeObjectURL(audio.src));
-    audio.play().catch(() => showHint(message, "Your browser blocked audio playback."));
+    if (token !== speakToken) {
+      URL.revokeObjectURL(audio.src);
+      return;
+    }
+    currentAudio = audio;
+    playing = true;
+    audio.addEventListener("ended", () => {
+      if (currentAudio !== audio) return;
+      URL.revokeObjectURL(audio.src);
+      currentAudio = null;
+      if (activeSpeakButton === speakButton) {
+        resetSpeakButton(speakButton);
+        activeSpeakButton = null;
+      }
+    });
+    audio.play().catch(() => {
+      if (token !== speakToken) return;
+      showHint(message, "Your browser blocked audio playback.");
+    });
     refreshVoiceStatus().catch(() => {});
   } catch (error) {
+    if (token !== speakToken) return;
     showHint(message, error.message || "GQ voice failed. Text stays free.");
   } finally {
-    setSpeakBusy(speakButton, false);
+    if (!playing && token === speakToken) {
+      resetSpeakButton(speakButton);
+      if (activeSpeakButton === speakButton) activeSpeakButton = null;
+    }
   }
 }
 

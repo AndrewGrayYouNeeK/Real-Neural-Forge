@@ -199,7 +199,9 @@ def test_balance_enforcement_blocks_empty_accounts(voice_client, fake_speech):
     assert fake_speech == ["e" * 80]
     assert _balance(client) == before
     too_long = _speak(client, "g" * 130)
-    assert too_long.status_code == 422
+    # Longer than the 120 character cap, so it is cut on a word boundary first.
+    # 120 characters still costs more than the 20 characters left.
+    assert too_long.status_code == 402
 
 
 def test_spend_draws_on_purchased_credit_after_free(

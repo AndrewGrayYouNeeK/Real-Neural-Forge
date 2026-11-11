@@ -883,6 +883,11 @@ class TestForecastDashboard:
         assert "Authorization" in app_js
         assert "Bearer " in app_js
         assert "/voice/speak" in app_js
+        assert "let currentAudio" in app_js
+        assert "stopCurrentAudio" in app_js
+        assert "speakToken" in app_js
+        assert 'button.textContent = "Stop"' in app_js
+        assert "toExponential" not in app_js
         assert "/starters/" in app_js
         assert "/live/weather" in app_js
         assert "/live/quote" in app_js
