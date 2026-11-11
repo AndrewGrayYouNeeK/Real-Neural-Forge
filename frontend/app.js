@@ -1310,11 +1310,8 @@ function speechRecognitionCtor() {
 }
 
 function speechPlainText(value) {
-  let text = String(value || "");
-  text = text.replace(/\[([^\]]+)\]\([^)]+\)/g, "$1");
-  text = text.replace(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{1F1E6}-\u{1F1FF}\uFE0F\u200D]/gu, " ");
-  text = text.replace(/[^0-9A-Za-z\s.,!?'":;\-]/g, " ");
-  return text.replace(/\s+/g, " ").trim();
+  // Money, dates, and units are normalized on the server before GQ voice.
+  return String(value || "").replace(/\s+/g, " ").trim();
 }
 
 function setTalkState(state) {
