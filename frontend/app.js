@@ -1409,6 +1409,15 @@ async function speakTalkTurn(text) {
     startListening();
     return;
   }
+  if (!(await voicePlaybackAllowed())) {
+    if (!talk.active || mine !== talk.turn) return;
+    if (!state.toldVoiceResting) {
+      state.toldVoiceResting = true;
+      addReply(VOICE_RESTING_MESSAGE);
+    }
+    startListening();
+    return;
+  }
   setTalkState("speaking");
   let response;
   try {
