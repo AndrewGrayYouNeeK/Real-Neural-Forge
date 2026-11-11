@@ -840,6 +840,8 @@ class TestForecastDashboard:
         assert 'id="chat-log"' in html
         assert 'id="chat-form"' in html
         assert 'id="chat-input"' in html
+        assert 'id="unhinged-toggle"' in html
+        assert "Unhinged" in html
         assert "What will the weather be tomorrow?" in html
         assert "Next lottery numbers" not in html
         assert "lottery" not in html.lower()
@@ -886,6 +888,8 @@ class TestForecastDashboard:
         assert "/live/quote" in app_js
         assert "/live/lottery" not in app_js
         assert "/live/ask" in app_js
+        assert "neuralForgeChatMode" in app_js
+        assert "mode: chatMode()" in app_js
         assert "/starters/weather/forecast" in app_js
         assert "loadDefaultDemos" in app_js
         assert "/starters/${id}/forecast" in app_js
@@ -929,6 +933,7 @@ class TestLunarEndpoints:
         assert "/starters/weather/forecast" in html
         assert "/workspace/limits" in html
         assert "/live/ask" in html
+        assert '"mode":"unhinged"' in html
         assert "/openapi.json" in html
         assert "Payments are not live" in html
         assert "lottery" not in html.lower()

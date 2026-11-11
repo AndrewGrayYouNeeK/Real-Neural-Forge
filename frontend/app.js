@@ -1,6 +1,7 @@
 /* Neural Forge chat-first dashboard. All API text is written with textContent only. */
 const charts = window.NeuralForgeCharts;
 const TOKEN_KEY = "neuralForgeApiToken";
+const MODE_KEY = "neuralForgeChatMode";
 const MAX_VOICE_CHARS = 2000;
 
 const state = {
@@ -1052,12 +1053,33 @@ function matchIntent(question) {
   return null;
 }
 
+function chatMode() {
+  try {
+    return localStorage.getItem(MODE_KEY) === "unhinged" ? "unhinged" : "normal";
+  } catch {
+    return "normal";
+  }
+}
+
+function setChatMode(mode) {
+  const next = mode === "unhinged" ? "unhinged" : "normal";
+  try {
+    localStorage.setItem(MODE_KEY, next);
+  } catch {
+    // The toggle still works for this page when storage is blocked.
+  }
+  const button = document.getElementById("unhinged-toggle");
+  if (!button) return;
+  const on = next === "unhinged";
+  button.setAttribute("aria-pressed", on ? "true" : "false");
+}
+
 async function askLive(question) {
   try {
     const result = await fetchJson("/live/ask", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ question }),
+      body: JSON.stringify({ question, mode: chatMode() }),
     });
     if (result && typeof result.text === "string" && result.text.trim()) {
       return { text: result.text.trim() };
@@ -1550,6 +1572,11 @@ function watchTraining() {
 }
 
 /* ------------------------------------------------------------------ wire-up */
+
+setChatMode(chatMode());
+document.getElementById("unhinged-toggle").addEventListener("click", () => {
+  setChatMode(chatMode() === "unhinged" ? "normal" : "unhinged");
+});
 
 document.getElementById("chat-form").addEventListener("submit", (event) => {
   event.preventDefault();
