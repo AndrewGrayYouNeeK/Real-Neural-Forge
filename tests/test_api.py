@@ -893,6 +893,8 @@ class TestForecastDashboard:
         assert "/live/quote" in app_js
         assert "/live/lottery" not in app_js
         assert "/live/ask" in app_js
+        assert "/live/budget" in app_js
+        assert "Voice is resting for today, text still works." in app_js
         assert "neuralForgeChatMode" in app_js
         assert "mode: chatMode()" in app_js
         assert "/starters/weather/forecast" in app_js
@@ -938,6 +940,8 @@ class TestLunarEndpoints:
         assert "/starters/weather/forecast" in html
         assert "/workspace/limits" in html
         assert "/live/ask" in html
+        assert "Voice is resting for today, text still works." in html
+        assert "Daily limit reached, back tomorrow." in html
         assert '"mode":"unhinged"' in html
         assert "/openapi.json" in html
         assert "Payments are not live" in html

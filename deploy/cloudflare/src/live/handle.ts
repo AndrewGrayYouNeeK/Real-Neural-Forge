@@ -3,21 +3,27 @@ import { answerWeather } from "./weather";
 import { answerQuote } from "./markets";
 import {
   CAP_MESSAGE,
-  RESERVE_NEURONS,
+  VOICE_RESTING_MESSAGE,
   addExtraNeurons,
   ipScope,
   chatMode,
+  resolveAiCaps,
+  resolveChatModels,
   runChatModel,
   tryReserve,
+  voiceBudget,
   type AiLike,
+  type AiQuotaEnv,
   type ChatMode,
   type D1Like,
 } from "./ai";
 
-export type LiveEnv = {
+export type LiveEnv = AiQuotaEnv & {
   AI?: AiLike;
   WORKSPACES_DB?: D1Like;
   NEURAL_FORGE_API_TOKEN?: string;
+  NEURAL_FORGE_AI_MODEL?: string;
+  NEURAL_FORGE_AI_FALLBACK_MODEL?: string;
 };
 
 const SESSION_COOKIE = "nf_session";
@@ -101,6 +107,21 @@ async function isOwnerRequest(request: Request, env: LiveEnv): Promise<boolean> 
   }
 }
 
+async function answerBudget(request: Request, env: LiveEnv): Promise<Response> {
+  if (!env.WORKSPACES_DB) return json({ voice_resting: false, voice_message: null });
+  const owner = await isOwnerRequest(request, env);
+  try {
+    const budget = await voiceBudget({
+      db: env.WORKSPACES_DB,
+      owner,
+      caps: resolveAiCaps(env),
+    });
+    return json({ voice_resting: budget.voiceResting, voice_message: budget.message });
+  } catch {
+    return json({ voice_resting: false, voice_message: null });
+  }
+}
+
 function clientIp(request: Request): string | null {
   return request.headers.get("CF-Connecting-IP") || request.headers.get("X-Forwarded-For")?.split(",")[0]?.trim() || null;
 }
@@ -123,22 +144,41 @@ async function answerAsk(
     });
   }
   const owner = await isOwnerRequest(request, env);
+  const models = resolveChatModels(env);
+  const caps = resolveAiCaps(env);
+  const ip = clientIp(request);
   const reserved = await tryReserve({
     db: env.WORKSPACES_DB,
-    ip: clientIp(request),
+    ip,
     owner,
+    caps,
   });
   if (!reserved.ok) {
     return json({ text: reserved.message, capped: true, reason: reserved.reason });
   }
   try {
-    const result = await runChatModel(env.AI, clean, mode, facts);
-    if (result.neurons > RESERVE_NEURONS) {
-      const extra = result.neurons - RESERVE_NEURONS;
+    const result = await runChatModel(env.AI, clean, mode, facts, models);
+    if (result.neurons > caps.reserve) {
+      const extra = result.neurons - caps.reserve;
       await addExtraNeurons(env.WORKSPACES_DB, "global", extra);
-      if (!owner) await addExtraNeurons(env.WORKSPACES_DB, await ipScope(clientIp(request)), extra);
+      if (!owner) await addExtraNeurons(env.WORKSPACES_DB, await ipScope(ip), extra);
     }
-    return json({ text: result.text, model: true });
+    let voiceResting = reserved.voiceResting;
+    let voiceMessage = voiceResting ? VOICE_RESTING_MESSAGE : null;
+    try {
+      const budget = await voiceBudget({ db: env.WORKSPACES_DB, owner, caps });
+      voiceResting = budget.voiceResting;
+      voiceMessage = budget.message;
+    } catch {
+      // The reserve already recorded the spend. Keep that voice flag.
+    }
+    return json({
+      text: result.text,
+      model: true,
+      model_id: result.modelId,
+      voice_resting: voiceResting,
+      voice_message: voiceMessage,
+    });
   } catch {
     return json({
       text: "I could not reach the language model right now. Please try again in a moment, or ask about the weather, a market price, the moon, or space.",
@@ -173,6 +213,10 @@ export async function handleLive(request: Request, env: LiveEnv): Promise<Respon
     if (request.method !== "GET" && request.method !== "POST") return json({ error: "Method not allowed." }, 405);
     const prefer = url.searchParams.get("kind") === "crypto" ? "crypto" : url.searchParams.get("kind") === "stock" ? "stock" : "auto";
     return json(await answerQuote(question, prefer));
+  }
+  if (path === "/live/budget") {
+    if (request.method !== "GET") return json({ error: "Method not allowed." }, 405);
+    return answerBudget(request, env);
   }
   if (path === "/live/ask") {
     if (request.method !== "POST" && request.method !== "GET") return json({ error: "Method not allowed." }, 405);

@@ -2,8 +2,12 @@ import { describe, expect, it } from "vitest";
 
 import {
   GLOBAL_DAILY_NEURONS,
+  FALLBACK_MODEL,
+  FREE_DAILY_NEURONS,
   PER_IP_DAILY_REQUESTS,
+  PRIMARY_MODEL,
   RESERVE_NEURONS,
+  SAFETY_DAILY_NEURONS,
   SYSTEM_PROMPT,
   UNHINGED_PROMPT,
   UNHINGED_TEMPERATURE,
@@ -126,7 +130,10 @@ describe("AI quota", () => {
       expect(text).toContain("minors");
       expect(text).toContain("illegal instructions");
     }
-    expect(SYSTEM_PROMPT.toLowerCase()).toContain("casual profanity is fine");
+    expect(SYSTEM_PROMPT.toLowerCase()).toContain("witty");
+    expect(SYSTEM_PROMPT.toLowerCase()).toContain("dry humor");
+    expect(SYSTEM_PROMPT.toLowerCase()).toContain("answer first");
+    expect(SYSTEM_PROMPT.toLowerCase()).toContain("casual cussing is fine");
     const unhinged = UNHINGED_PROMPT.toLowerCase();
     expect(unhinged).toContain("foul-mouthed comedian");
     expect(unhinged).toContain("cuss a lot");
@@ -187,5 +194,22 @@ describe("AI quota", () => {
     expect(temperatures).toEqual([UNHINGED_TEMPERATURE]);
     expect(userContent("hey", "   ")).toBe("hey");
     expect(sanitizeFacts(123)).toBe("");
+  });
+
+  it("uses gpt-oss until that call fails, then the 8B model", async () => {
+    const seen: string[] = [];
+    const ai = {
+      async run(model: string) {
+        seen.push(model);
+        if (model === PRIMARY_MODEL) throw new Error("capacity");
+        return { response: "still here" };
+      },
+    };
+    const result = await runChatModel(ai, "hi");
+    expect(seen).toEqual([PRIMARY_MODEL, FALLBACK_MODEL]);
+    expect(result.modelId).toBe(FALLBACK_MODEL);
+    expect(SAFETY_DAILY_NEURONS).toBe(25000);
+    expect(FREE_DAILY_NEURONS).toBe(10000);
+    expect(GLOBAL_DAILY_NEURONS).toBe(SAFETY_DAILY_NEURONS);
   });
 });

@@ -496,6 +496,20 @@ YouNeeK Time is **100 units / 100 minutes / 100 seconds** (not App Store 10/10/1
 - `POST /voice/checkout` — `{"pack_id": "..."}` → a Stripe Checkout URL, or `{"available": false}` ("coming soon") when Stripe is not configured.
 - `POST /voice/stripe/webhook` — Stripe webhook. The signature is verified before anything is credited, and each checkout session credits exactly once.
 
+## Chat answers
+
+General questions (`POST /live/ask`) always go to `@cf/openai/gpt-oss-120b` on Workers AI. The 8B model (`@cf/meta/llama-3.1-8b-instruct-fp8-fast`) runs only when that call itself fails. It is not a budget fallback.
+
+Workers Paid includes 10,000 neurons per day. Extra neurons are $0.011 per 1,000. GPT-OSS 120B costs 31,818 neurons per million input tokens and 68,182 per million output tokens. A typical turn is about 400 input tokens and 160 output tokens, about 24 neurons. Reasoning tokens count as output, so each reply reserves 80.
+
+| Cap | Default | What happens |
+| --- | --- | --- |
+| Free daily neurons | 10,000 | Chat stays on 120B. Non-owner GQ voice and Talk mode audio rest until midnight UTC. The reply and `GET /live/budget` say “Voice is resting for today, text still works.” |
+| Safety cap | 25,000 | Chat stops for every account, including the owner: “Daily limit reached, back tomorrow.” |
+| Per visitor | 40 requests and 3,200 neurons | That visitor stops. The owner skips this cap and still counts toward the safety cap. |
+
+15,000 neurons past the free allocation is `15 × $0.011 = $0.165` per day, about $4.95 over 30 days. Override the defaults with `NEURAL_FORGE_AI_DAILY_NEURONS`, `NEURAL_FORGE_AI_FREE_DAILY_NEURONS`, `NEURAL_FORGE_AI_PER_IP_DAILY_NEURONS`, `NEURAL_FORGE_AI_PER_IP_DAILY_REQUESTS`, and `NEURAL_FORGE_AI_RESERVE_NEURONS` on the Worker. `NEURAL_FORGE_AI_MODEL` and `NEURAL_FORGE_AI_FALLBACK_MODEL` select the model ids.
+
 ## GQ voice: metered read-aloud
 
 The dashboard can read forecasts and results aloud in **GQ**, Andrew's professional voice clone on ElevenLabs (voice id `QMnwdN2oOwNXPcl9oXIl`). The rules:
