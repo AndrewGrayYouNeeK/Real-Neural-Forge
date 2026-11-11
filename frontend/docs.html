@@ -107,7 +107,20 @@ curl -sS "https://forge.youneek.dev/live/quote?kind=stock&amp;q=AAPL"
 
 curl -sS -X POST https://forge.youneek.dev/live/ask \
   -H "Content-Type: application/json" \
-  -d '{"question":"What can Neural Forge do?"}'</code></pre>
+  -d '{"question":"What can Neural Forge do?"}'
+
+# Optional. Omit mode, or pass "normal", for the default voice.
+curl -sS -X POST https://forge.youneek.dev/live/ask \
+  -H "Content-Type: application/json" \
+  -d '{"question":"What can Neural Forge do?","mode":"unhinged"}'</code></pre>
+      <p>
+        <code>mode</code> is optional. <code>normal</code> allows casual
+        profanity when it fits. <code>unhinged</code> cusses a lot, jokes, and
+        trash-talks the chat, the data, and bad forecasts, then still gives
+        the real answer and the confidence. Both still refuse hate, slurs,
+        harassment, threats, sexual content involving minors, and illegal
+        instructions. Anyone can use either mode.
+      </p>
       <p>
         Related container routes include
         <code>GET /lunar</code>,

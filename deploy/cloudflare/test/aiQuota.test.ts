@@ -4,9 +4,14 @@ import {
   GLOBAL_DAILY_NEURONS,
   PER_IP_DAILY_REQUESTS,
   RESERVE_NEURONS,
+  SYSTEM_PROMPT,
+  UNHINGED_PROMPT,
+  chatMode,
   estimateNeurons,
   extractModelText,
+  runChatModel,
   sanitizeQuestion,
+  systemPromptFor,
   tryReserve,
   type D1Like,
 } from "../src/live/ai";
@@ -104,5 +109,48 @@ describe("AI quota", () => {
     expect(sanitizeQuestion("  hello\n\nworld  ".repeat(80)).length).toBeLessThanOrEqual(500);
     expect(estimateNeurons(300, 150)).toBeGreaterThan(0);
     expect(extractModelText({ response: " George Washington " })).toBe("George Washington");
+  });
+
+  it("allows casual profanity and still forbids harm and secrets", () => {
+    for (const prompt of [SYSTEM_PROMPT, UNHINGED_PROMPT]) {
+      const text = prompt.toLowerCase();
+      expect(text).not.toMatch(/no (cussing|swearing|profanity)|do not swear|don't swear/);
+      expect(text).toContain("secrets");
+      expect(text).toContain("hate speech");
+      expect(text).toContain("slurs");
+      expect(text).toContain("harass real people");
+      expect(text).toContain("threats");
+      expect(text).toContain("minors");
+      expect(text).toContain("illegal instructions");
+    }
+    expect(SYSTEM_PROMPT.toLowerCase()).toContain("casual profanity is fine");
+    const unhinged = UNHINGED_PROMPT.toLowerCase();
+    expect(unhinged).toContain("foul-mouthed comedian");
+    expect(unhinged).toContain("cuss a lot");
+    expect(unhinged).toContain("funny joke in most replies");
+    expect(unhinged).toContain("trash-talk and roast");
+    expect(unhinged).toContain("their data");
+    expect(unhinged).toContain("bad forecasts");
+    expect(unhinged).toContain("forecast numbers");
+    expect(unhinged).toContain("confidence");
+  });
+
+  it("defaults chat mode to normal and only switches the prompt when asked", async () => {
+    expect(chatMode(undefined)).toBe("normal");
+    expect(chatMode("loud")).toBe("normal");
+    expect(chatMode("unhinged")).toBe("unhinged");
+    expect(systemPromptFor("normal")).toBe(SYSTEM_PROMPT);
+    expect(systemPromptFor("unhinged")).toBe(UNHINGED_PROMPT);
+    const seen: string[] = [];
+    const ai = {
+      async run(_model: string, inputs: Record<string, unknown>) {
+        const messages = inputs.messages as { content: string }[];
+        seen.push(messages[0].content);
+        return { response: "ok" };
+      },
+    };
+    await runChatModel(ai, "hi");
+    await runChatModel(ai, "hi", "unhinged");
+    expect(seen).toEqual([SYSTEM_PROMPT, UNHINGED_PROMPT]);
   });
 });

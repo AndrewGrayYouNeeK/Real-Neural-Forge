@@ -6,9 +6,11 @@ import {
   RESERVE_NEURONS,
   addExtraNeurons,
   ipScope,
+  chatMode,
   runChatModel,
   tryReserve,
   type AiLike,
+  type ChatMode,
   type D1Like,
 } from "./ai";
 
@@ -30,6 +32,11 @@ function json(body: unknown, status = 200): Response {
 function questionFrom(request: Request, url: URL, body: Record<string, unknown> | null): string {
   if (typeof body?.question === "string") return body.question;
   return url.searchParams.get("q") || url.searchParams.get("question") || "";
+}
+
+function modeFrom(url: URL, body: Record<string, unknown> | null) {
+  const raw = typeof body?.mode === "string" ? body.mode : url.searchParams.get("mode");
+  return chatMode(raw);
 }
 
 function cookieValue(request: Request, name: string): string | null {
@@ -93,7 +100,12 @@ function clientIp(request: Request): string | null {
   return request.headers.get("CF-Connecting-IP") || request.headers.get("X-Forwarded-For")?.split(",")[0]?.trim() || null;
 }
 
-async function answerAsk(request: Request, env: LiveEnv, question: string): Promise<Response> {
+async function answerAsk(
+  request: Request,
+  env: LiveEnv,
+  question: string,
+  mode: ChatMode = "normal",
+): Promise<Response> {
   const clean = question.replace(/\s+/g, " ").trim();
   if (!clean) {
     return json({ text: "Ask me a question and I will try to answer it." }, 400);
@@ -114,7 +126,7 @@ async function answerAsk(request: Request, env: LiveEnv, question: string): Prom
     return json({ text: reserved.message, capped: true, reason: reserved.reason });
   }
   try {
-    const result = await runChatModel(env.AI, clean);
+    const result = await runChatModel(env.AI, clean, mode);
     if (result.neurons > RESERVE_NEURONS) {
       const extra = result.neurons - RESERVE_NEURONS;
       await addExtraNeurons(env.WORKSPACES_DB, "global", extra);
@@ -158,7 +170,7 @@ export async function handleLive(request: Request, env: LiveEnv): Promise<Respon
   }
   if (path === "/live/ask") {
     if (request.method !== "POST" && request.method !== "GET") return json({ error: "Method not allowed." }, 405);
-    return answerAsk(request, env, question);
+    return answerAsk(request, env, question, modeFrom(url, body));
   }
   return json({ error: "Not found." }, 404);
 }
