@@ -51,6 +51,33 @@ DEFAULT_PACKS = (
 
 
 @dataclass(frozen=True)
+class VoiceSettings:
+    """ElevenLabs delivery settings. Higher stability and no style reduce stutter."""
+
+    stability: float = 0.7
+    similarity_boost: float = 0.75
+    style: float = 0.0
+    use_speaker_boost: bool = True
+    speed: float = 1.0
+
+    def as_dict(self) -> dict[str, Any]:
+        return {
+            "stability": self.stability,
+            "similarity_boost": self.similarity_boost,
+            "style": self.style,
+            "use_speaker_boost": self.use_speaker_boost,
+            "speed": self.speed,
+        }
+
+    def cache_token(self) -> str:
+        boost = "1" if self.use_speaker_boost else "0"
+        return (
+            f"{self.stability}:{self.similarity_boost}:{self.style}:"
+            f"{boost}:{self.speed}"
+        )
+
+
+@dataclass(frozen=True)
 class VoiceConfig:
     """Resolved GQ voice limits and catalogue."""
 
@@ -60,6 +87,8 @@ class VoiceConfig:
     max_chars_per_request: int = 2_000
     daily_char_limit: int = 300_000
     packs: tuple[VoicePack, ...] = DEFAULT_PACKS
+    settings: VoiceSettings = VoiceSettings()
+    apply_text_normalization: str = "on"
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -166,6 +195,40 @@ def voice_enabled(config: dict[str, Any] | None = None) -> bool:
     return api_key() is not None
 
 
+def _unit_float(name: str, value: Any) -> float:
+    if isinstance(value, bool) or not isinstance(value, int | float | str):
+        raise ValueError(f"voice.{name} must be a number from 0 to 1.")
+    try:
+        number = float(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"voice.{name} must be a number from 0 to 1.") from exc
+    if not 0.0 <= number <= 1.0:
+        raise ValueError(f"voice.{name} must be from 0 to 1, got {number}.")
+    return number
+
+
+def _speed(name: str, value: Any) -> float:
+    if isinstance(value, bool) or not isinstance(value, int | float | str):
+        raise ValueError(f"voice.{name} must be a number from 0.7 to 1.2.")
+    try:
+        number = float(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"voice.{name} must be a number from 0.7 to 1.2.") from exc
+    if not 0.7 <= number <= 1.2:
+        raise ValueError(f"voice.{name} must be from 0.7 to 1.2, got {number}.")
+    return number
+
+
+def _bool_value(name: str, value: Any) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str) and value.strip().lower() in {"1", "true", "yes", "on"}:
+        return True
+    if isinstance(value, str) and value.strip().lower() in {"0", "false", "no", "off"}:
+        return False
+    raise ValueError(f"voice.{name} must be true or false.")
+
+
 def _int_value(name: str, value: Any, minimum: int) -> int:
     if isinstance(value, bool) or not isinstance(value, int | float | str):
         raise ValueError(f"voice.{name} must be an integer.")
@@ -235,6 +298,9 @@ def load_voice_config(config: dict[str, Any] | None = None) -> VoiceConfig:
     if env_voice_id:
         voice_id = env_voice_id
     model_id = str(section.get("model_id", "eleven_multilingual_v2")).strip()
+    normalization = str(section.get("apply_text_normalization", "on")).strip().lower()
+    if normalization not in {"on", "off", "auto"}:
+        raise ValueError("voice.apply_text_normalization must be on, off, or auto.")
     return VoiceConfig(
         voice_id=voice_id,
         model_id=model_id or "eleven_multilingual_v2",
@@ -246,6 +312,18 @@ def load_voice_config(config: dict[str, Any] | None = None) -> VoiceConfig:
             "daily_char_limit", section.get("daily_char_limit", 300_000), 0
         ),
         packs=_packs(section.get("packs")),
+        settings=VoiceSettings(
+            stability=_unit_float("stability", section.get("stability", 0.7)),
+            similarity_boost=_unit_float(
+                "similarity_boost", section.get("similarity_boost", 0.75)
+            ),
+            style=_unit_float("style", section.get("style", 0)),
+            use_speaker_boost=_bool_value(
+                "use_speaker_boost", section.get("use_speaker_boost", True)
+            ),
+            speed=_speed("speed", section.get("speed", 1.0)),
+        ),
+        apply_text_normalization=normalization,
     )
 
 

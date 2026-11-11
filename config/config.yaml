@@ -82,6 +82,12 @@ limits:
 voice:
   voice_id: QMnwdN2oOwNXPcl9oXIl
   model_id: eleven_multilingual_v2
+  stability: 0.7
+  similarity_boost: 0.75
+  style: 0
+  use_speaker_boost: true
+  speed: 1.0
+  apply_text_normalization: "on"
   free_chars: 5000
   max_chars_per_request: 2000
   daily_char_limit: 300000
