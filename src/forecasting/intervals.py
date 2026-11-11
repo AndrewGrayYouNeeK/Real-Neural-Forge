@@ -223,6 +223,32 @@ def _as_steps(tensor: torch.Tensor) -> torch.Tensor:
     )
 
 
+def interval_confidence(
+    coverage_80: float | None, n: int, *, nominal: float = 0.8
+) -> float:
+    """How much to trust an 80% interval given stored coverage.
+
+    Zero when nothing has been scored. Approaches 1 when the empirical
+    coverage matches ``nominal`` and at least 30 outcomes are in the window.
+    """
+    if coverage_80 is None or n < 1 or not 0.0 < nominal < 1.0:
+        return 0.0
+    if not 0.0 <= coverage_80 <= 1.0:
+        return 0.0
+    agreement = max(0.0, 1.0 - abs(coverage_80 - nominal) / nominal)
+    sample = min(1.0, n / 30)
+    return agreement * sample
+
+
+def interval_is_calibrated(
+    coverage_80: float | None, n: int, *, nominal: float = 0.8
+) -> bool:
+    """True when a window of at least 30 outcomes lands near the nominal rate."""
+    if coverage_80 is None or n < 30 or not 0.0 < nominal < 1.0:
+        return False
+    return abs(coverage_80 - nominal) <= 0.1
+
+
 def _qhat_per_step(scores: torch.Tensor, nominal: float) -> tuple[float, ...]:
     # scores: (samples, horizon, output_dim). Pool features so the offset is marginal.
     return tuple(

@@ -951,11 +951,18 @@ class TestAppVersion:
 
 
 class TestForecastApi:
-    def test_default_predict_response_is_unchanged(self, client):
+    def test_default_predict_response_keeps_the_point(self, client):
         resp = client.post("/predict", json={"sequence": [[0.1], [0.2], [0.3], [0.4]]})
         assert resp.status_code == 200
-        assert set(resp.json()) == {"prediction"}
-        assert len(resp.json()["prediction"]) == 1
+        body = resp.json()
+        assert set(body) == {"prediction", "uncertainty"}
+        assert len(body["prediction"]) == 1
+        uncertainty = body["uncertainty"]
+        assert uncertainty["p50"] == [body["prediction"][0]]
+        assert uncertainty["interval_80"]["lower"] == uncertainty["p10"]
+        assert uncertainty["interval_80"]["upper"] == uncertainty["p90"]
+        assert uncertainty["calibrated"] is False
+        assert "lottery" not in resp.text.lower()
 
     def test_explicit_one_step_horizon_stays_a_point(self, client):
         resp = client.post(
@@ -963,7 +970,9 @@ class TestForecastApi:
             json={"sequence": [[0.1], [0.2], [0.3]], "horizon": 1},
         )
         assert resp.status_code == 200
-        assert set(resp.json()) == {"prediction"}
+        body = resp.json()
+        assert set(body) == {"prediction", "uncertainty"}
+        assert body["uncertainty"]["p50"] == [body["prediction"][0]]
 
     def test_multi_step_predict_extends_the_response(self, client):
         resp = client.post(
@@ -979,6 +988,7 @@ class TestForecastApi:
         assert "lower" not in body
         assert body["p50"] == [step[0] for step in body["forecast"]]
         assert "p10" not in body
+        assert body["uncertainty"]["p50"] == body["p50"]
 
     def test_forecast_endpoint_defaults_to_configured_horizon(self, client):
         resp = client.post("/forecast", json={"sequence": [[0.1], [0.2], [0.3]]})

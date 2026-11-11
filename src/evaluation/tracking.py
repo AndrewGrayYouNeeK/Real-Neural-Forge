@@ -23,6 +23,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from src.forecasting.output import uncertainty_report
 from src.utils.paths import REPO_ROOT
 from src.workspace.runtime import runtime
 from src.workspace.service_ids import new_id
@@ -94,6 +95,10 @@ class OutcomeTracker:
             p50 = _finite(step.get("p50"), "p50")
             p10 = _optional_finite(step.get("p10"))
             p90 = _optional_finite(step.get("p90"))
+            if p10 is not None and p90 is not None and abs(p90 - p10) <= 1e-12:
+                # A collapsed band is a point forecast, not an interval to score.
+                p10 = None
+                p90 = None
             target = _optional_text(step.get("target_time"))
             if _already_open(self.sql, model_id, horizon, target, p50):
                 continue
@@ -268,6 +273,41 @@ def default_tracker() -> OutcomeTracker:
     if store is not None:
         return tracker_for(store.sql)
     return tracker_for(SqliteSql(REPO_ROOT / "data" / "evaluation.db"))
+
+
+def uncertainty_for(
+    model_id: str,
+    p50: Sequence[float],
+    p10: Sequence[float] | None = None,
+    p90: Sequence[float] | None = None,
+) -> dict[str, Any]:
+    """Build the additive uncertainty block, including stored coverage when present."""
+    stats = None
+    try:
+        stats = default_tracker().preferred_coverage(model_id, 1)
+    except (
+        OSError,
+        RuntimeError,
+        TypeError,
+        ValueError,
+        KeyError,
+        SqlError,
+        sqlite3.Error,
+    ):
+        stats = None
+    if stats is None:
+        return uncertainty_report(list(p50), p10, p90)
+    return uncertainty_report(
+        list(p50),
+        p10,
+        p90,
+        coverage_80=stats.coverage_80,
+        p10_hit_rate=stats.p10_hit_rate,
+        p90_hit_rate=stats.p90_hit_rate,
+        coverage_n=stats.n,
+        coverage_window=stats.window_size,
+        coverage_horizon=stats.horizon,
+    )
 
 
 def record_payload(model_id: str, payload: Mapping[str, Any]) -> None:

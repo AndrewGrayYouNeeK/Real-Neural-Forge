@@ -35,6 +35,13 @@ def test_weather_forecast_uses_central_park_sample() -> None:
     assert payload["forecast"][0]["p10"] is not None
     assert payload["forecast"][0]["p10"] <= payload["forecast"][0]["p50"]
     assert payload["forecast"][0]["p50"] <= payload["forecast"][0]["p90"]
+    uncertainty = payload["uncertainty"]
+    assert uncertainty["p50"][0] == payload["forecast"][0]["p50"]
+    assert uncertainty["p10"][0] <= uncertainty["p50"][0] <= uncertainty["p90"][0]
+    assert uncertainty["interval_80"]["lower"] == uncertainty["p10"]
+    assert uncertainty["interval_80"]["upper"] == uncertainty["p90"]
+    assert isinstance(uncertainty["confidence"], float)
+    assert isinstance(uncertainty["calibrated"], bool)
 
 
 def test_stocks_and_crypto_forecasts() -> None:
