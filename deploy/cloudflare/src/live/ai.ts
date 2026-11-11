@@ -204,11 +204,16 @@ export function sanitizeFacts(value: unknown): string {
   return value.replace(/\s+/g, " ").trim().slice(0, FACTS_LIMIT);
 }
 
-export function userContent(question: string, facts = ""): string {
+export function userContent(question: string, facts = "", mode: ChatMode = "normal"): string {
   const cleanFacts = sanitizeFacts(facts);
   if (!cleanFacts) return question;
+  const voice =
+    mode === "unhinged"
+      ? "Rewrite the factual reply in Unhinged voice. Every rewrite must cuss heavily and naturally, using words such as fuck, shit, damn, ass, and hell. Do not swap in mild words. Roast the person who asked, and include one short funny joke. No slurs, no hate toward protected groups, and no threats. "
+      : "Rewrite the factual reply below in your voice. ";
   return (
-    "Rewrite the factual reply below in your voice. Keep every number, unit, and confidence or accuracy figure exactly as written. Do not add, drop, or round any figure. Do not invent live weather or prices.\n\n" +
+    voice +
+    "Keep every number, unit, and confidence or accuracy figure exactly as written. Do not add, drop, or round any figure. Do not invent live weather or prices.\n\n" +
     `The person asked: ${question}\n\n` +
     `Factual reply:\n${cleanFacts}`
   );
@@ -221,8 +226,15 @@ export const SYSTEM_PROMPT =
   "You are Neural Forge, a concise assistant. Answer in plain words, in a few short sentences. Casual profanity is fine when it fits the moment or when the person you are talking with uses it. If you are not sure, say so. Do not invent live weather or prices. " +
   HARD_LIMITS;
 
+export const UNHINGED_TEMPERATURE = 0.9;
+
 export const UNHINGED_PROMPT =
-  "You are Neural Forge in unhinged mode, a foul-mouthed comedian. Cuss a lot. Tell a funny joke in most replies. Playfully trash-talk and roast the person in this chat, their data, and their bad forecasts. Stay wild, irreverent, and sarcastic. Still give the correct real answer, including the forecast numbers and the confidence info, and do not invent live weather or prices. If you are not sure, say so. " +
+  "You are Neural Forge in unhinged mode, a foul-mouthed comedian. Every reply must cuss a lot, with heavy natural profanity such as fuck, shit, damn, ass, and hell. Do not sanitize, dodge, or swap in mild words like crap, darn, or shoot. Tell a funny joke in every reply. Playfully trash-talk and roast the person in this chat, their data, and their bad forecasts. Stay wild, irreverent, and sarcastic. Still give the correct real answer, including the forecast numbers and the confidence info, and do not invent live weather or prices. If you are not sure, say so. Roasting the person in this chat is required. That roast is not hate toward a protected group and it is not a threat. No slurs. The limit on harassing real people means do not target anyone outside this chat. " +
+  "Examples:\n" +
+  "User: hey\n" +
+  "Assistant: Hey, you beautiful pain in the ass. What the hell do you want? Joke: I told my calendar to fuck off and it still scheduled this shit.\n" +
+  "User: The high is 72°F with 80% confidence.\n" +
+  "Assistant: Fuck, it is 72°F, and that 80% confidence is the only honest thing in this damn chat. Joke: your luck is worse than this forecast, and that is saying shit.\n" +
   HARD_LIMITS;
 
 export type ChatMode = "normal" | "unhinged";
@@ -275,15 +287,17 @@ export async function runChatModel(
   facts = "",
 ): Promise<{ text: string; neurons: number }> {
   const clean = sanitizeQuestion(question);
-  const content = userContent(clean, facts);
+  const content = userContent(clean, facts, mode);
   const system = systemPromptFor(mode);
-  const result = await ai.run(AI_MODEL, {
+  const inputs: Record<string, unknown> = {
     messages: [
       { role: "system", content: system },
       { role: "user", content },
     ],
     max_tokens: MAX_OUTPUT_TOKENS,
-  });
+  };
+  if (mode === "unhinged") inputs.temperature = UNHINGED_TEMPERATURE;
+  const result = await ai.run(AI_MODEL, inputs);
   const text = extractModelText(result);
   if (!text) throw new Error("empty model response");
   const prompt = `${system}\n${content}`;
