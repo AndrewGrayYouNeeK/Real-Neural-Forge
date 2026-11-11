@@ -124,10 +124,15 @@ describe("AI quota", () => {
       expect(text).toContain("illegal instructions");
     }
     expect(SYSTEM_PROMPT.toLowerCase()).toContain("casual profanity is fine");
-    expect(UNHINGED_PROMPT.toLowerCase()).toContain("heavy casual profanity");
-    expect(UNHINGED_PROMPT.toLowerCase()).toContain("sarcastic");
-    expect(UNHINGED_PROMPT.toLowerCase()).toContain("forecast numbers");
-    expect(UNHINGED_PROMPT.toLowerCase()).toContain("confidence");
+    const unhinged = UNHINGED_PROMPT.toLowerCase();
+    expect(unhinged).toContain("foul-mouthed comedian");
+    expect(unhinged).toContain("cuss a lot");
+    expect(unhinged).toContain("funny joke in most replies");
+    expect(unhinged).toContain("trash-talk and roast");
+    expect(unhinged).toContain("their data");
+    expect(unhinged).toContain("bad forecasts");
+    expect(unhinged).toContain("forecast numbers");
+    expect(unhinged).toContain("confidence");
   });
 
   it("defaults chat mode to normal and only switches the prompt when asked", async () => {
