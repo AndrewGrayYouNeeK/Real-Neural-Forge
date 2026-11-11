@@ -6,6 +6,7 @@ import {
   RESERVE_NEURONS,
   SYSTEM_PROMPT,
   UNHINGED_PROMPT,
+  UNHINGED_TEMPERATURE,
   chatMode,
   estimateNeurons,
   extractModelText,
@@ -129,7 +130,14 @@ describe("AI quota", () => {
     const unhinged = UNHINGED_PROMPT.toLowerCase();
     expect(unhinged).toContain("foul-mouthed comedian");
     expect(unhinged).toContain("cuss a lot");
-    expect(unhinged).toContain("funny joke in most replies");
+    expect(unhinged).toContain("funny joke in every reply");
+    expect(unhinged).toContain("every reply must cuss a lot");
+    for (const word of ["fuck", "shit", "damn", "ass", "hell"]) {
+      expect(unhinged).toContain(word);
+    }
+    expect(unhinged).toContain("no slurs");
+    expect(unhinged).toContain("protected group");
+    expect(unhinged).toContain("not a threat");
     expect(unhinged).toContain("trash-talk and roast");
     expect(unhinged).toContain("their data");
     expect(unhinged).toContain("bad forecasts");
@@ -155,10 +163,12 @@ describe("AI quota", () => {
     await runChatModel(ai, "hi", "unhinged");
     expect(seen).toEqual([SYSTEM_PROMPT, UNHINGED_PROMPT]);
     const prompts: string[] = [];
+    const temperatures: unknown[] = [];
     const rewriting = {
       async run(_model: string, inputs: Record<string, unknown>) {
         const messages = inputs.messages as { content: string }[];
         prompts.push(messages[1].content);
+        temperatures.push(inputs.temperature);
         return { response: "still 72°F" };
       },
     };
@@ -172,6 +182,9 @@ describe("AI quota", () => {
     expect(prompts[0]).toContain("72°F");
     expect(prompts[0]).toContain("80%");
     expect(prompts[0]).toContain("exactly as written");
+    expect(prompts[0]).toContain("fuck");
+    expect(prompts[0].toLowerCase()).toContain("joke");
+    expect(temperatures).toEqual([UNHINGED_TEMPERATURE]);
     expect(userContent("hey", "   ")).toBe("hey");
     expect(sanitizeFacts(123)).toBe("");
   });
