@@ -157,7 +157,7 @@ def test_unhinged_mode_uses_the_model_for_canned_replies() -> None:
     assert "text: rewritten.text" in answer
     assert "🔥 Unhinged ON" in source
     assert "Unhinged is on. Ask anything." in source
-    assert 'payload.facts = facts' in source
+    assert "payload.facts = facts" in source
 
 
 def test_live_endpoints_are_wired_in_the_chat() -> None:
