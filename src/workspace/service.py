@@ -884,7 +884,7 @@ def model_metrics(actor: Actor, model_id: str) -> dict[str, Any]:
     }
 
 
-def _owner_actor(model: dict[str, Any]) -> Actor:
+def _backtest_actor(model: dict[str, Any]) -> Actor:
     return Actor(
         user_id=str(model["user_id"]),
         email="",
@@ -893,8 +893,10 @@ def _owner_actor(model: dict[str, Any]) -> Actor:
     )
 
 
-def _backtest_owned_model(store: WorkspaceStore, model: dict[str, Any]) -> dict[str, Any]:
-    actor = _owner_actor(model)
+def _backtest_owned_model(
+    store: WorkspaceStore, model: dict[str, Any]
+) -> dict[str, Any]:
+    actor = _backtest_actor(model)
     dataset = _dataset_for_model(store, actor, model)
     if dataset is None:
         raise WorkspaceError(422, "This model has no dataset to backtest.")
@@ -909,7 +911,8 @@ def _backtest_owned_model(store: WorkspaceStore, model: dict[str, Any]) -> dict[
         raise WorkspaceError(500, "Model config is unreadable.")
     if int(cfg.get("model", {}).get("input_dim", 1) or 1) != 1:
         raise WorkspaceError(422, "Backtests currently score one-column series.")
-    data_cfg = cfg.get("data") if isinstance(cfg.get("data"), dict) else {}
+    raw_data = cfg.get("data")
+    data_cfg: dict[str, Any] = raw_data if isinstance(raw_data, dict) else {}
     target = str(data_cfg.get("target_column") or "value")
     seq_len = int(data_cfg.get("seq_len", 16) or 16)
     values = _csv_column_values(blob, target)
