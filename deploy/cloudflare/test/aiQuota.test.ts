@@ -10,8 +10,10 @@ import {
   estimateNeurons,
   extractModelText,
   runChatModel,
+  sanitizeFacts,
   sanitizeQuestion,
   systemPromptFor,
+  userContent,
   tryReserve,
   type D1Like,
 } from "../src/live/ai";
@@ -152,5 +154,25 @@ describe("AI quota", () => {
     await runChatModel(ai, "hi");
     await runChatModel(ai, "hi", "unhinged");
     expect(seen).toEqual([SYSTEM_PROMPT, UNHINGED_PROMPT]);
+    const prompts: string[] = [];
+    const rewriting = {
+      async run(_model: string, inputs: Record<string, unknown>) {
+        const messages = inputs.messages as { content: string }[];
+        prompts.push(messages[1].content);
+        return { response: "still 72°F" };
+      },
+    };
+    const rewritten = await runChatModel(
+      rewriting,
+      "hey",
+      "unhinged",
+      "The high is 72°F with 80% confidence.",
+    );
+    expect(rewritten.text).toBe("still 72°F");
+    expect(prompts[0]).toContain("72°F");
+    expect(prompts[0]).toContain("80%");
+    expect(prompts[0]).toContain("exactly as written");
+    expect(userContent("hey", "   ")).toBe("hey");
+    expect(sanitizeFacts(123)).toBe("");
   });
 });

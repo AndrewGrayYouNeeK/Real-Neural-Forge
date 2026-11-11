@@ -144,6 +144,22 @@ def test_train_on_my_csv_opens_the_upload_flow() -> None:
     assert "so this shared server stays on a small plan." in source
 
 
+def test_unhinged_mode_uses_the_model_for_canned_replies() -> None:
+    source = APP_JS.read_text(encoding="utf-8")
+    answer = source.split("async function answer(question)", 1)[1].split(
+        "async function handleQuestion", 1
+    )[0]
+    assert 'chatMode() !== "unhinged"' in answer
+    assert 'intent.name === "greet" || intent.name === "help"' in answer
+    assert "return askLive(question)" in answer
+    assert "facts" in answer
+    assert "rewritten.capped || rewritten.failed" in answer
+    assert "text: rewritten.text" in answer
+    assert "🔥 Unhinged ON" in source
+    assert "Unhinged is on. Ask anything." in source
+    assert 'payload.facts = facts' in source
+
+
 def test_live_endpoints_are_wired_in_the_chat() -> None:
     source = APP_JS.read_text(encoding="utf-8")
     assert "/live/weather" in source

@@ -39,6 +39,11 @@ function modeFrom(url: URL, body: Record<string, unknown> | null) {
   return chatMode(raw);
 }
 
+function factsFrom(url: URL, body: Record<string, unknown> | null): string {
+  if (typeof body?.facts === "string") return body.facts;
+  return url.searchParams.get("facts") || "";
+}
+
 function cookieValue(request: Request, name: string): string | null {
   const header = request.headers.get("Cookie") || "";
   for (const part of header.split(";")) {
@@ -105,6 +110,7 @@ async function answerAsk(
   env: LiveEnv,
   question: string,
   mode: ChatMode = "normal",
+  facts = "",
 ): Promise<Response> {
   const clean = question.replace(/\s+/g, " ").trim();
   if (!clean) {
@@ -126,7 +132,7 @@ async function answerAsk(
     return json({ text: reserved.message, capped: true, reason: reserved.reason });
   }
   try {
-    const result = await runChatModel(env.AI, clean, mode);
+    const result = await runChatModel(env.AI, clean, mode, facts);
     if (result.neurons > RESERVE_NEURONS) {
       const extra = result.neurons - RESERVE_NEURONS;
       await addExtraNeurons(env.WORKSPACES_DB, "global", extra);
@@ -170,7 +176,7 @@ export async function handleLive(request: Request, env: LiveEnv): Promise<Respon
   }
   if (path === "/live/ask") {
     if (request.method !== "POST" && request.method !== "GET") return json({ error: "Method not allowed." }, 405);
-    return answerAsk(request, env, question, modeFrom(url, body));
+    return answerAsk(request, env, question, modeFrom(url, body), factsFrom(url, body));
   }
   return json({ error: "Not found." }, 404);
 }

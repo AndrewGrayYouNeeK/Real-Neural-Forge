@@ -1124,6 +1124,12 @@ function chatMode() {
   }
 }
 
+const NORMAL_PLACEHOLDER = "Ask about your data, or weather, markets, space…";
+const UNHINGED_PLACEHOLDER =
+  "Unhinged is on. Ask anything. I'll roast the forecast and keep every number exact.";
+const ASK_UNAVAILABLE =
+  "I could not reach the general-answer model right now. I can still help with live weather, market prices, the moon, near-Earth space, and training.";
+
 function setChatMode(mode) {
   const next = mode === "unhinged" ? "unhinged" : "normal";
   try {
@@ -1131,38 +1137,48 @@ function setChatMode(mode) {
   } catch {
     // The toggle still works for this page when storage is blocked.
   }
-  const button = document.getElementById("unhinged-toggle");
-  if (!button) return;
   const on = next === "unhinged";
-  button.setAttribute("aria-pressed", on ? "true" : "false");
+  const button = document.getElementById("unhinged-toggle");
+  if (button) {
+    button.setAttribute("aria-pressed", on ? "true" : "false");
+    button.textContent = on ? "🔥 Unhinged ON" : "Unhinged";
+    button.setAttribute("aria-label", on ? "Unhinged mode is on" : "Unhinged mode");
+  }
+  const input = document.getElementById("chat-input");
+  if (input) input.placeholder = on ? UNHINGED_PLACEHOLDER : NORMAL_PLACEHOLDER;
 }
 
-async function askLive(question) {
+async function askLive(question, options) {
+  const facts = options && typeof options.facts === "string" ? options.facts : "";
+  const payload = { question, mode: chatMode() };
+  if (facts) payload.facts = facts;
   try {
     const result = await fetchJson("/live/ask", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ question, mode: chatMode() }),
+      body: JSON.stringify(payload),
     });
-    if (result && typeof result.text === "string" && result.text.trim()) {
-      return { text: result.text.trim() };
-    }
+    const text = result && typeof result.text === "string" ? result.text.trim() : "";
+    if (result && result.capped) return { text, capped: true };
+    if (facts && !(result && result.model === true)) return { text, failed: true };
+    if (text) return { text };
   } catch (error) {
-    return {
-      text:
-        (error && error.message) ||
-        "I could not reach the general-answer model right now. I can still help with live weather, market prices, the moon, near-Earth space, and training.",
-    };
+    return { text: (error && error.message) || ASK_UNAVAILABLE, failed: true };
   }
-  return {
-    text: "I could not reach the general-answer model right now. I can still help with live weather, market prices, the moon, near-Earth space, and training.",
-  };
+  return { text: ASK_UNAVAILABLE, failed: true };
 }
 
 async function answer(question) {
   const intent = matchIntent(question);
-  if (intent) return intent.handler(question);
-  return askLive(question);
+  if (!intent) return askLive(question);
+  if (chatMode() !== "unhinged") return intent.handler(question);
+  if (intent.name === "greet" || intent.name === "help") return askLive(question);
+  const factual = await intent.handler(question);
+  const facts = factual && typeof factual.text === "string" ? factual.text.trim() : "";
+  if (!facts) return factual;
+  const rewritten = await askLive(question, { facts });
+  if (!rewritten || rewritten.capped || rewritten.failed || !rewritten.text) return factual;
+  return { ...factual, text: rewritten.text };
 }
 
 async function handleQuestion(question) {
