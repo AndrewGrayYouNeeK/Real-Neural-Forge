@@ -907,6 +907,10 @@ class TestForecastDashboard:
         assert "Speaking" in app_js
         assert "TALK_UNSUPPORTED" in app_js
         assert "TALK_NO_CREDIT" in app_js
+        assert "TALK_MIC_BLOCKED" in app_js
+        assert "getUserMedia" in app_js
+        assert "TALK_AFTER_SPEECH_MS = 350" in app_js
+        assert 'addEventListener("pause"' not in app_js
         assert "onTalkClick" in app_js
         assert "/starters/weather/forecast" in app_js
         assert "loadDefaultDemos" in app_js
