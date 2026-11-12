@@ -908,10 +908,24 @@ class TestForecastDashboard:
         assert "TALK_UNSUPPORTED" in app_js
         assert "TALK_NO_CREDIT" in app_js
         assert "TALK_MIC_BLOCKED" in app_js
+        assert "TALK_SIGN_IN" in app_js
+        assert "TALK_PLAYBACK_BLOCKED" in app_js
+        assert "TALK_VOICE_FAILED" in app_js
         assert "getUserMedia" in app_js
-        assert "TALK_AFTER_SPEECH_MS = 350" in app_js
+        assert "TALK_AFTER_SPEECH_MS = 550" in app_js
+        assert "TALK_PLAYBACK_PAD_MS" in app_js
+        assert "TALK_PLAYBACK_MAX_MS" in app_js
+        assert "TALK_SILENT_WAV" in app_js
+        assert "function unlockTalkAudio" in app_js
+        assert "function ensureTalkPlayer" in app_js
+        assert "function waitForTalkPlayback" in app_js
+        assert "function abortTalkRecognition" in app_js
+        assert 'addEventListener("error", onError)' in app_js
+        assert "startListening({ immediate: true })" in app_js
         assert 'addEventListener("pause"' not in app_js
         assert "onTalkClick" in app_js
+        assert "One moment — checking…" in app_js
+        assert "await speakTalkTurn(answerText)" in app_js
         assert "/starters/weather/forecast" in app_js
         assert "loadDefaultDemos" in app_js
         assert "/starters/${id}/forecast" in app_js
