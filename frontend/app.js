@@ -1295,17 +1295,31 @@ const TALK_UNSUPPORTED =
 const TALK_NO_CREDIT =
   "You are out of GQ voice credit, so Talk mode will keep answering in text. Reading stays free.";
 const TALK_MIC_BLOCKED = "The microphone is blocked. Allow it in the browser, or keep typing.";
-const TALK_AFTER_SPEECH_MS = 350;
+const TALK_SIGN_IN =
+  "GQ voice needs a free account, so Talk mode will keep answering in text. Tap Account to sign in; reading stays free.";
+const TALK_PLAYBACK_BLOCKED =
+  "This browser blocked GQ voice after the Talk tap. Tap Talk again to unlock sound, or use the speaker button on a reply. Text answers keep going.";
+const TALK_VOICE_FAILED =
+  "GQ voice could not play that reply, so Talk mode will keep answering in text. Reading stays free.";
+const TALK_AFTER_SPEECH_MS = 550;
 const TALK_RESTART_MS = 300;
+const TALK_PLAYBACK_PAD_MS = 2500;
+const TALK_PLAYBACK_MAX_MS = 120000;
+// Tiny silent WAV used only to unlock autoplay during the Talk tap gesture.
+const TALK_SILENT_WAV =
+  "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=";
 
 const talk = {
   active: false,
   state: "idle",
   recognition: null,
   audio: null,
+  player: null,
+  objectUrl: null,
   turn: 0,
   voiceOff: false,
   toldVoice: false,
+  toldPlayback: false,
   restartTimer: 0,
   opening: false,
 };
@@ -1338,13 +1352,81 @@ function setTalkState(state) {
   );
 }
 
+function ensureTalkPlayer() {
+  if (!talk.player) talk.player = new Audio();
+  return talk.player;
+}
+
+function unlockTalkAudio() {
+  const audio = ensureTalkPlayer();
+  // Do not clear src in the play() callback — a later GQ blob may already
+  // be assigned to this same unlocked element by the time the silent clip ends.
+  try {
+    audio.muted = true;
+    audio.src = TALK_SILENT_WAV;
+    const playPromise = audio.play();
+    if (playPromise && typeof playPromise.then === "function") {
+      playPromise
+        .then(() => {
+          try {
+            audio.pause();
+            audio.currentTime = 0;
+          } catch {
+            // Ignore seek failures on still-loading silent buffers.
+          }
+          audio.muted = false;
+        })
+        .catch(() => {
+          audio.muted = false;
+        });
+    } else {
+      audio.muted = false;
+    }
+  } catch {
+    audio.muted = false;
+  }
+}
+
+function clearTalkObjectUrl() {
+  if (!talk.objectUrl) return;
+  URL.revokeObjectURL(talk.objectUrl);
+  talk.objectUrl = null;
+}
+
 function stopTalkAudio() {
   const audio = talk.audio;
   talk.audio = null;
-  if (!audio) return;
+  if (!audio) {
+    clearTalkObjectUrl();
+    return;
+  }
   if (typeof audio._nfStop === "function") audio._nfStop();
-  audio.pause();
-  if (audio.src) URL.revokeObjectURL(audio.src);
+  try {
+    audio.pause();
+  } catch {
+    // Already stopped.
+  }
+  clearTalkObjectUrl();
+  try {
+    audio.removeAttribute("src");
+    audio.load();
+  } catch {
+    // Keep the unlocked element even if src clear fails.
+  }
+}
+
+function abortTalkRecognition() {
+  const recognition = talk.recognition;
+  talk.recognition = null;
+  if (!recognition) return;
+  recognition.onend = null;
+  recognition.onresult = null;
+  recognition.onerror = null;
+  try {
+    recognition.abort();
+  } catch {
+    // Already stopped.
+  }
 }
 
 function scheduleListen(delay) {
@@ -1358,23 +1440,12 @@ function stopTalk() {
   window.clearTimeout(talk.restartTimer);
   talk.active = false;
   talk.turn += 1;
-  const recognition = talk.recognition;
-  talk.recognition = null;
-  if (recognition) {
-    recognition.onend = null;
-    recognition.onresult = null;
-    recognition.onerror = null;
-    try {
-      recognition.abort();
-    } catch {
-      // Already stopped.
-    }
-  }
+  abortTalkRecognition();
   stopTalkAudio();
   setTalkState("idle");
 }
 
-function startListening() {
+function startListening(options = {}) {
   if (!talk.active) return;
   window.clearTimeout(talk.restartTimer);
   const Recognition = speechRecognitionCtor();
@@ -1384,6 +1455,7 @@ function startListening() {
     return;
   }
   stopTalkAudio();
+  abortTalkRecognition();
   const recognition = new Recognition();
   talk.recognition = recognition;
   recognition.lang = "en-US";
@@ -1412,14 +1484,65 @@ function startListening() {
     if (talk.active && talk.state === "listening") scheduleListen(TALK_RESTART_MS);
   };
   setTalkState("listening");
-  window.setTimeout(() => {
+  const kick = () => {
     if (!talk.active || talk.recognition !== recognition || talk.state !== "listening") return;
     try {
       recognition.start();
     } catch {
       scheduleListen(TALK_RESTART_MS);
     }
-  }, TALK_RESTART_MS);
+  };
+  // First tap must start inside the user-activation window on iOS.
+  if (options.immediate) {
+    kick();
+    return;
+  }
+  window.setTimeout(kick, TALK_RESTART_MS);
+}
+
+function tellTalkVoiceIssue(message) {
+  if (talk.toldVoice || talk.toldPlayback) return;
+  talk.toldPlayback = true;
+  addReply(message);
+}
+
+function waitForTalkPlayback(audio) {
+  return new Promise((resolve) => {
+    let settled = false;
+    let timer = 0;
+    const finish = (result) => {
+      if (settled) return;
+      settled = true;
+      window.clearTimeout(timer);
+      audio.removeEventListener("ended", onEnded);
+      audio.removeEventListener("error", onError);
+      audio.removeEventListener("loadedmetadata", onMeta);
+      resolve(result);
+    };
+    const armTimeout = (ms) => {
+      window.clearTimeout(timer);
+      timer = window.setTimeout(() => finish("timeout"), ms);
+    };
+    const onEnded = () => finish("ended");
+    const onError = () => finish("error");
+    const onMeta = () => {
+      if (settled) return;
+      const durationMs =
+        Number.isFinite(audio.duration) && audio.duration > 0
+          ? audio.duration * 1000 + TALK_PLAYBACK_PAD_MS
+          : TALK_PLAYBACK_MAX_MS;
+      armTimeout(Math.min(Math.max(durationMs, TALK_PLAYBACK_PAD_MS), TALK_PLAYBACK_MAX_MS));
+    };
+    audio._nfStop = () => finish("stopped");
+    audio.addEventListener("ended", onEnded);
+    audio.addEventListener("error", onError);
+    audio.addEventListener("loadedmetadata", onMeta);
+    armTimeout(TALK_PLAYBACK_MAX_MS);
+    audio.play().catch((err) => {
+      const name = err && err.name;
+      finish(name === "NotAllowedError" ? "blocked" : "error");
+    });
+  });
 }
 
 async function speakTalkTurn(text) {
@@ -1449,7 +1572,9 @@ async function speakTalkTurn(text) {
       body: JSON.stringify({ text: spoken }),
     });
   } catch {
-    if (talk.active && mine === talk.turn) startListening();
+    if (!talk.active || mine !== talk.turn) return;
+    tellTalkVoiceIssue(TALK_VOICE_FAILED);
+    startListening();
     return;
   }
   if (!talk.active || mine !== talk.turn) return;
@@ -1457,33 +1582,43 @@ async function speakTalkTurn(text) {
     talk.voiceOff = true;
     if (!talk.toldVoice) {
       talk.toldVoice = true;
-      addReply(
-        response.status === 401
-          ? "GQ voice needs a free account, so Talk mode will keep answering in text."
-          : TALK_NO_CREDIT
-      );
+      addReply(response.status === 401 ? TALK_SIGN_IN : TALK_NO_CREDIT);
     }
     startListening();
     return;
   }
   if (!response.ok) {
+    tellTalkVoiceIssue(TALK_VOICE_FAILED);
     startListening();
     return;
   }
-  const audio = new Audio(URL.createObjectURL(await response.blob()));
+  const blob = await response.blob();
+  if (!talk.active || mine !== talk.turn) return;
+  const objectUrl = URL.createObjectURL(blob);
+  const audio = ensureTalkPlayer();
+  clearTalkObjectUrl();
+  talk.objectUrl = objectUrl;
   talk.audio = audio;
-  const played = await new Promise((resolve) => {
-    const finish = (ended) => resolve(ended);
-    audio._nfStop = () => finish(false);
-    audio.addEventListener("ended", () => finish(true), { once: true });
-    audio.play().catch(() => finish(false));
-  });
-  if (talk.audio === audio) {
-    URL.revokeObjectURL(audio.src);
-    talk.audio = null;
+  audio.src = objectUrl;
+  const played = await waitForTalkPlayback(audio);
+  if (talk.audio === audio) talk.audio = null;
+  // Revoke only after playback finished or was interrupted — never while waiting.
+  if (talk.objectUrl === objectUrl) clearTalkObjectUrl();
+  try {
+    audio.removeAttribute("src");
+    audio.load();
+  } catch {
+    // Keep the unlocked element for the next turn.
   }
   if (!(talk.active && talk.state === "speaking" && mine === talk.turn)) return;
-  if (played) await new Promise((resolve) => window.setTimeout(resolve, TALK_AFTER_SPEECH_MS));
+  if (played === "blocked") {
+    tellTalkVoiceIssue(TALK_PLAYBACK_BLOCKED);
+  } else if (played === "error" || played === "timeout") {
+    tellTalkVoiceIssue(TALK_VOICE_FAILED);
+  }
+  if (played === "ended") {
+    await new Promise((resolve) => window.setTimeout(resolve, TALK_AFTER_SPEECH_MS));
+  }
   if (talk.active && mine === talk.turn) startListening();
 }
 
@@ -1495,6 +1630,7 @@ async function onTalkUtterance(transcript) {
     return;
   }
   setTalkState("thinking");
+  // handleQuestion returns the final answer text only (never the placeholder).
   const answerText = await handleQuestion(question);
   if (!talk.active) return;
   await speakTalkTurn(answerText);
@@ -1506,14 +1642,25 @@ async function beginTalk() {
     addReply(TALK_UNSUPPORTED);
     return;
   }
+  // Unlock autoplay and start recognition inside the Talk tap gesture.
+  unlockTalkAudio();
   talk.opening = true;
+  talk.active = true;
+  talk.voiceOff = false;
+  talk.toldVoice = false;
+  talk.toldPlayback = false;
+  startListening({ immediate: true });
   try {
     if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
       let stream = null;
       try {
         stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       } catch {
-        addReply(TALK_MIC_BLOCKED);
+        // Recognition may already be running; only stop when the mic is blocked.
+        if (talk.active) {
+          stopTalk();
+          addReply(TALK_MIC_BLOCKED);
+        }
         return;
       } finally {
         if (stream) {
@@ -1521,10 +1668,6 @@ async function beginTalk() {
         }
       }
     }
-    talk.active = true;
-    talk.voiceOff = false;
-    talk.toldVoice = false;
-    startListening();
   } finally {
     talk.opening = false;
   }
@@ -1532,13 +1675,18 @@ async function beginTalk() {
 
 function onTalkClick() {
   if (!talk.active) {
-    beginTalk().catch(() => addReply(TALK_MIC_BLOCKED));
+    // Prime audio synchronously on the click path before any await.
+    unlockTalkAudio();
+    beginTalk().catch(() => {
+      if (talk.active) stopTalk();
+      addReply(TALK_MIC_BLOCKED);
+    });
     return;
   }
   if (talk.state === "speaking") {
     talk.turn += 1;
     stopTalkAudio();
-    startListening();
+    startListening({ immediate: true });
     return;
   }
   stopTalk();
