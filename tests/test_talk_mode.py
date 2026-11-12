@@ -8,8 +8,13 @@ APP_JS = REPO_ROOT / "frontend" / "app.js"
 
 
 def _talk_section(source: str) -> str:
-    start = source.index("/* --------------------------------------------------------------- talk mode */")
-    end = source.index("/* ------------------------------------------------------------------ voice */", start)
+    start = source.index(
+        "/* --------------------------------------------------------------- talk mode */"
+    )
+    end = source.index(
+        "/* ------------------------------------------------------------------ voice */",
+        start,
+    )
     return source[start:end]
 
 
@@ -72,6 +77,9 @@ def test_unhinged_mode_wiring_is_unchanged_by_talk_fixes() -> None:
     assert 'id="unhinged-toggle"' in html
     assert "Unhinged" in html
     assert "neuralForgeChatMode" in source
-    assert "Unhinged is on. Ask anything. I'll roast the forecast and keep every number exact." in source
+    assert (
+        "Unhinged is on. Ask anything. I'll roast the forecast and keep every number exact."
+        in source
+    )
     assert "payload.facts = facts" in source
     assert 'mode === "unhinged"' in source
