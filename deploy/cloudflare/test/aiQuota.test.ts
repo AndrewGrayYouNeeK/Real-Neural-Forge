@@ -117,6 +117,25 @@ describe("AI quota", () => {
     expect(sanitizeQuestion("  hello\n\nworld  ".repeat(80)).length).toBeLessThanOrEqual(500);
     expect(estimateNeurons(300, 150)).toBeGreaterThan(0);
     expect(extractModelText({ response: " George Washington " })).toBe("George Washington");
+    expect(extractModelText({ output_text: "The high is 72°F." })).toBe("The high is 72°F.");
+    expect(
+      extractModelText({
+        output_text: "Need to respond.\nHello. What can I help with?",
+        output: [
+          {
+            type: "reasoning",
+            content: [{ type: "reasoning_text", text: "Need to respond." }],
+          },
+          {
+            type: "message",
+            content: [{ type: "output_text", text: "Hello. What can I help with?" }],
+          },
+        ],
+      }),
+    ).toBe("Hello. What can I help with?");
+    expect(
+      extractModelText({ response: "Need to respond.\nThe high is 72°F." }),
+    ).toBe("The high is 72°F.");
   });
 
   it("allows casual profanity and still forbids harm and secrets", () => {
@@ -151,6 +170,9 @@ describe("AI quota", () => {
     expect(unhinged).toContain("bad forecasts");
     expect(unhinged).toContain("forecast numbers");
     expect(unhinged).toContain("confidence");
+    expect(unhinged).toContain("user-facing answer");
+    expect(unhinged).toContain("i told my calendar to fuck off");
+    expect(SYSTEM_PROMPT.toLowerCase()).toContain("user-facing answer");
   });
 
   it("defaults chat mode to normal and only switches the prompt when asked", async () => {

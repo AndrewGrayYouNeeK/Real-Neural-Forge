@@ -1294,6 +1294,9 @@ const TALK_UNSUPPORTED =
   "This browser can't use hands-free speech recognition, so Talk mode stays off. You can still type, and the speaker button reads replies in GQ voice.";
 const TALK_NO_CREDIT =
   "You are out of GQ voice credit, so Talk mode will keep answering in text. Reading stays free.";
+const TALK_MIC_BLOCKED = "The microphone is blocked. Allow it in the browser, or keep typing.";
+const TALK_AFTER_SPEECH_MS = 350;
+const TALK_RESTART_MS = 300;
 
 const talk = {
   active: false,
@@ -1303,6 +1306,8 @@ const talk = {
   turn: 0,
   voiceOff: false,
   toldVoice: false,
+  restartTimer: 0,
+  opening: false,
 };
 
 function speechRecognitionCtor() {
@@ -1337,11 +1342,20 @@ function stopTalkAudio() {
   const audio = talk.audio;
   talk.audio = null;
   if (!audio) return;
+  if (typeof audio._nfStop === "function") audio._nfStop();
   audio.pause();
   if (audio.src) URL.revokeObjectURL(audio.src);
 }
 
+function scheduleListen(delay) {
+  window.clearTimeout(talk.restartTimer);
+  talk.restartTimer = window.setTimeout(() => {
+    if (talk.active && talk.state === "listening") startListening();
+  }, delay);
+}
+
 function stopTalk() {
+  window.clearTimeout(talk.restartTimer);
   talk.active = false;
   talk.turn += 1;
   const recognition = talk.recognition;
@@ -1362,6 +1376,7 @@ function stopTalk() {
 
 function startListening() {
   if (!talk.active) return;
+  window.clearTimeout(talk.restartTimer);
   const Recognition = speechRecognitionCtor();
   if (!Recognition) {
     stopTalk();
@@ -1387,18 +1402,24 @@ function startListening() {
     const code = event && event.error;
     if (code === "not-allowed" || code === "service-not-allowed") {
       stopTalk();
-      addReply("The microphone is blocked. Allow it in the browser, or keep typing.");
+      addReply(TALK_MIC_BLOCKED);
+      return;
     }
+    if (code === "aborted") return;
+    if (talk.state === "listening") scheduleListen(TALK_RESTART_MS);
   };
   recognition.onend = () => {
-    if (talk.active && talk.state === "listening") startListening();
+    if (talk.active && talk.state === "listening") scheduleListen(TALK_RESTART_MS);
   };
   setTalkState("listening");
-  try {
-    recognition.start();
-  } catch {
-    // Starting twice throws. The open session keeps listening.
-  }
+  window.setTimeout(() => {
+    if (!talk.active || talk.recognition !== recognition || talk.state !== "listening") return;
+    try {
+      recognition.start();
+    } catch {
+      scheduleListen(TALK_RESTART_MS);
+    }
+  }, TALK_RESTART_MS);
 }
 
 async function speakTalkTurn(text) {
@@ -1451,17 +1472,19 @@ async function speakTalkTurn(text) {
   }
   const audio = new Audio(URL.createObjectURL(await response.blob()));
   talk.audio = audio;
-  await new Promise((resolve) => {
-    const finish = () => resolve();
-    audio.addEventListener("ended", finish, { once: true });
-    audio.addEventListener("pause", finish, { once: true });
-    audio.play().catch(finish);
+  const played = await new Promise((resolve) => {
+    const finish = (ended) => resolve(ended);
+    audio._nfStop = () => finish(false);
+    audio.addEventListener("ended", () => finish(true), { once: true });
+    audio.play().catch(() => finish(false));
   });
   if (talk.audio === audio) {
     URL.revokeObjectURL(audio.src);
     talk.audio = null;
   }
-  if (talk.active && talk.state === "speaking" && mine === talk.turn) startListening();
+  if (!(talk.active && talk.state === "speaking" && mine === talk.turn)) return;
+  if (played) await new Promise((resolve) => window.setTimeout(resolve, TALK_AFTER_SPEECH_MS));
+  if (talk.active && mine === talk.turn) startListening();
 }
 
 async function onTalkUtterance(transcript) {
@@ -1477,20 +1500,39 @@ async function onTalkUtterance(transcript) {
   await speakTalkTurn(answerText);
 }
 
-function beginTalk() {
+async function beginTalk() {
+  if (talk.opening || talk.active) return;
   if (!speechRecognitionCtor()) {
     addReply(TALK_UNSUPPORTED);
     return;
   }
-  talk.active = true;
-  talk.voiceOff = false;
-  talk.toldVoice = false;
-  startListening();
+  talk.opening = true;
+  try {
+    if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+      let stream = null;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      } catch {
+        addReply(TALK_MIC_BLOCKED);
+        return;
+      } finally {
+        if (stream) {
+          for (const track of stream.getTracks()) track.stop();
+        }
+      }
+    }
+    talk.active = true;
+    talk.voiceOff = false;
+    talk.toldVoice = false;
+    startListening();
+  } finally {
+    talk.opening = false;
+  }
 }
 
 function onTalkClick() {
   if (!talk.active) {
-    beginTalk();
+    beginTalk().catch(() => addReply(TALK_MIC_BLOCKED));
     return;
   }
   if (talk.state === "speaking") {
