@@ -9,7 +9,12 @@
   "main": "src/index.ts",
   "compatibility_date": "2026-10-21",
   "observability": {
-    "enabled": true
+    "enabled": true,
+    "logs": {
+      "enabled": true,
+      "invocation_logs": true,
+      "head_sampling_rate": 1
+    }
   },
   "containers": [
     {

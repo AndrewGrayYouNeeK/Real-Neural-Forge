@@ -3,10 +3,30 @@
  * Tools never invent live weather or prices.
  */
 
-import { visitorFromCf, type CfIncoming, type VisitorGeo } from "../live/geo";
+import { visitorFromCf, wantsCurrentConditions, type CfIncoming, type VisitorGeo } from "../live/geo";
 import { answerWeather } from "../live/weather";
 import { answerQuote } from "../live/markets";
 import { AGENT_TOOL_NAMES, type AgentToolName } from "./protocol";
+
+/**
+ * Build the weather lookup string from the user's original question and the
+ * model's tool query. Current-conditions intent ("right now") must come from
+ * the original question — models often drop those words from `query`.
+ */
+export function weatherQuestionForTool(originalQuestion: string, toolQuery: string): string {
+  const original = originalQuestion.replace(/\s+/g, " ").trim();
+  const query = toolQuery.replace(/\s+/g, " ").trim();
+  const base = query || original;
+  if (!base) return original;
+  if (wantsCurrentConditions(original) && !wantsCurrentConditions(base)) {
+    return `${base} right now`;
+  }
+  if (wantsCurrentConditions(original)) {
+    // Prefer the original question so place + "right now" stay together.
+    return original;
+  }
+  return base;
+}
 
 export const MAX_TOOL_CALLS = 4;
 export const TOOL_TIMEOUT_MS = 8_000;
@@ -307,8 +327,16 @@ async function runLiveData(ctx: ToolContext, args: Record<string, unknown>): Pro
   const query = stringArg(args, "query", ctx.question) || ctx.question;
   switch (kind) {
     case "weather": {
-      const result = await answerWeather(query, ctx.visitor);
-      return { kind, text: result.text };
+      // Evaluate wantsCurrentConditions on the user's original question.
+      const weatherAsk = weatherQuestionForTool(ctx.question, query);
+      const result = await answerWeather(weatherAsk, ctx.visitor);
+      return {
+        kind,
+        text: result.text,
+        query_used: weatherAsk,
+        original_question: ctx.question,
+        wants_current: wantsCurrentConditions(ctx.question),
+      };
     }
     case "stock": {
       const result = await answerQuote(query, "stock");
