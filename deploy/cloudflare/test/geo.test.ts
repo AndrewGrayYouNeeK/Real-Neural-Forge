@@ -20,6 +20,14 @@ describe("extractPlaceName", () => {
     expect(extractPlaceName("What will the weather be tomorrow?")).toBeNull();
     expect(extractPlaceName("Is it going to rain?")).toBeNull();
   });
+
+  it("never geocodes right/now/bitcoin leftovers", () => {
+    expect(extractPlaceName("what's bitcoin at right now")).toBeNull();
+    expect(extractPlaceName("bitcoin at right now")).toBeNull();
+    expect(extractPlaceName("what's the price at right now")).toBeNull();
+    expect(extractPlaceName("weather at right now")).toBeNull();
+    expect(extractPlaceName("what's the weather in New York right now")).toBe("New York");
+  });
 });
 
 describe("parseDateWindow", () => {

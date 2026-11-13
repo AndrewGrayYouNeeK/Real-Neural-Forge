@@ -3,6 +3,7 @@
  * Used when the model fails to emit a parseable tool call.
  */
 
+import { detectMarketKind, isWeatherAsk } from "../live/kind";
 import { type AgentToolName, type ParsedToolCall } from "./protocol";
 
 const STARTER_IDS = ["weather", "stocks", "crypto", "near-earth", "lunar"] as const;
@@ -81,22 +82,17 @@ export function routeClearIntent(question: string): ParsedToolCall | null {
     );
   }
 
-  // Live crypto / stock prices.
-  if (/\b(bitcoin|btc|ethereum|eth|solana|doge|crypto|cryptocurrency)\b/.test(q)) {
+  // Live crypto / stock prices — before weather so "bitcoin at right now" never geocodes.
+  const market = detectMarketKind(text);
+  if (market === "crypto") {
     return call("fetch_live_data", { kind: "crypto", query: text }, "intent_crypto");
   }
-  if (
-    /\b(stock|stocks|markets?|share\s+price|ticker|aapl|tsla|nvda|msft|goog|amzn)\b/.test(q) ||
-    /\$[A-Za-z]{1,5}\b/.test(text)
-  ) {
+  if (market === "stock") {
     return call("fetch_live_data", { kind: "stock", query: text }, "intent_stock");
   }
 
-  // Live weather (current or forecast days) — not the weather starter sample.
-  if (
-    /\b(weather|temperature|temp|rain|forecast|hot|cold|humid)\b/.test(q) &&
-    !/\b(starter|sample\s+model|series|backtest|mae)\b/.test(q)
-  ) {
+  // Live weather only when the ask is about weather/temperature/rain (not markets).
+  if (isWeatherAsk(text) && !/\b(starter|sample\s+model|series|backtest|mae)\b/.test(q)) {
     return call("fetch_live_data", { kind: "weather", query: text }, "intent_weather");
   }
 

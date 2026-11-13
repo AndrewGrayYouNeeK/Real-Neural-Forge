@@ -55,10 +55,52 @@ const WEEKDAYS = [
 ] as const;
 
 const NOISE =
-  /\b(what|whats|what's|will|the|a|an|weather|forecast|be|like|hows|how's|how|is|are|it|in|for|at|on|of|this|next|coming|today|tonight|tomorrow|weekend|week|morning|afternoon|evening|tonight|temperature|temp|high|low|rain|chance|conditions|please|tell|me|about|going|to|look|looking|give|show|there|right|now|currently|current)\b/gi;
+  /\b(what's|whats|what|will|the|a|an|weather|forecast|be|like|how's|hows|how|is|are|it|in|for|at|on|of|this|next|coming|today|tonight|tomorrow|weekend|week|morning|afternoon|evening|tonight|temperature|temp|high|low|rain|chance|conditions|please|tell|me|about|going|to|look|looking|give|show|there|right|now|currently|current|price|trading)\b/gi;
 
+/** Never geocode these leftovers (time words, assets, filler). */
+const NON_PLACE_WORDS = new Set([
+  "right",
+  "now",
+  "currently",
+  "current",
+  "today",
+  "tonight",
+  "tomorrow",
+  "weekend",
+  "bitcoin",
+  "btc",
+  "ethereum",
+  "eth",
+  "solana",
+  "sol",
+  "doge",
+  "dogecoin",
+  "crypto",
+  "cryptocurrency",
+  "coin",
+  "xrp",
+  "ripple",
+  "stock",
+  "stocks",
+  "market",
+  "markets",
+  "ticker",
+  "price",
+  "quote",
+  "aapl",
+  "tsla",
+  "nvda",
+  "msft",
+  "goog",
+  "googl",
+  "amzn",
+  "meta",
+  "nflx",
+]);
+
+// Negative lookahead skips "at right now" / "at now" so "right" is never a place.
 const PLACE_PREFIX =
-  /\b(?:in|for|at|near|around|outside)\s+([A-Za-z][A-Za-z .'-]+?(?:,\s*[A-Za-z]{2})?)(?=\s+(?:this|next|coming|today|tonight|tomorrow|right\s+now|currently|now|on|for the|this coming|over the)\b|[?!.]|$)/i;
+  /\b(?:in|for|at|near|around|outside)\s+(?!right\s+now\b|currently\b|now\b)([A-Za-z][A-Za-z .'-]+?(?:,\s*[A-Za-z]{2})?)(?=\s+(?:this|next|coming|today|tonight|tomorrow|right\s+now|currently|now|on|for the|this coming|over the)\b|[?!.]|$)/i;
 
 export function visitorFromCf(cf: CfIncoming | undefined): VisitorGeo {
   if (!cf) return {};
@@ -94,7 +136,7 @@ export function extractPlaceName(question: string): string | null {
 function cleanPlaceName(raw: string): string | null {
   const name = raw
     .replace(/\b(the)\b/gi, " ")
-    .replace(/[?!]/g, " ")
+    .replace(/[?!']/g, " ")
     .replace(/\s+,/g, ",")
     .replace(/\s+/g, " ")
     .trim()
@@ -103,6 +145,14 @@ function cleanPlaceName(raw: string): string | null {
   if (name.length < 2 || name.length > 80) return null;
   if (!/[A-Za-z]/.test(name)) return null;
   if (/^\d+$/.test(name)) return null;
+  const tokens = name
+    .toLowerCase()
+    .split(/[\s,]+/)
+    .map((token) => token.replace(/^[^a-z0-9]+|[^a-z0-9]+$/g, ""))
+    .filter((token) => token.length > 1);
+  if (!tokens.length) return null;
+  // Reject leftovers that are only non-place words ("right", "bitcoin", "now").
+  if (tokens.every((token) => NON_PLACE_WORDS.has(token))) return null;
   return name;
 }
 
