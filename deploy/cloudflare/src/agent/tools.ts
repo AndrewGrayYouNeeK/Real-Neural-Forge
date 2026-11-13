@@ -4,6 +4,7 @@
  */
 
 import { visitorFromCf, wantsCurrentConditions, type CfIncoming, type VisitorGeo } from "../live/geo";
+import { isWeatherAsk, resolveFetchLiveKind } from "../live/kind";
 import { answerWeather } from "../live/weather";
 import { answerQuote } from "../live/markets";
 import { AGENT_TOOL_NAMES, type AgentToolName } from "./protocol";
@@ -31,6 +32,9 @@ export function weatherQuestionForTool(originalQuestion: string, toolQuery: stri
 export const MAX_TOOL_CALLS = 4;
 export const TOOL_TIMEOUT_MS = 8_000;
 export const TURN_TIMEOUT_MS = 45_000;
+/** Wait before one retry when the container is still cold-starting. */
+export const CONTAINER_COLD_START_WAIT_MS = 1_500;
+const COLD_START_RETRY_TOOLS = new Set<AgentToolName>(["forecast", "get_evaluation_metrics"]);
 
 export type ToolResult = {
   ok: boolean;
@@ -232,6 +236,39 @@ async function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
   }
 }
 
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/** Container cold-start / timeout errors that deserve one retry. */
+export function isContainerColdStartError(message: string): boolean {
+  const text = message.toLowerCase();
+  return (
+    text.includes("container is not running") ||
+    text.includes("tool timeout") ||
+    text.includes("container not running") ||
+    /\btimeout\b/.test(text)
+  );
+}
+
+async function withOptionalColdStartRetry<T>(
+  toolName: AgentToolName,
+  run: () => Promise<T>,
+  timeoutMs: number,
+  waitMs = CONTAINER_COLD_START_WAIT_MS,
+): Promise<T> {
+  try {
+    return await withTimeout(run(), timeoutMs);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (!COLD_START_RETRY_TOOLS.has(toolName) || !isContainerColdStartError(message)) {
+      throw error;
+    }
+    await sleep(waitMs);
+    return withTimeout(run(), timeoutMs);
+  }
+}
+
 function compactForecast(payload: Record<string, unknown>): Record<string, unknown> {
   const forecast = Array.isArray(payload.forecast) ? payload.forecast.slice(0, 8) : payload.forecast;
   const uncertainty = payload.uncertainty;
@@ -323,10 +360,17 @@ async function runForecast(ctx: ToolContext, args: Record<string, unknown>): Pro
 }
 
 async function runLiveData(ctx: ToolContext, args: Record<string, unknown>): Promise<ToolResult["data"]> {
-  const kind = stringArg(args, "kind", "weather").toLowerCase();
+  const requested = stringArg(args, "kind", "weather").toLowerCase();
   const query = stringArg(args, "query", ctx.question) || ctx.question;
+  // Reclassify: models often pass kind=weather for "bitcoin at right now".
+  const kind = resolveFetchLiveKind(requested, query, ctx.question);
   switch (kind) {
     case "weather": {
+      if (!isWeatherAsk(ctx.question) && !isWeatherAsk(query)) {
+        throw new Error(
+          "That does not look like a weather question. Ask about weather, temperature, or rain in a place.",
+        );
+      }
       // Evaluate wantsCurrentConditions on the user's original question.
       const weatherAsk = weatherQuestionForTool(ctx.question, query);
       const result = await answerWeather(weatherAsk, ctx.visitor);
@@ -336,15 +380,16 @@ async function runLiveData(ctx: ToolContext, args: Record<string, unknown>): Pro
         query_used: weatherAsk,
         original_question: ctx.question,
         wants_current: wantsCurrentConditions(ctx.question),
+        requested_kind: requested,
       };
     }
     case "stock": {
-      const result = await answerQuote(query, "stock");
-      return { kind, text: result.text };
+      const result = await answerQuote(query || ctx.question, "stock");
+      return { kind, text: result.text, requested_kind: requested };
     }
     case "crypto": {
-      const result = await answerQuote(query, "crypto");
-      return { kind, text: result.text };
+      const result = await answerQuote(query || ctx.question, "crypto");
+      return { kind, text: result.text, requested_kind: requested };
     }
     case "moon": {
       const result = await ctx.fetchContainer("/lunar", { method: "GET", headers: ctx.authHeaders });
@@ -452,6 +497,7 @@ export async function dispatchTool(
   args: Record<string, unknown>,
   ctx: ToolContext,
   timeoutMs = TOOL_TIMEOUT_MS,
+  options?: { coldStartWaitMs?: number },
 ): Promise<ToolResult> {
   const started = Date.now();
   const toolName = AGENT_TOOL_NAMES.includes(name as AgentToolName) ? (name as AgentToolName) : null;
@@ -464,29 +510,33 @@ export async function dispatchTool(
       durationMs: Date.now() - started,
     };
   }
+  const runOnce = (): Promise<unknown> => {
+    switch (toolName) {
+      case "forecast":
+        return runForecast(ctx, args);
+      case "fetch_live_data":
+        return runLiveData(ctx, args);
+      case "get_evaluation_metrics":
+        return runEvaluation(ctx, args);
+      case "compare_horizons":
+        return runCompareHorizons(ctx, args);
+      case "explain_prediction":
+        return runExplain(ctx, args);
+      case "list_user_series":
+        return runListSeries(ctx);
+      default: {
+        const unexpected: never = toolName;
+        throw new Error(`Unhandled tool: ${String(unexpected)}`);
+      }
+    }
+  };
+
   try {
-    const data = await withTimeout(
-      (async () => {
-        switch (toolName) {
-          case "forecast":
-            return runForecast(ctx, args);
-          case "fetch_live_data":
-            return runLiveData(ctx, args);
-          case "get_evaluation_metrics":
-            return runEvaluation(ctx, args);
-          case "compare_horizons":
-            return runCompareHorizons(ctx, args);
-          case "explain_prediction":
-            return runExplain(ctx, args);
-          case "list_user_series":
-            return runListSeries(ctx);
-          default: {
-            const unexpected: never = toolName;
-            throw new Error(`Unhandled tool: ${String(unexpected)}`);
-          }
-        }
-      })(),
+    const data = await withOptionalColdStartRetry(
+      toolName,
+      runOnce,
       timeoutMs,
+      options?.coldStartWaitMs ?? CONTAINER_COLD_START_WAIT_MS,
     );
     return {
       ok: true,

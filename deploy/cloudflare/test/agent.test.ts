@@ -36,6 +36,9 @@ vi.mock("../src/live/weather", async () => {
   return {
     ...actual,
     answerWeather: vi.fn(async (question: string) => {
+      if (/bitcoin|btc|rightangle/i.test(question)) {
+        throw new Error("should not geocode market questions as weather");
+      }
       if (/right\s+now|currently|\bnow\b/i.test(question)) {
         return {
           text: "Right now in New York, it is about 54°F with partly cloudy skies. This is live Open-Meteo current conditions, not a trained model.",
@@ -43,6 +46,23 @@ vi.mock("../src/live/weather", async () => {
       }
       return {
         text: "Tomorrow in New York, the high is about 60°F and the low about 45°F. This is a live Open-Meteo forecast, not a trained model.",
+      };
+    }),
+  };
+});
+
+vi.mock("../src/live/markets", async () => {
+  const actual = await vi.importActual<typeof import("../src/live/markets")>("../src/live/markets");
+  return {
+    ...actual,
+    answerQuote: vi.fn(async (question: string, prefer: string) => {
+      if (/bitcoin|btc/i.test(question) || prefer === "crypto") {
+        return {
+          text: "Bitcoin is at $104,321.40. This is a live price, not financial advice.",
+        };
+      }
+      return {
+        text: "AAPL is at $268.50. This is a live market quote, not financial advice.",
       };
     }),
   };
@@ -217,6 +237,8 @@ describe("agent intent router", () => {
     });
     expect(routeClearIntent("How accurate is the weather sample?")?.name).toBe("get_evaluation_metrics");
     expect(routeClearIntent("what is the bitcoin price")?.args).toMatchObject({ kind: "crypto" });
+    expect(routeClearIntent("what's bitcoin at right now")?.args).toMatchObject({ kind: "crypto" });
+    expect(routeClearIntent("what's AAPL at right now")?.args).toMatchObject({ kind: "stock" });
     expect(routeClearIntent("What is a neural network?")).toBeNull();
   });
 });
@@ -261,6 +283,87 @@ describe("agent tool dispatch", () => {
     expect(data.text).toMatch(/Right now/i);
     expect(data.text).toMatch(/54°F/);
     expect(data.text?.toLowerCase()).not.toContain("tomorrow");
+  });
+
+  it("routes bitcoin at right now to crypto even when the model asks for weather", async () => {
+    const result = await dispatchTool(
+      "fetch_live_data",
+      { kind: "weather", query: "Rightangle" },
+      toolContext({ question: "what's bitcoin at right now" }),
+    );
+    expect(result.ok).toBe(true);
+    const data = result.data as { kind?: string; text?: string; requested_kind?: string };
+    expect(data.kind).toBe("crypto");
+    expect(data.requested_kind).toBe("weather");
+    expect(data.text).toMatch(/Bitcoin/i);
+    expect(data.text).toMatch(/\$104,321/);
+    expect(data.text?.toLowerCase()).not.toContain("rightangle");
+    expect(data.text?.toLowerCase()).not.toContain("kentucky");
+    expect(data.text?.toLowerCase()).not.toContain("weather");
+  });
+
+  it("retries forecast once after container cold-start failure", async () => {
+    let attempts = 0;
+    const fetchContainer = vi.fn(async (path: string) => {
+      if (path.includes("/starters/weather/forecast")) {
+        attempts += 1;
+        if (attempts === 1) {
+          throw new Error("The container is not running.");
+        }
+        return {
+          status: 200,
+          json: {
+            starter_id: "weather",
+            name: "Central Park",
+            unit: "°C",
+            forecast: [{ step: 1, value: 22 }],
+          },
+        };
+      }
+      if (path.includes("/evaluation/")) {
+        return { status: 200, json: { horizon: 1, metrics: { mae: 1.1 }, comparison: "ok" } };
+      }
+      return { status: 404, json: {} };
+    });
+    const result = await dispatchTool(
+      "forecast",
+      { series: "weather", horizon: 1 },
+      toolContext({ fetchContainer }),
+      2000,
+      { coldStartWaitMs: 0 },
+    );
+    expect(result.ok).toBe(true);
+    expect(attempts).toBe(2);
+    expect((result.data as { forecast?: unknown[] }).forecast).toBeTruthy();
+  });
+
+  it("retries get_evaluation_metrics once after tool timeout", async () => {
+    let attempts = 0;
+    const fetchContainer = vi.fn(async () => {
+      attempts += 1;
+      if (attempts === 1) {
+        await new Promise((resolve) => setTimeout(resolve, 30));
+        return { status: 200, json: {} };
+      }
+      return {
+        status: 200,
+        json: {
+          horizon: 1,
+          metrics: { mae: 1.1, rmse: 1.4, mape: 0.08, directional_accuracy: 0.66 },
+          comparison: "10.0% better than the best simple baseline",
+        },
+      };
+    });
+    const result = await dispatchTool(
+      "get_evaluation_metrics",
+      { model_id: "weather" },
+      toolContext({ fetchContainer }),
+      5,
+      { coldStartWaitMs: 0 },
+    );
+    expect(result.ok).toBe(true);
+    expect(attempts).toBe(2);
+    expect((result.data as { comparison?: string }).comparison).toContain("baseline");
   });
 
   it("dispatches forecast to the container starter path", async () => {
@@ -313,17 +416,18 @@ describe("agent tool dispatch", () => {
     expect((result.data as { signed_in?: boolean }).signed_in).toBe(false);
   });
 
-  it("times out slow tools", async () => {
+  it("times out slow tools after the cold-start retry is exhausted", async () => {
     const result = await dispatchTool(
       "get_evaluation_metrics",
       { model_id: "weather" },
       toolContext({
         fetchContainer: async () =>
           new Promise((resolve) => {
-            setTimeout(() => resolve({ status: 200, json: {} }), 50);
+            setTimeout(() => resolve({ status: 200, json: {} }), 40);
           }),
       }),
       5,
+      { coldStartWaitMs: 0 },
     );
     expect(result.ok).toBe(false);
     expect(result.error).toMatch(/timeout/i);
