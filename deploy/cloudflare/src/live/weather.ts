@@ -35,6 +35,22 @@ type ForecastResult = {
     precipitation_probability_max?: number[];
     weather_code?: number[];
   };
+  current?: {
+    time?: string;
+    temperature_2m?: number;
+    weather_code?: number;
+    relative_humidity_2m?: number;
+    wind_speed_10m?: number;
+  };
+};
+
+export type CurrentConditions = {
+  tempF: number;
+  condition: string;
+  humidity: number | null;
+  windMph: number | null;
+  asOf: string | null;
+  timezone: string;
 };
 
 export type DayForecast = {
@@ -153,6 +169,39 @@ export async function fetchDailyForecast(place: Place): Promise<{ timezone: stri
   return { timezone: payload.timezone || place.timezone, days };
 }
 
+export async function fetchCurrentConditions(place: Place): Promise<CurrentConditions> {
+  const url =
+    "https://api.open-meteo.com/v1/forecast?" +
+    new URLSearchParams({
+      latitude: String(place.latitude),
+      longitude: String(place.longitude),
+      current: [
+        "temperature_2m",
+        "weather_code",
+        "relative_humidity_2m",
+        "wind_speed_10m",
+      ].join(","),
+      temperature_unit: "fahrenheit",
+      wind_speed_unit: "mph",
+      timezone: place.timezone && place.timezone !== "auto" ? place.timezone : "auto",
+    }).toString();
+  const cacheKey = `weather-current:${place.latitude.toFixed(3)},${place.longitude.toFixed(3)}`;
+  const payload = await cachedJson(cacheKey, WEATHER_TTL_SECONDS, () => fetchJson<ForecastResult>(url));
+  const current = payload.current || {};
+  const tempF = Number(current.temperature_2m);
+  if (!Number.isFinite(tempF)) throw new Error("missing current temperature");
+  const humidityRaw = current.relative_humidity_2m;
+  const windRaw = current.wind_speed_10m;
+  return {
+    tempF,
+    condition: conditionFromCode(current.weather_code),
+    humidity: humidityRaw == null || !Number.isFinite(Number(humidityRaw)) ? null : Number(humidityRaw),
+    windMph: windRaw == null || !Number.isFinite(Number(windRaw)) ? null : Number(windRaw),
+    asOf: typeof current.time === "string" ? current.time : null,
+    timezone: payload.timezone || place.timezone,
+  };
+}
+
 export function formatTempF(value: number): string {
   if (!Number.isFinite(value)) return "n/a";
   return `${Math.round(value)}°F`;
@@ -169,6 +218,25 @@ function formatDayLine(day: DayForecast, label: string, placeName: string, withP
 
 function capitalize(value: string): string {
   return value.charAt(0).toUpperCase() + value.slice(1);
+}
+
+export function currentReplyText(place: Place, current: CurrentConditions): string {
+  const placeName = formatPlace(place);
+  const lines: string[] = [];
+  if (place.source === "fallback") {
+    lines.push(
+      "I could not tell a location from your question or this connection, so I used Chicago as a default.",
+    );
+  }
+  const extras: string[] = [];
+  if (current.humidity != null) extras.push(`${Math.round(current.humidity)}% humidity`);
+  if (current.windMph != null) extras.push(`wind about ${Math.round(current.windMph)} mph`);
+  const extra = extras.length ? ` ${extras.join(", ")}.` : "";
+  lines.push(
+    `Right now in ${placeName}, it is about ${formatTempF(current.tempF)} with ${current.condition}.${extra}`,
+  );
+  lines.push("This is live Open-Meteo current conditions, not a trained model.");
+  return lines.join(" ");
 }
 
 export function weatherReplyText(
@@ -215,6 +283,10 @@ export async function answerWeather(question: string, visitor: VisitorGeo): Prom
   try {
     const place = await resolvePlace(question, visitor);
     const window = parseDateWindow(question, place.timezone || "America/Chicago");
+    if (window.kind === "now") {
+      const current = await fetchCurrentConditions(place);
+      return { text: currentReplyText(place, current) };
+    }
     const forecast = await fetchDailyForecast(place);
     return { text: weatherReplyText(place, window, forecast.days) };
   } catch {
