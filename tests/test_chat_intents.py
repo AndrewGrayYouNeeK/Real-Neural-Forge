@@ -166,10 +166,13 @@ def test_live_endpoints_are_wired_in_the_chat() -> None:
     assert "/live/quote" in source
     assert "/live/lottery" not in source
     assert "lotteryReply" not in source
+    assert "/agent/chat" in source
     assert "/live/ask" in source
     assert "askLive(question)" in source
     assert "neuralForgeChatMode" in source
     assert "mode: chatMode()" in source
+    assert "tools_used" in source
+    assert "tool-used-chip" in source
     assert "webkitSpeechRecognition" in source
     assert "/voice/speak" in source
     assert "speechPlainText" in source

@@ -6,7 +6,7 @@
     <title>Neural Forge — Train a small model on your numbers</title>
     <meta
       name="description"
-      content="Train a small model on your numbers. Ask what comes next — weather, markets, near-Earth objects, or your own data. Text is free. Training needs a free account. Listening in GQ uses voice credits. Payments are not live."
+      content="Train a small model on your numbers. Ask what comes next — forecast with confidence, train on your CSV, live weather and prices, backtested accuracy, Talk mode, and a developer API. Text chat is free. Voice credits are sold on the site."
     />
     <link rel="icon" href="/favicon.ico" sizes="any" />
     <link rel="stylesheet" href="/assets/styles.css" />
@@ -142,21 +142,50 @@
               <span class="hero-lead">Ask what comes next.</span>
             </h1>
             <p class="hero-copy">
-              Weather, markets, near-Earth objects, or your own data.
-              Free to read. Train when you want more. Listening uses voice credits.
+              Forecast your series with confidence, get live answers, and talk
+              to the model in plain English. Text chat is free.
             </p>
-            <ul class="hero-points">
+            <div class="hero-cta">
+              <a class="btn primary" href="#chat-input">Try it free</a>
+              <button class="btn secondary" type="button" id="hero-signup-btn">
+                Sign up
+              </button>
+            </div>
+            <p class="hero-pricing-note">
+              Text chat is free. Voice credits are sold on this website.
+            </p>
+          </section>
+
+          <section class="capabilities" id="capabilities" aria-labelledby="capabilities-heading">
+            <h2 id="capabilities-heading">What Neural Forge can do</h2>
+            <ul class="capability-list">
               <li>
-                <strong>Train on a CSV</strong>
-                in a private workspace, on your series.
+                <strong>Forecast any number series</strong>
+                with confidence ranges and recent accuracy.
               </li>
               <li>
-                <strong>Compare experiments</strong>
-                and keep the runs you care about.
+                <strong>Train on your own CSV</strong>
+                in one click in a private workspace.
               </li>
               <li>
-                <strong>Ask in the chat</strong>
-                for live answers or your model's forecast.
+                <strong>Live answers</strong>
+                for weather, market prices, space, and the moon.
+              </li>
+              <li>
+                <strong>Ask in plain English</strong>
+                via the chat agent — it calls tools when it needs facts.
+              </li>
+              <li>
+                <strong>Backtested accuracy</strong>
+                versus simple baselines (MAE, RMSE, and more).
+              </li>
+              <li>
+                <strong>Talk hands-free</strong>
+                in voice with Talk mode.
+              </li>
+              <li>
+                <strong>Developer API</strong>
+                — see the <a href="/docs">API docs</a>.
               </li>
             </ul>
           </section>
@@ -165,7 +194,7 @@
             <h2 id="pricing-heading">What's free, and what uses credits</h2>
             <ul>
               <li>
-                <strong>Text is free.</strong>
+                <strong>Text chat is free.</strong>
                 Reading the chat, live weather, markets, space, and the sample
                 models do not cost anything.
               </li>
@@ -174,9 +203,9 @@
                 needs a free account and stays under published caps.
               </li>
               <li>
-                <strong>GQ voice</strong>
-                uses credits. A free account starts with a small allowance.
-                Listening uses voice credits.
+                <strong>Voice credits</strong>
+                are sold on this website. A free account starts with a small GQ
+                allowance. Listening uses voice credits.
               </li>
               <li>
                 <strong>Payments are not live.</strong>

@@ -833,9 +833,19 @@ class TestForecastDashboard:
         html = page.text
         assert "Train a small model on your numbers." in html
         assert "Ask what comes next." in html
-        assert "Listening uses voice credits." in html
-        assert "Train on a CSV" in html
-        assert "Compare experiments" in html
+        assert "Try it free" in html
+        assert 'id="hero-signup-btn"' in html
+        assert "Text chat is free" in html
+        assert "Voice credits are sold on this website" in html
+        assert 'id="capabilities"' in html
+        assert "What Neural Forge can do" in html
+        assert "Forecast any number series" in html
+        assert "Train on your own CSV" in html
+        assert "Live answers" in html
+        assert "Ask in plain English" in html
+        assert "Backtested accuracy" in html
+        assert "Talk hands-free" in html
+        assert "Developer API" in html
         assert 'id="welcome-heading"' in html
         assert 'id="chat-log"' in html
         assert 'id="chat-form"' in html
@@ -857,6 +867,7 @@ class TestForecastDashboard:
         assert "Try the Bitcoin sample" in html
         assert 'href="/docs"' in html
         assert "API docs" in html
+        assert "/agent/chat" in client.get("/docs").text
         assert 'id="csv-train-file"' in html
         assert 'id="account-btn"' in html
         assert 'id="sign-in-modal"' in html
@@ -893,6 +904,7 @@ class TestForecastDashboard:
         assert "/live/weather" in app_js
         assert "/live/quote" in app_js
         assert "/live/lottery" not in app_js
+        assert "/agent/chat" in app_js
         assert "/live/ask" in app_js
         assert "/live/budget" in app_js
         assert "Voice is resting for today, text still works." in app_js
@@ -970,7 +982,9 @@ class TestLunarEndpoints:
         assert "curl -sS https://forge.youneek.dev/health" in html
         assert "/starters/weather/forecast" in html
         assert "/workspace/limits" in html
+        assert "/agent/chat" in html
         assert "/live/ask" in html
+        assert "tools_used" in html
         assert "Voice is resting for today, text still works." in html
         assert "Daily limit reached, back tomorrow." in html
         assert '"mode":"unhinged"' in html

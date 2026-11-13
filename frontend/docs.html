@@ -105,24 +105,53 @@ curl -sS -X POST https://forge.youneek.dev/workspace/models/MODEL_ID/predict-lat
 
 curl -sS "https://forge.youneek.dev/live/quote?kind=stock&amp;q=AAPL"
 
+curl -sS -X POST https://forge.youneek.dev/agent/chat \
+  -H "Content-Type: application/json" \
+  -d '{"question":"What can Neural Forge do?"}'
+
+# Optional history and mode. The agent may call forecast, live-data, and
+# evaluation tools before answering.
+curl -sS -X POST https://forge.youneek.dev/agent/chat \
+  -H "Content-Type: application/json" \
+  -d '{"question":"How accurate is the weather sample?","mode":"normal","history":[]}'
+
+# Unhinged mode on the agent route (same voice rules as /live/ask).
+curl -sS -X POST https://forge.youneek.dev/agent/chat \
+  -H "Content-Type: application/json" \
+  -d '{"question":"What can Neural Forge do?","mode":"unhinged"}'
+
+# Fallback without tools (unchanged):
 curl -sS -X POST https://forge.youneek.dev/live/ask \
   -H "Content-Type: application/json" \
   -d '{"question":"What can Neural Forge do?"}'
 
-# Optional. Omit mode, or pass "normal", for the default voice.
 curl -sS -X POST https://forge.youneek.dev/live/ask \
   -H "Content-Type: application/json" \
   -d '{"question":"What can Neural Forge do?","mode":"unhinged"}'</code></pre>
       <p>
-        <code>mode</code> is optional. <code>normal</code> allows casual
-        profanity when it fits. <code>unhinged</code> cusses a lot, jokes, and
+        <code>POST /agent/chat</code> is the tool-calling chat agent. Same
+        request shape as <code>/live/ask</code> (<code>question</code>,
+        optional <code>mode</code>, optional <code>facts</code>) plus optional
+        <code>history</code>. It may call tools such as
+        <code>forecast</code>, <code>fetch_live_data</code>,
+        <code>get_evaluation_metrics</code>, <code>compare_horizons</code>,
+        <code>explain_prediction</code>, and <code>list_user_series</code>,
+        then returns only the final answer text plus
+        <code>tools_used</code>. Cap every model call with the same neuron
+        budget as <code>/live/ask</code>.
+      </p>
+      <p>
+        <code>mode</code> is optional. <code>normal</code> answers directly and
+        briefly, with light wit secondary to the answer. Casual profanity is
+        fine when it fits. <code>unhinged</code> cusses a lot, jokes, and
         trash-talks the chat, the data, and bad forecasts, then still gives
         the real answer and the confidence. Both still refuse hate, slurs,
         harassment, threats, sexual content involving minors, and illegal
-        instructions.         Anyone can use either mode. Optional <code>facts</code> asks the
-        model to rewrite that text in the selected voice while keeping every
-        number, unit, and confidence figure exactly. Omit it for a normal
-        question.
+        instructions. Anyone can use either mode. Optional <code>facts</code>
+        asks the model to rewrite that text in the selected voice while
+        keeping every number, unit, and confidence figure exactly. Omit it for
+        a normal question. <code>/live/ask</code> stays available as a
+        non-agent fallback.
       </p>
       <p>
         General answers use GPT-OSS 120B. A successful reply adds

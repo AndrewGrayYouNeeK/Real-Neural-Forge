@@ -498,7 +498,22 @@ YouNeeK Time is **100 units / 100 minutes / 100 seconds** (not App Store 10/10/1
 
 ## Chat answers
 
-General questions (`POST /live/ask`) always go to `@cf/openai/gpt-oss-120b` on Workers AI. The 8B model (`@cf/meta/llama-3.1-8b-instruct-fp8-fast`) runs only when that call itself fails. It is not a budget fallback.
+`POST /agent/chat` is the tool-calling chat agent. Same body as `/live/ask`
+(`question`, optional `mode` `normal`|`unhinged`, optional `facts`) plus
+optional `history`. The model may call `forecast`, `fetch_live_data`,
+`get_evaluation_metrics`, `compare_horizons`, `explain_prediction`, and
+`list_user_series` (wired to existing forecast, live-data, evaluation, and
+workspace paths). The response is final answer text only, plus
+`tools_used`, `voice_resting`, and `voice_message`. Caps: about 4 tool calls
+per turn, per-tool and turn timeouts, and every model call counts toward the
+per-visitor and global neuron budgets below. After the free daily budget,
+non-owners stay text-only (`voice_resting`).
+
+`POST /live/ask` remains the non-agent fallback (dashboard falls back to it if
+`/agent/chat` errors). Normal mode answers directly and briefly; Unhinged
+mode is unchanged.
+
+General questions always go to `@cf/openai/gpt-oss-120b` on Workers AI. The 8B model (`@cf/meta/llama-3.1-8b-instruct-fp8-fast`) runs only when that call itself fails. It is not a budget fallback.
 
 Workers Paid includes 10,000 neurons per day. Extra neurons are $0.011 per 1,000. GPT-OSS 120B costs 31,818 neurons per million input tokens and 68,182 per million output tokens. A typical turn is about 400 input tokens and 160 output tokens, about 24 neurons. Reasoning tokens count as output, so each reply reserves 80.
 

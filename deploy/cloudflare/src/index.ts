@@ -2,6 +2,7 @@ import { Container, ContainerProxy, getContainer, type State } from "@cloudflare
 
 import { BINDINGS_HOST, containerEnv } from "./containerEnv";
 import { isAllowedObjectKey } from "./objectKey";
+import { handleAgent } from "./agent/handle";
 import { handleLive } from "./live/handle";
 
 export { ContainerProxy };
@@ -382,6 +383,9 @@ export default {
     }
     if (url.pathname === "/live" || url.pathname.startsWith("/live/")) {
       return handleLive(request, env);
+    }
+    if (url.pathname === "/agent" || url.pathname.startsWith("/agent/")) {
+      return handleAgent(request, env);
     }
     const container = getContainer(env.NEURAL_FORGE, "primary");
     await container.startAndWaitForPorts({

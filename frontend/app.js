@@ -1220,27 +1220,72 @@ function setChatMode(mode) {
   if (input) input.placeholder = on ? UNHINGED_PLACEHOLDER : NORMAL_PLACEHOLDER;
 }
 
+function chatHistoryPayload() {
+  const log = chatLog();
+  if (!log) return [];
+  const messages = [...log.querySelectorAll(".message")].slice(-8);
+  const history = [];
+  for (const message of messages) {
+    const role = message.classList.contains("user")
+      ? "user"
+      : message.classList.contains("assistant")
+        ? "assistant"
+        : null;
+    if (!role) continue;
+    const bubble = message.querySelector(".bubble");
+    const text = bubble ? bubble.textContent.trim() : "";
+    if (!text || text === "One moment — checking…") continue;
+    history.push({ role, content: text.slice(0, 500) });
+  }
+  return history;
+}
+
+function normalizeAskResult(result, facts) {
+  rememberVoiceBudget(result);
+  const text = result && typeof result.text === "string" ? result.text.trim() : "";
+  const toolsUsed = Array.isArray(result && result.tools_used)
+    ? result.tools_used.filter((name) => typeof name === "string" && name.trim())
+    : [];
+  if (result && result.capped) return { text, capped: true, toolsUsed };
+  if (facts && !(result && result.model === true)) return { text, failed: true, toolsUsed };
+  if (text) {
+    return {
+      text,
+      voiceResting: Boolean(result && result.voice_resting),
+      voiceMessage: typeof result.voice_message === "string" ? result.voice_message : "",
+      toolsUsed,
+    };
+  }
+  return null;
+}
+
 async function askLive(question, options) {
   const facts = options && typeof options.facts === "string" ? options.facts : "";
   const payload = { question, mode: chatMode() };
   if (facts) payload.facts = facts;
+  const history = chatHistoryPayload();
+  if (history.length) payload.history = history;
   try {
-    const result = await fetchJson("/live/ask", {
+    const agentResult = await fetchJson("/agent/chat", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
     });
-    rememberVoiceBudget(result);
-    const text = result && typeof result.text === "string" ? result.text.trim() : "";
-    if (result && result.capped) return { text, capped: true };
-    if (facts && !(result && result.model === true)) return { text, failed: true };
-    if (text) {
-      return {
-        text,
-        voiceResting: Boolean(result && result.voice_resting),
-        voiceMessage: typeof result.voice_message === "string" ? result.voice_message : "",
-      };
-    }
+    const normalized = normalizeAskResult(agentResult, facts);
+    if (normalized) return normalized;
+  } catch {
+    // Fall back to the unchanged /live/ask path when the agent route fails.
+  }
+  try {
+    const livePayload = { question, mode: chatMode() };
+    if (facts) livePayload.facts = facts;
+    const result = await fetchJson("/live/ask", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(livePayload),
+    });
+    const normalized = normalizeAskResult(result, facts);
+    if (normalized) return normalized;
   } catch (error) {
     return { text: (error && error.message) || ASK_UNAVAILABLE, failed: true };
   }
@@ -1257,7 +1302,20 @@ async function answer(question) {
   if (!facts) return factual;
   const rewritten = await askLive(question, { facts });
   if (!rewritten || rewritten.capped || rewritten.failed || !rewritten.text) return factual;
-  return { ...factual, text: rewritten.text };
+  return { ...factual, text: rewritten.text, toolsUsed: rewritten.toolsUsed };
+}
+
+function showToolsUsed(message, toolsUsed) {
+  if (!message || !Array.isArray(toolsUsed) || !toolsUsed.length) return;
+  const actions = message.querySelector(".message-actions");
+  if (!actions) return;
+  const unique = [...new Set(toolsUsed.map((name) => String(name).trim()).filter(Boolean))];
+  for (const name of unique.slice(0, 4)) {
+    const chip = document.createElement("span");
+    chip.className = "tool-used-chip";
+    chip.textContent = `used: ${name}`;
+    actions.append(chip);
+  }
 }
 
 async function handleQuestion(question) {
@@ -1267,6 +1325,7 @@ async function handleQuestion(question) {
     const reply = await answer(question);
     pending.remove();
     const replyMessage = addReply(reply.text, reply.chart);
+    showToolsUsed(replyMessage, reply.toolsUsed);
     if (reply.voiceResting && !state.toldVoiceResting) {
       state.toldVoiceResting = true;
       showHint(replyMessage, reply.voiceMessage || VOICE_RESTING_MESSAGE);
@@ -2163,6 +2222,14 @@ document.querySelectorAll("#suggestion-chips .chip, #demo-chips .chip").forEach(
 });
 
 document.getElementById("account-btn").addEventListener("click", openSignInModal);
+const heroSignup = document.getElementById("hero-signup-btn");
+if (heroSignup) {
+  heroSignup.addEventListener("click", () => {
+    openSignInModal();
+    const showSignUp = document.getElementById("show-sign-up");
+    if (showSignUp) showSignUp.click();
+  });
+}
 document.getElementById("modal-close").addEventListener("click", closeSignInModal);
 document.getElementById("sign-in-modal").addEventListener("click", (event) => {
   if (event.target === event.currentTarget) closeSignInModal();
