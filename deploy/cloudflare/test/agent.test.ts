@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   FALLBACK_MODEL,
@@ -8,19 +8,45 @@ import {
   tryReserve,
   type D1Like,
 } from "../src/live/ai";
+import { routeClearIntent } from "../src/agent/intent";
 import {
   agentSystemPrompt,
   buildAgentInputs,
+  factualFallback,
   isSmallTalk,
   runAgentTurn,
 } from "../src/agent/loop";
 import {
   collectToolCalls,
+  isDegenerateAnswer,
   parseJsonToolProtocol,
   sanitizeAgentAnswer,
   extractNativeToolCalls,
+  tryParseToolJson,
 } from "../src/agent/protocol";
-import { MAX_TOOL_CALLS, dispatchTool, type ToolContext } from "../src/agent/tools";
+import {
+  MAX_TOOL_CALLS,
+  dispatchTool,
+  weatherQuestionForTool,
+  type ToolContext,
+} from "../src/agent/tools";
+
+vi.mock("../src/live/weather", async () => {
+  const actual = await vi.importActual<typeof import("../src/live/weather")>("../src/live/weather");
+  return {
+    ...actual,
+    answerWeather: vi.fn(async (question: string) => {
+      if (/right\s+now|currently|\bnow\b/i.test(question)) {
+        return {
+          text: "Right now in New York, it is about 54°F with partly cloudy skies. This is live Open-Meteo current conditions, not a trained model.",
+        };
+      }
+      return {
+        text: "Tomorrow in New York, the high is about 60°F and the low about 45°F. This is a live Open-Meteo forecast, not a trained model.",
+      };
+    }),
+  };
+});
 
 type Row = { day: string; scope: string; requests: number; neurons: number };
 
@@ -93,6 +119,10 @@ function toolContext(overrides: Partial<ToolContext> = {}): ToolContext {
   };
 }
 
+afterEach(() => {
+  vi.restoreAllMocks();
+});
+
 describe("agent protocol", () => {
   it("parses native Responses function_call items", () => {
     const calls = extractNativeToolCalls({
@@ -123,6 +153,39 @@ describe("agent protocol", () => {
     );
   });
 
+  it("parses tool JSON wrapped in prose, fences, and extra text", () => {
+    const prose = parseJsonToolProtocol(
+      'Sure — calling the tool now.\n```json\n{"tool":"fetch_live_data","args":{"kind":"weather","query":"New York"}}\n```\nDone.',
+    );
+    expect(prose?.name).toBe("fetch_live_data");
+    expect(prose?.args).toEqual({ kind: "weather", query: "New York" });
+
+    const trailing = tryParseToolJson(
+      'I need live weather\n{"tool":"fetch_live_data","args":{"kind":"weather","query":"NYC right now"}}',
+    );
+    expect(trailing[0]?.name).toBe("fetch_live_data");
+
+    const fromReasoning = collectToolCalls(
+      {
+        output: [
+          {
+            type: "reasoning",
+            content: [
+              {
+                type: "reasoning_text",
+                text: 'Use {"tool":"forecast","args":{"series":"weather","horizon":3}}',
+              },
+            ],
+          },
+          { type: "message", content: [{ type: "output_text", text: "working" }] },
+        ],
+      },
+      "working",
+    );
+    expect(fromReasoning[0]?.name).toBe("forecast");
+    expect(fromReasoning[0]?.args).toEqual({ series: "weather", horizon: 3 });
+  });
+
   it("sanitizes planning and tool JSON from agent output", () => {
     const cleaned = sanitizeAgentAnswer(
       "Need to respond with the forecast\nHigh is 72°F.\n{\"tool\":\"forecast\",\"args\":{\"series\":\"weather\"}}",
@@ -130,6 +193,31 @@ describe("agent protocol", () => {
     expect(cleaned).toBe("High is 72°F.");
     expect(cleaned).not.toContain("tool");
     expect(cleaned.toLowerCase()).not.toContain("need to respond");
+  });
+
+  it("detects degenerate repeated-character answers", () => {
+    expect(isDegenerateAnswer("!!!!!!!!!!!")).toBe(true);
+    expect(isDegenerateAnswer("!!!!!!!!")).toBe(true);
+    expect(isDegenerateAnswer("")).toBe(true);
+    expect(isDegenerateAnswer("ok")).toBe(true);
+    expect(isDegenerateAnswer("Right now in New York, it is 54°F.")).toBe(false);
+  });
+});
+
+describe("agent intent router", () => {
+  it("routes clear weather, price, forecast, and accuracy intents", () => {
+    expect(routeClearIntent("what's the weather in New York right now")?.name).toBe("fetch_live_data");
+    expect(routeClearIntent("what's the weather in New York right now")?.args).toMatchObject({
+      kind: "weather",
+    });
+    expect(routeClearIntent("forecast the next 3 values of the weather starter series")).toEqual({
+      id: "intent_forecast",
+      name: "forecast",
+      args: { series: "weather", horizon: 3 },
+    });
+    expect(routeClearIntent("How accurate is the weather sample?")?.name).toBe("get_evaluation_metrics");
+    expect(routeClearIntent("what is the bitcoin price")?.args).toMatchObject({ kind: "crypto" });
+    expect(routeClearIntent("What is a neural network?")).toBeNull();
   });
 });
 
@@ -151,6 +239,28 @@ describe("agent tool dispatch", () => {
     expect(result.name).toBe("fetch_live_data");
     expect(result.ok).toBe(true);
     expect((result.data as { data?: { named_phase?: string } }).data?.named_phase).toBe("Full Moon");
+  });
+
+  it("keeps right-now intent from the original question when the model drops it", async () => {
+    expect(weatherQuestionForTool("what's the weather in New York right now", "New York")).toMatch(
+      /right now/i,
+    );
+    const result = await dispatchTool(
+      "fetch_live_data",
+      { kind: "weather", query: "New York" },
+      toolContext({ question: "what's the weather in New York right now" }),
+    );
+    expect(result.ok).toBe(true);
+    const data = result.data as {
+      text?: string;
+      wants_current?: boolean;
+      query_used?: string;
+    };
+    expect(data.wants_current).toBe(true);
+    expect(data.query_used).toMatch(/right now/i);
+    expect(data.text).toMatch(/Right now/i);
+    expect(data.text).toMatch(/54°F/);
+    expect(data.text?.toLowerCase()).not.toContain("tomorrow");
   });
 
   it("dispatches forecast to the container starter path", async () => {
@@ -300,10 +410,10 @@ describe("agent turn caps and fallback", () => {
             error.status = 400;
             throw error;
           }
-          return { response: "from 8b after primary failed" };
+          return { response: "Real Neural Forge predicts time series with transformers." };
         },
       };
-      const result = await runAgentTurn("How accurate is weather?", "normal", [], {
+      const result = await runAgentTurn("What does Real Neural Forge do?", "normal", [], {
         ai,
         db,
         ip: "4.4.4.4",
@@ -312,7 +422,7 @@ describe("agent turn caps and fallback", () => {
         models: { primary: PRIMARY_MODEL, fallback: FALLBACK_MODEL },
       });
       expect(result.modelId).toBe(FALLBACK_MODEL);
-      expect(result.text).toContain("8b");
+      expect(result.text.toLowerCase()).toContain("transformer");
       expect(logged.join("\n")).toContain("agent.primary_failed");
       expect(logged.join("\n")).toContain("tools field is not supported");
       expect(logged.join("\n")).toContain("400");
@@ -357,23 +467,192 @@ describe("agent turn caps and fallback", () => {
     expect(result.text.toLowerCase()).toContain("forge");
   });
 
-  it("answers without tools when the model returns plain text", async () => {
+  it("answers without tools when the model returns plain text for a non-tool question", async () => {
     const db = new MemoryD1();
     const ai = {
       async run() {
-        return { response: "Need to respond\nHigh of 70°F in Dallas." };
+        return { response: "Need to respond\nA transformer is a sequence model with attention." };
       },
     };
-    const result = await runAgentTurn("weather in Dallas?", "normal", [], {
+    const result = await runAgentTurn("What is a neural network transformer?", "normal", [], {
       ai,
       db,
       ip: "9.9.9.9",
       owner: false,
       toolContext: toolContext(),
     });
-    expect(result.text).toBe("High of 70°F in Dallas.");
+    expect(result.text).toBe("A transformer is a sequence model with attention.");
     expect(result.toolsUsed).toEqual([]);
     expect(result.capped).toBeFalsy();
+  });
+
+  it("retries once with a stricter instruction when tool JSON fails to parse", async () => {
+    const db = new MemoryD1();
+    let calls = 0;
+    const prompts: string[] = [];
+    const ai = {
+      async run(_model: string, inputs: Record<string, unknown>) {
+        calls += 1;
+        const parts = (inputs.input || inputs.messages) as { content: string }[];
+        prompts.push(parts.map((part) => part.content).join("\n"));
+        if (calls === 1) {
+          return { response: "fetch_live_data { broken" };
+        }
+        if (calls === 2) {
+          return {
+            response: '{"tool":"fetch_live_data","args":{"kind":"weather","query":"New York right now"}}',
+          };
+        }
+        return { response: "Right now in New York, it is about 54°F." };
+      },
+    };
+    const result = await runAgentTurn("what's the weather in New York right now", "normal", [], {
+      ai,
+      db,
+      ip: "8.8.4.4",
+      owner: false,
+      toolContext: toolContext({ question: "what's the weather in New York right now" }),
+      models: { primary: PRIMARY_MODEL, fallback: PRIMARY_MODEL },
+    });
+    expect(calls).toBeGreaterThanOrEqual(2);
+    expect(prompts.some((text) => text.includes("not a valid tool JSON"))).toBe(true);
+    expect(result.toolsUsed).toContain("fetch_live_data");
+    expect(result.text).toMatch(/54°F|Right now/i);
+  });
+
+  it("routes clear weather intents when the model emits no parseable tool call", async () => {
+    const db = new MemoryD1();
+    let calls = 0;
+    const ai = {
+      async run() {
+        calls += 1;
+        if (calls === 1) {
+          return { response: "I should look that up but here is nothing useful." };
+        }
+        return { response: "!!!!!!!!!!" };
+      },
+    };
+    const result = await runAgentTurn("what's the weather in New York right now", "normal", [], {
+      ai,
+      db,
+      ip: "8.8.8.8",
+      owner: false,
+      toolContext: toolContext({ question: "what's the weather in New York right now" }),
+      models: { primary: PRIMARY_MODEL, fallback: PRIMARY_MODEL },
+    });
+    expect(result.toolsUsed).toContain("fetch_live_data");
+    expect(result.text).toMatch(/Right now/i);
+    expect(result.text).toMatch(/54°F/);
+    expect(result.text.toLowerCase()).not.toContain("tomorrow");
+    expect(result.text).not.toMatch(/could not finish/i);
+  });
+
+  it("parses prose-wrapped tool JSON and falls back when the final answer is degenerate", async () => {
+    const db = new MemoryD1();
+    let calls = 0;
+    const ai = {
+      async run() {
+        calls += 1;
+        if (calls === 1) {
+          return {
+            response:
+              'Okay.\n```json\n{"tool":"forecast","args":{"series":"weather","horizon":3}}\n```',
+          };
+        }
+        return { response: "!!!!!!!!!!!!!!" };
+      },
+    };
+    const result = await runAgentTurn(
+      "forecast the next 3 values of the weather starter series",
+      "normal",
+      [],
+      {
+        ai,
+        db,
+        ip: "7.7.7.7",
+        owner: false,
+        toolContext: toolContext({
+          question: "forecast the next 3 values of the weather starter series",
+          fetchContainer: async (path: string) => {
+            if (path.includes("/starters/weather/forecast")) {
+              return {
+                status: 200,
+                json: {
+                  starter_id: "weather",
+                  name: "Central Park",
+                  unit: "°C",
+                  forecast: [
+                    { step: 1, value: 21 },
+                    { step: 2, value: 22 },
+                    { step: 3, value: 23 },
+                  ],
+                },
+              };
+            }
+            if (path.includes("/evaluation/")) {
+              return {
+                status: 200,
+                json: { horizon: 3, metrics: { mae: 1.1 }, comparison: "8% better than naive" },
+              };
+            }
+            return { status: 404, json: {} };
+          },
+        }),
+        models: { primary: PRIMARY_MODEL, fallback: PRIMARY_MODEL },
+      },
+    );
+    expect(result.toolsUsed).toContain("forecast");
+    expect(result.text).toMatch(/21/);
+    expect(result.text).not.toMatch(/^!+$/);
+    expect(result.text).not.toMatch(/could not finish/i);
+  });
+
+  it("logs agent.turn with a Workers Observability message field", async () => {
+    const db = new MemoryD1();
+    const logged: string[] = [];
+    const original = console.log;
+    console.log = (line?: unknown) => {
+      logged.push(typeof line === "string" ? line : JSON.stringify(line));
+    };
+    try {
+      const ai = {
+        async run() {
+          return { response: "A short direct answer about transformers." };
+        },
+      };
+      await runAgentTurn("What is attention?", "normal", [], {
+        ai,
+        db,
+        ip: "6.6.6.6",
+        owner: false,
+        toolContext: toolContext(),
+        models: { primary: PRIMARY_MODEL, fallback: PRIMARY_MODEL },
+      });
+      const turn = logged.map((line) => {
+        try {
+          return JSON.parse(line) as { message?: string; event?: string };
+        } catch {
+          return null;
+        }
+      }).find((item) => item?.message === "agent.turn");
+      expect(turn?.message).toBe("agent.turn");
+      expect(turn?.event).toBe("agent.turn");
+    } finally {
+      console.log = original;
+    }
+  });
+
+  it("builds templated answers from tool results", () => {
+    const text = factualFallback([
+      {
+        ok: true,
+        name: "fetch_live_data",
+        summary: "fetch_live_data",
+        data: { text: "Right now in New York, it is about 54°F with partly cloudy skies." },
+        durationMs: 12,
+      },
+    ]);
+    expect(text).toMatch(/54°F/);
   });
 
   it("runs a tool then answers, and counts each model call against quota", async () => {
