@@ -1,9 +1,36 @@
 import { describe, expect, it } from "vitest";
 
-import { conditionFromCode, formatTempF, weatherReplyText } from "../src/live/weather";
+import {
+  conditionFromCode,
+  currentReplyText,
+  formatTempF,
+  weatherReplyText,
+} from "../src/live/weather";
 import { CHICAGO } from "../src/live/geo";
 
 describe("weather replies", () => {
+  it("describes current conditions without tomorrow language", () => {
+    const text = currentReplyText(
+      { ...CHICAGO, source: "question", name: "New York", region: "New York" },
+      {
+        tempF: 54.2,
+        condition: "partly cloudy skies",
+        humidity: 61,
+        windMph: 8.4,
+        asOf: "2026-11-13T15:00",
+        timezone: "America/New_York",
+      },
+    );
+    expect(text).toContain("Right now");
+    expect(text).toContain("New York");
+    expect(text).toContain("54°F");
+    expect(text).toContain("partly cloudy skies");
+    expect(text).toContain("61% humidity");
+    expect(text).toContain("8 mph");
+    expect(text.toLowerCase()).not.toContain("tomorrow");
+    expect(text).toMatch(/current conditions/i);
+  });
+
   it("describes high, low, rain, and conditions in Fahrenheit", () => {
     const text = weatherReplyText(
       { ...CHICAGO, source: "question", name: "Dallas", region: "Texas" },

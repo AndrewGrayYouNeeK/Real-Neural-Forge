@@ -39,7 +39,7 @@ export type VisitorGeo = {
 };
 
 export type DateWindow = {
-  kind: "today" | "tomorrow" | "weekend" | "weekday" | "range";
+  kind: "now" | "today" | "tomorrow" | "weekend" | "weekday" | "range";
   dates: string[];
   label: string;
 };
@@ -55,10 +55,10 @@ const WEEKDAYS = [
 ] as const;
 
 const NOISE =
-  /\b(what|whats|what's|will|the|a|an|weather|forecast|be|like|hows|how's|how|is|are|it|in|for|at|on|of|this|next|coming|today|tonight|tomorrow|weekend|week|morning|afternoon|evening|tonight|temperature|temp|high|low|rain|chance|conditions|please|tell|me|about|going|to|look|looking|give|show|there)\b/gi;
+  /\b(what|whats|what's|will|the|a|an|weather|forecast|be|like|hows|how's|how|is|are|it|in|for|at|on|of|this|next|coming|today|tonight|tomorrow|weekend|week|morning|afternoon|evening|tonight|temperature|temp|high|low|rain|chance|conditions|please|tell|me|about|going|to|look|looking|give|show|there|right|now|currently|current)\b/gi;
 
 const PLACE_PREFIX =
-  /\b(?:in|for|at|near|around|outside)\s+([A-Za-z][A-Za-z .'-]+?(?:,\s*[A-Za-z]{2})?)(?=\s+(?:this|next|coming|today|tonight|tomorrow|on|for the|this coming|over the)\b|[?!.]|$)/i;
+  /\b(?:in|for|at|near|around|outside)\s+([A-Za-z][A-Za-z .'-]+?(?:,\s*[A-Za-z]{2})?)(?=\s+(?:this|next|coming|today|tonight|tomorrow|right\s+now|currently|now|on|for the|this coming|over the)\b|[?!.]|$)/i;
 
 export function visitorFromCf(cf: CfIncoming | undefined): VisitorGeo {
   if (!cf) return {};
@@ -134,10 +134,24 @@ export function addIsoDays(isoDate: string, days: number): string {
   return date.toISOString().slice(0, 10);
 }
 
+/** True when the asker wants live conditions, not a forecast day. */
+export function wantsCurrentConditions(question: string): boolean {
+  const text = question.toLowerCase();
+  if (/\b(right\s+now|currently)\b/.test(text)) return true;
+  if (!/\bnow\b/.test(text)) return false;
+  // Bare "now" still means current unless they also named a forecast day.
+  return !/\b(tomorrow|tonight|weekend|today|this\s+(morning|afternoon|evening)|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/.test(
+    text,
+  );
+}
+
 export function parseDateWindow(question: string, timeZone: string, at = new Date()): DateWindow {
   const text = question.toLowerCase();
   const today = ymdInZone(timeZone, at);
   const weekday = weekdayInZone(timeZone, at);
+  if (wantsCurrentConditions(question)) {
+    return { kind: "now", dates: [today], label: "right now" };
+  }
   if (/\bthis weekend\b|\bthe weekend\b|\bweekend\b/.test(text)) {
     const saturdayOffset = weekday === 0 ? -1 : weekday === 6 ? 0 : 6 - weekday;
     const saturday = addIsoDays(today, saturdayOffset);

@@ -61,7 +61,7 @@ export const TOOL_DEFINITIONS = [
     type: "function" as const,
     name: "fetch_live_data",
     description:
-      "Fetch live weather, stock/crypto prices, moon phase, or near-Earth space data from existing sources. Never invent values.",
+      "Fetch live weather, stock/crypto prices, moon phase, or near-Earth space data from existing sources. Never invent values. For weather, pass the user's wording in query so 'right now/currently/now' gets current conditions and named days get forecasts.",
     parameters: {
       type: "object",
       properties: {
@@ -72,7 +72,8 @@ export const TOOL_DEFINITIONS = [
         },
         query: {
           type: "string",
-          description: "Place, ticker, coin, or free-text for the live lookup.",
+          description:
+            "Place, ticker, coin, or free-text for the live lookup. For weather include time words like 'right now' or 'tomorrow'.",
         },
       },
       required: ["kind"],

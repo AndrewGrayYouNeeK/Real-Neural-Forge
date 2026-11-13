@@ -1,7 +1,19 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { SYSTEM_PROMPT, UNHINGED_PROMPT, tryReserve, type D1Like } from "../src/live/ai";
-import { agentSystemPrompt, runAgentTurn } from "../src/agent/loop";
+import {
+  FALLBACK_MODEL,
+  PRIMARY_MODEL,
+  SYSTEM_PROMPT,
+  UNHINGED_PROMPT,
+  tryReserve,
+  type D1Like,
+} from "../src/live/ai";
+import {
+  agentSystemPrompt,
+  buildAgentInputs,
+  isSmallTalk,
+  runAgentTurn,
+} from "../src/agent/loop";
 import {
   collectToolCalls,
   parseJsonToolProtocol,
@@ -213,11 +225,136 @@ describe("agent turn caps and fallback", () => {
     expect(SYSTEM_PROMPT.toLowerCase()).toContain("answer exactly what was asked");
     expect(SYSTEM_PROMPT.toLowerCase()).toContain("lead with the answer");
     expect(SYSTEM_PROMPT.toLowerCase()).toContain("secondary");
-    expect(agentSystemPrompt("normal")).toContain("forecast");
-    expect(agentSystemPrompt("normal")).toContain(SYSTEM_PROMPT);
-    expect(agentSystemPrompt("unhinged").startsWith(UNHINGED_PROMPT)).toBe(true);
+    expect(agentSystemPrompt("normal", true)).toContain("forecast");
+    expect(agentSystemPrompt("normal", true)).toContain(SYSTEM_PROMPT);
+    expect(agentSystemPrompt("unhinged", true).startsWith(UNHINGED_PROMPT)).toBe(true);
     expect(UNHINGED_PROMPT).toContain("foul-mouthed comedian");
     expect(UNHINGED_PROMPT).not.toContain("Answer exactly what was asked");
+  });
+
+  it("builds gpt-oss Responses inputs without a native tools field", () => {
+    const inputs = buildAgentInputs({
+      model: PRIMARY_MODEL,
+      system: agentSystemPrompt("normal", true),
+      question: "How accurate is weather?",
+      history: [],
+      toolNotes: [],
+      mode: "normal",
+      allowTools: true,
+    });
+    expect(inputs.input).toBeTruthy();
+    expect(inputs.reasoning).toEqual({ effort: "low" });
+    expect(inputs.max_output_tokens).toBe(220);
+    expect(inputs.tools).toBeUndefined();
+    expect(inputs.messages).toBeUndefined();
+    const fallback = buildAgentInputs({
+      model: FALLBACK_MODEL,
+      system: agentSystemPrompt("normal", true),
+      question: "How accurate is weather?",
+      history: [],
+      toolNotes: [],
+      mode: "normal",
+      allowTools: true,
+    });
+    expect(fallback.messages).toBeTruthy();
+    expect(fallback.tools).toBeTruthy();
+  });
+
+  it("stays on 120B when Responses JSON protocol succeeds", async () => {
+    const db = new MemoryD1();
+    const seen: string[] = [];
+    const ai = {
+      async run(model: string, inputs: Record<string, unknown>) {
+        seen.push(model);
+        expect(inputs.tools).toBeUndefined();
+        expect(inputs.input).toBeTruthy();
+        return { response: "Hey — what do you want to forge?" };
+      },
+    };
+    const result = await runAgentTurn("hey", "normal", [], {
+      ai,
+      db,
+      ip: "9.9.9.9",
+      owner: false,
+      toolContext: toolContext(),
+      models: { primary: PRIMARY_MODEL, fallback: FALLBACK_MODEL },
+    });
+    expect(seen).toEqual([PRIMARY_MODEL]);
+    expect(result.modelId).toBe(PRIMARY_MODEL);
+    expect(result.toolsUsed).toEqual([]);
+    expect(result.text.toLowerCase()).toContain("forge");
+  });
+
+  it("logs the 120B error reason when falling back to 8B", async () => {
+    const db = new MemoryD1();
+    const logged: string[] = [];
+    const original = console.error;
+    console.error = (line?: unknown) => {
+      logged.push(String(line));
+    };
+    try {
+      const ai = {
+        async run(model: string) {
+          if (model === PRIMARY_MODEL) {
+            const error = new Error("tools field is not supported") as Error & { status?: number };
+            error.status = 400;
+            throw error;
+          }
+          return { response: "from 8b after primary failed" };
+        },
+      };
+      const result = await runAgentTurn("How accurate is weather?", "normal", [], {
+        ai,
+        db,
+        ip: "4.4.4.4",
+        owner: false,
+        toolContext: toolContext(),
+        models: { primary: PRIMARY_MODEL, fallback: FALLBACK_MODEL },
+      });
+      expect(result.modelId).toBe(FALLBACK_MODEL);
+      expect(result.text).toContain("8b");
+      expect(logged.join("\n")).toContain("agent.primary_failed");
+      expect(logged.join("\n")).toContain("tools field is not supported");
+      expect(logged.join("\n")).toContain("400");
+      expect(logged.join("\n")).toContain(FALLBACK_MODEL);
+    } finally {
+      console.error = original;
+    }
+  });
+
+  it("does not call tools for small talk like hey", async () => {
+    expect(isSmallTalk("hey")).toBe(true);
+    expect(isSmallTalk("How accurate is the weather sample?")).toBe(false);
+    const db = new MemoryD1();
+    let fetched = false;
+    const ai = {
+      async run(_model: string, inputs: Record<string, unknown>) {
+        const system = ((inputs.input || inputs.messages) as { content: string }[])[0].content;
+        expect(system.toLowerCase()).toContain("do not call tools");
+        expect(system).not.toContain("Valid tools:");
+        expect(inputs.tools).toBeUndefined();
+        // Even if the model emits a tool call, small talk must ignore it.
+        return {
+          response: '{"tool":"list_user_series","args":{}}',
+        };
+      },
+    };
+    const result = await runAgentTurn("hey", "normal", [], {
+      ai,
+      db,
+      ip: "5.5.5.5",
+      owner: false,
+      toolContext: toolContext({
+        fetchContainer: async () => {
+          fetched = true;
+          throw new Error("should not fetch for small talk");
+        },
+      }),
+    });
+    expect(fetched).toBe(false);
+    expect(result.toolsUsed).toEqual([]);
+    expect(result.text.toLowerCase()).not.toContain("sign in");
+    expect(result.text.toLowerCase()).toContain("forge");
   });
 
   it("answers without tools when the model returns plain text", async () => {

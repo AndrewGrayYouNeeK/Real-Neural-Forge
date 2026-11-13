@@ -37,6 +37,26 @@ describe("parseDateWindow", () => {
     expect(weekend.kind).toBe("weekend");
     expect(weekend.dates).toEqual(["2026-11-14", "2026-11-15"]);
   });
+
+  it("uses current conditions for now / right now / currently", () => {
+    const rightNow = parseDateWindow(
+      "what's the weather in New York right now",
+      "America/New_York",
+      noonUtc,
+    );
+    expect(rightNow.kind).toBe("now");
+    expect(rightNow.label).toBe("right now");
+    expect(rightNow.dates).toEqual(["2026-11-10"]);
+    expect(parseDateWindow("currently in Dallas", "America/Chicago", noonUtc).kind).toBe("now");
+    expect(parseDateWindow("weather now", "America/Chicago", noonUtc).kind).toBe("now");
+    expect(
+      parseDateWindow("tell me now what tomorrow looks like", "America/Chicago", noonUtc).kind,
+    ).toBe("tomorrow");
+  });
+
+  it("keeps New York out of the place name when asking right now", () => {
+    expect(extractPlaceName("what's the weather in New York right now")).toBe("New York");
+  });
 });
 
 describe("visitorFromCf", () => {
