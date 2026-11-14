@@ -14,6 +14,7 @@ from typing import Any
 
 import torch
 
+from src.analysis.why import attach_why
 from src.dashboard_data import recent_series
 from src.evaluation.tracking import default_tracker, steps_from_payload, uncertainty_for
 from src.forecasting.spec import forecast_spec_from_config
@@ -174,6 +175,7 @@ def starter_forecast(
     payload["checkpoint_loaded"] = True
     payload["lite"] = lite
     _attach_uncertainty(starter.id, payload)
+    attach_why(payload)
     if not lite:
         _track_starter(starter.id, payload)
     if lite:

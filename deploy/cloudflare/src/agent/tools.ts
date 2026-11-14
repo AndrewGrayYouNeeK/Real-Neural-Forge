@@ -192,7 +192,7 @@ export const TOOL_DEFINITIONS = [
     type: "function" as const,
     name: "explain_prediction",
     description:
-      "Explain an existing prediction: point forecast, interval, confidence, and recent accuracy for a series.",
+      "Explain why a forecast looks the way it does: recent trend, seasonality, optional PCA drivers / K-Means regime, plus the point and interval.",
     parameters: {
       type: "object",
       properties: {
@@ -717,6 +717,7 @@ function compactForecast(
     uncertainty,
     history,
     checkpoint_loaded: payload.checkpoint_loaded,
+    why: payload.why,
   };
   if (isWeatherSeries(payload.starter_id) || isWeatherSeries(seriesHint)) {
     return convertWeatherForecastPayload(compact);
@@ -1015,10 +1016,54 @@ async function runCompareHorizons(ctx: ToolContext, args: Record<string, unknown
 async function runExplain(ctx: ToolContext, args: Record<string, unknown>): Promise<ToolResult["data"]> {
   const series = stringArg(args, "series", "weather") || "weather";
   const forecast = await runForecast(ctx, { series, horizon: 1 });
+  const why =
+    forecast && typeof forecast === "object" && "why" in forecast
+      ? (forecast as Record<string, unknown>).why
+      : undefined;
+  let explanation =
+    why && typeof why === "object" && typeof (why as { explanation?: unknown }).explanation === "string"
+      ? String((why as { explanation: string }).explanation)
+      : "";
+  if (!explanation) {
+    // Degrade gracefully: rebuild from history when the container omitted why.
+    const historyRows = Array.isArray((forecast as { history?: unknown }).history)
+      ? ((forecast as { history: Array<Record<string, unknown>> }).history)
+      : [];
+    const history = historyRows
+      .map((row) => Number(row.actual ?? row.value))
+      .filter((value) => Number.isFinite(value));
+    const steps = Array.isArray((forecast as { forecast?: unknown }).forecast)
+      ? ((forecast as { forecast: Array<Record<string, unknown>> }).forecast)
+      : [];
+    const next = steps[0];
+    const point = next ? Number(next.p50 ?? next.value) : undefined;
+    const rebuilt = await ctx.fetchContainer("/analysis/why", {
+      method: "POST",
+      headers: { ...ctx.authHeaders, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        history,
+        forecast: Number.isFinite(point) ? point : null,
+        unit: (forecast as { unit?: string }).unit ?? null,
+      }),
+    });
+    if (rebuilt.status < 400 && rebuilt.json && typeof rebuilt.json === "object") {
+      const payload = rebuilt.json as { explanation?: string; drivers?: unknown };
+      explanation = typeof payload.explanation === "string" ? payload.explanation : "";
+      return {
+        series,
+        why: payload,
+        explanation,
+        explanation_facts: forecast,
+        note: "Lead with the why explanation; then mention the point, interval, and accuracy using only these facts.",
+      };
+    }
+  }
   return {
     series,
+    why,
+    explanation,
     explanation_facts: forecast,
-    note: "Explain the point forecast, interval, confidence, and recent accuracy using only these facts.",
+    note: "Lead with the why explanation; then mention the point, interval, and accuracy using only these facts.",
   };
 }
 

@@ -500,7 +500,22 @@ function forecastPlainLines(kind, series, steps) {
     );
   }
   if (typeof series.summary === "string" && series.summary) lines.push(series.summary);
+  const why = whyExplanationText(series);
+  if (why) lines.push(why);
   return lines;
+}
+
+function whyExplanationText(payload) {
+  if (!payload || typeof payload !== "object") return "";
+  const why = payload.why;
+  if (why && typeof why === "object" && typeof why.explanation === "string") {
+    const text = why.explanation.trim();
+    return text ? `Why: ${text}` : "";
+  }
+  if (typeof payload.explanation === "string" && payload.explanation.trim()) {
+    return `Why: ${payload.explanation.trim()}`;
+  }
+  return "";
 }
 
 function liveUrl(path, question) {
@@ -562,6 +577,8 @@ function sampleModelLines(starterId, series, steps) {
     lines.push(`The last point in the sample is ${lastValue} on ${lastTime}.`);
   }
   if (typeof series.summary === "string" && series.summary) lines.push(series.summary);
+  const why = whyExplanationText(series);
+  if (why) lines.push(why);
   return lines;
 }
 
@@ -612,6 +629,8 @@ function sampleReplyParts(starterId, series, steps) {
   }
   const band = uncertaintyText(series.uncertainty, starterId);
   if (band) lines.push(band);
+  const why = whyExplanationText(series);
+  if (why) lines.push(why);
   return { text: lines.join("\n\n"), chart: forecastChart(series, steps, starterId) };
 }
 
@@ -1068,6 +1087,8 @@ async function announceCsvTrainResult(status) {
     ];
     const band = uncertaintyText(forecast.uncertainty);
     if (band) lines.push(band);
+    const why = whyExplanationText(forecast);
+    if (why) lines.push(why);
     try {
       const metrics = await fetchJson(`/workspace/models/${modelId}/metrics`);
       if (metrics && typeof metrics.comparison === "string" && metrics.comparison) {

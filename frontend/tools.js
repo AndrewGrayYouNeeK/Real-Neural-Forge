@@ -122,8 +122,8 @@
       name: "Why this forecast",
       icon: "?",
       description: "Plain-language drivers behind a prediction.",
-      status: "coming-soon",
-      view: "coming-soon",
+      status: "live",
+      view: "why",
     },
     {
       id: "reports",
@@ -261,7 +261,7 @@
     {
       id: "phase-3",
       title: "Phase 3 — Generative Layer",
-      status: "coming-soon",
+      status: "in-progress",
       items: [
         {
           name: "Why this forecast",

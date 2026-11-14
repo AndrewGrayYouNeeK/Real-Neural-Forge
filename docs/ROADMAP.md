@@ -11,58 +11,39 @@ and never deploy the frontend Worker `real-neural-forge`.
 - Grok-like dashboard shell and live tool registry
 - Weather °F conversion in tool payloads; Cache API key versioning
 
-## Phase 2 — Interactive & stateful (in progress)
+## Phase 2 — Interactive & stateful (shipped)
 
-1. **Per-user memory** — D1 `user_memory` (migration `0006_*`); chat tools
-   `remember_fact` / `recall_memory` / `forget_memory`; view/clear in the Memory
-   tool panel; owner, signed-in, and visitor scopes.
-2. **Persistent context** — D1 `chat_threads` / `chat_messages` (migration
-   `0007_*`); sidebar Chats list loads saved threads; reopening restores
-   messages and continues `/agent/chat` with `thread_id` context.
-3. **Saved scenarios** — D1 `saved_scenarios` (migration `0008_*`); save/list/run
-   via agent tools and the Memory panel; re-run opens chat with the stored
-   question/series.
-4. **Manage your own series** — workspace UI + `PATCH /workspace/datasets/{id}`
-   rename; delete and retrain actions on uploaded CSV series (Train on my CSV).
+1. **Per-user memory** — D1 `user_memory`; chat tools + Memory panel.
+2. **Persistent context** — D1 chat threads; sidebar restore with `thread_id`.
+3. **Saved scenarios** — D1 `saved_scenarios`; save/list/run tools + panel.
+4. **Manage your own series** — rename / delete / retrain uploaded CSVs.
 
-Flip matching “coming soon” tool-registry entries to live as each piece ships
-(Memory first; saved scenarios when that PR lands).
+## Foundations that feed Phase 3+
 
-## Phase 3 — Explainability & trust
+- **PCA column analysis (shipped)** — eigenvectors / co-moving groups;
+  `analyze_pca` + optional `data.pca_reduce`. Feeds **Why this forecast**.
+- **K-Means regimes / anomalies (shipped)** — `analyze_regimes`; anomaly flags
+  feed later **Alerts**.
+- **Diffusion forecaster experiment (shipped; selectable, not default)** —
+  `config/diffusion_experiment.yaml`.
+- **JEPA SSL experiment (shipped; selectable, not default)** —
+  `config/jepa_experiment.yaml`.
 
-- **PCA column analysis (in progress in this track)** — eigenvectors of the
-  covariance matrix for multi-column CSV uploads; explained variance and
-  co-moving groups; optional `data.pca_reduce` / `data.pca_components` before
-  training; API + `analyze_pca` agent tool; landing registry stays **In progress**.
-  Feeds the later **Why this forecast** narratives.
-- **K-Means regimes / anomalies (in progress in this track)** — cluster windows
-  or multi-column rows into `k≤8` regimes (auto-pick via silhouette); plain
-  labels (e.g. calm/volatile, low/high); flag points far from centroids. API +
-  `analyze_regimes` agent tool; landing registry stays **In progress**. Anomaly
-  flags feed later **Alerts**.
-- Why-this-forecast narratives grounded in model/features (still coming soon)
-- Shareable accuracy / forecast reports
-- Threshold alerts on series (fed by K-Means anomaly flags)
+## Phase 3 — Generative Layer (in progress)
 
-## Phase 4 — Synthetic & counterfactual
+1. **Why-this-forecast** — short plain-English explanation under each prediction
+   from recent trend / seasonality, plus PCA drivers and K-Means regimes when
+   available (`POST /analysis/why`, `why` on starter / predict-latest payloads,
+   `explain_prediction` agent tool). Landing tool **Live**.
+2. **What-if** — tweak a saved scenario input and see the forecast change.
+3. **Reports** — one-click shareable summary (forecast, accuracy, regimes).
+4. **Alerts** — threshold or unusual-point alerts from K-Means flags (in-app).
+5. **Synthetic data** — generate realistic sample series (diffusion can help).
 
-- Synthetic training series with known patterns
-- What-if shocks on a forecast path
-- **Diffusion forecaster experiment (in progress; selectable, not default)** —
-  small 1D conditional denoising diffusion `f_θ(x_t, t, c)` → many futures →
-  p10/p50/p90 bands; train offline/CPU-small with few inference steps; compare
-  via backtests/metrics against the transformer before any default swap
-  (`config/diffusion_experiment.yaml`, `model.name: diffusion_forecaster`);
-  landing registry stays **In progress**
+## Phase 4 — Multimodal
+
+- Charts, images, and text in one workflow
 
 ## Phase 5 — World model / simulator
 
 - Interactive multi-step simulator for rolling scenarios forward
-- **Diffusion forecaster experiment** (shared with Phase 4 synthetic path)
-- **JEPA-style (joint-embedding predictive) self-supervised pretraining
-  experiment for time series (in progress; selectable, not default)** — mask
-  spans; context encoder + EMA target encoder; predict target embeddings (not
-  raw values); then fine-tune the forecast head and compare via backtests
-  (`config/jepa_experiment.yaml`, `model.name: jepa_forecaster`,
-  `training.jepa_pretrain_epochs`) before any production swap; landing registry
-  stays **In progress**

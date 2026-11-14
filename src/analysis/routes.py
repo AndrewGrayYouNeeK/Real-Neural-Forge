@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field
 
 from src.analysis.kmeans import cluster_csv_bytes, cluster_matrix
 from src.analysis.pca import analyze_csv_bytes, analyze_matrix
+from src.analysis.why import build_why_explanation
 
 router = APIRouter(tags=["analysis"])
 
@@ -29,6 +30,16 @@ class KMeansMatrixRequest(BaseModel):
     rows: list[list[float]] = Field(min_length=3)
     k: int | None = Field(default=None, ge=2, le=8)
     max_k: int = Field(default=8, ge=2, le=8)
+
+
+class WhyRequest(BaseModel):
+    """History + forecast (+ optional PCA / regimes) for a plain-English why."""
+
+    history: list[float] = Field(default_factory=list)
+    forecast: float | None = None
+    unit: str | None = None
+    pca: dict[str, Any] | None = None
+    regimes: dict[str, Any] | None = None
 
 
 @router.post("/analysis/pca")
@@ -124,3 +135,15 @@ def analyze_kmeans_matrix(body: KMeansMatrixRequest) -> dict[str, Any]:
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     return report.as_dict()
+
+
+@router.post("/analysis/why")
+def explain_why_forecast(body: WhyRequest) -> dict[str, Any]:
+    """Short plain-English explanation for a prediction (trend / seasonality / drivers)."""
+    return build_why_explanation(
+        history=body.history,
+        forecast=body.forecast,
+        unit=body.unit,
+        pca=body.pca,
+        regimes=body.regimes,
+    )
