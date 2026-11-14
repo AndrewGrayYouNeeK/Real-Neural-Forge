@@ -19,7 +19,7 @@
   "containers": [
     {
       "class_name": "NeuralForgeContainer",
-      "image": "registry.cloudflare.com/d74b0de637f4d9d9eb3efb9e13142784/real-neural-forge:main-8dc15fe",
+      "image": "registry.cloudflare.com/d74b0de637f4d9d9eb3efb9e13142784/real-neural-forge:main-f80f66c",
       "instance_type": "standard-1",
       "max_instances": 1
     }
