@@ -16,8 +16,9 @@ and never deploy the frontend Worker `real-neural-forge`.
 1. **Per-user memory** — D1 `user_memory` (migration `0006_*`); chat tools
    `remember_fact` / `recall_memory` / `forget_memory`; view/clear in the Memory
    tool panel; owner, signed-in, and visitor scopes.
-2. **Persistent context** — chat history per user in D1; Grok sidebar Chats list
-   reopens a thread into `/agent/chat`.
+2. **Persistent context** — D1 `chat_threads` / `chat_messages` (migration
+   `0007_*`); sidebar Chats list loads saved threads; reopening restores
+   messages and continues `/agent/chat` with `thread_id` context.
 3. **Saved scenarios** — named forecast/question (series, horizon, settings);
    re-run from the sidebar.
 4. **Manage your own series** — list / rename / delete uploaded CSV series and

@@ -906,6 +906,10 @@ class TestForecastDashboard:
         assert 'id="memory-clear"' in html
         app_js = client.get("/assets/app.js").text
         assert "/agent/memory" in app_js
+        assert "/agent/chats" in app_js
+        assert "currentThreadId" in app_js
+        assert "refreshRemoteChatHistory" in app_js
+        assert "openSavedChat" in app_js
         assert "celsiusToFahrenheit" in app_js
         assert "return `${formatMetric(celsiusToFahrenheit(number))}°F`" in app_js
         assert "formatWeatherMaeFahrenheit" in app_js
