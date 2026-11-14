@@ -897,9 +897,15 @@ class TestForecastDashboard:
         tools_js = client.get("/assets/tools.js").text
         assert "TOOL_REGISTRY" in tools_js
         assert "Train on my CSV" in tools_js
+        assert 'id: "memory"' in tools_js
+        assert 'view: "memory"' in tools_js
         assert "Coming soon" in tools_js or "coming-soon" in tools_js
         assert "lottery" not in tools_js.lower()
+        assert 'id="view-memory"' in html
+        assert 'id="memory-list"' in html
+        assert 'id="memory-clear"' in html
         app_js = client.get("/assets/app.js").text
+        assert "/agent/memory" in app_js
         assert "celsiusToFahrenheit" in app_js
         assert "return `${formatMetric(celsiusToFahrenheit(number))}°F`" in app_js
         assert "formatWeatherMaeFahrenheit" in app_js

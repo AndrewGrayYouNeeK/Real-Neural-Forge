@@ -12,6 +12,14 @@ import {
 } from "../live/ai";
 import { runAgentTurn, type HistoryMessage } from "./loop";
 import {
+  clearMemory,
+  deleteMemoryKey,
+  listMemory,
+  memoryPromptBlock,
+  resolveMemoryIdentity,
+  upsertMemory,
+} from "./memory";
+import {
   authHeadersFromRequest,
   visitorFromRequest,
   type ContainerFetcher,
@@ -28,8 +36,6 @@ export type AgentEnv = AiQuotaEnv & {
   NEURAL_FORGE_VOICE_ID?: string;
   [key: string]: unknown;
 };
-
-const SESSION_COOKIE = "nf_session";
 
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -64,69 +70,23 @@ function historyFrom(body: Record<string, unknown> | null): HistoryMessage[] {
   return out;
 }
 
-function cookieValue(request: Request, name: string): string | null {
-  const header = request.headers.get("Cookie") || "";
-  for (const part of header.split(";")) {
-    const trimmed = part.trim();
-    if (!trimmed) continue;
-    const index = trimmed.indexOf("=");
-    if (index < 0) continue;
-    if (trimmed.slice(0, index) === name) return decodeURIComponent(trimmed.slice(index + 1));
-  }
-  return null;
-}
-
-function bearerToken(request: Request): string | null {
-  const header = request.headers.get("Authorization") || "";
-  const match = header.match(/^Bearer\s+(.+)$/i);
-  return match ? match[1].trim() : null;
-}
-
-function timingEqual(left: string, right: string): boolean {
-  if (left.length !== right.length) return false;
-  let diff = 0;
-  for (let index = 0; index < left.length; index += 1) {
-    diff |= left.charCodeAt(index) ^ right.charCodeAt(index);
-  }
-  return diff === 0;
-}
-
-async function sha256Hex(value: string): Promise<string> {
-  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
-  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
-}
-
-async function isOwnerRequest(request: Request, env: AgentEnv): Promise<boolean> {
-  const bearer = bearerToken(request);
-  if (bearer && env.NEURAL_FORGE_API_TOKEN && timingEqual(bearer, env.NEURAL_FORGE_API_TOKEN)) {
-    return true;
-  }
-  const token = bearer || cookieValue(request, SESSION_COOKIE);
-  if (!token || !env.WORKSPACES_DB) return false;
-  try {
-    const hash = await sha256Hex(token);
-    const now = new Date().toISOString();
-    const result = await env.WORKSPACES_DB.prepare(
-      `SELECT users.role AS role
-       FROM sessions
-       JOIN users ON users.id = sessions.user_id
-       WHERE sessions.token_hash = ? AND sessions.expires_at > ?
-       LIMIT 1`,
-    )
-      .bind(hash, now)
-      .all();
-    return result.results?.[0]?.role === "owner";
-  } catch {
-    return false;
-  }
-}
-
 function clientIp(request: Request): string | null {
   return (
     request.headers.get("CF-Connecting-IP") ||
     request.headers.get("X-Forwarded-For")?.split(",")[0]?.trim() ||
     null
   );
+}
+
+async function identityFor(
+  request: Request,
+  env: AgentEnv,
+): Promise<Awaited<ReturnType<typeof resolveMemoryIdentity>>> {
+  return resolveMemoryIdentity(request, {
+    apiToken: env.NEURAL_FORGE_API_TOKEN,
+    db: env.WORKSPACES_DB,
+    ip: clientIp(request),
+  });
 }
 
 function makeContainerFetcher(env: AgentEnv, request: Request): ContainerFetcher {
@@ -186,18 +146,26 @@ async function answerAgentChat(
       capped: true,
     });
   }
-  const owner = await isOwnerRequest(request, env);
+  const identity = await identityFor(request, env);
   const models = resolveChatModels(env);
   const caps = resolveAiCaps(env);
   const ip = clientIp(request);
+  let memoryPrompt = memoryPromptBlock([]);
+  try {
+    const facts = await listMemory(env.WORKSPACES_DB, identity.scope);
+    memoryPrompt = memoryPromptBlock(facts);
+  } catch {
+    memoryPrompt = memoryPromptBlock([]);
+  }
   try {
     const result = await runAgentTurn(clean, mode, history, {
       ai: env.AI,
       db: env.WORKSPACES_DB,
       ip,
-      owner,
+      owner: identity.owner,
       caps,
       models,
+      memoryPrompt,
       toolContext: {
         question: clean,
         visitor: visitorFromRequest(request),
@@ -205,6 +173,7 @@ async function answerAgentChat(
         authHeaders: authHeadersFromRequest(request),
         db: env.WORKSPACES_DB,
         waitUntil,
+        memoryScope: identity.scope,
       },
     });
     return json({
@@ -216,12 +185,63 @@ async function answerAgentChat(
       tools_used: result.toolsUsed,
       capped: result.capped || false,
       reason: result.reason,
+      memory_scope: identity.signedIn ? (identity.owner ? "owner" : "user") : "visitor",
     });
   } catch {
     return json({
       text: "I could not reach the language model right now. Please try again in a moment, or ask about the weather, a market price, the moon, or space.",
     });
   }
+}
+
+async function handleMemory(
+  request: Request,
+  env: AgentEnv,
+  path: string,
+): Promise<Response> {
+  if (!env.WORKSPACES_DB) {
+    return json({ error: "Memory store is not configured." }, 503);
+  }
+  const identity = await identityFor(request, env);
+  const db = env.WORKSPACES_DB;
+  const keyPath = path.replace(/^\/agent\/memory\/?/, "");
+
+  if (request.method === "GET" && !keyPath) {
+    const facts = await listMemory(db, identity.scope);
+    return json({
+      scope: identity.signedIn ? (identity.owner ? "owner" : "user") : "visitor",
+      signed_in: identity.signedIn,
+      facts,
+    });
+  }
+
+  if (request.method === "PUT" && !keyPath) {
+    let body: Record<string, unknown> = {};
+    try {
+      const text = await request.text();
+      if (text) body = JSON.parse(text) as Record<string, unknown>;
+    } catch {
+      return json({ error: "Invalid JSON." }, 400);
+    }
+    const key = typeof body.key === "string" ? body.key : "";
+    const value = typeof body.value === "string" ? body.value : "";
+    const result = await upsertMemory(db, identity.scope, key, value);
+    if (!result.ok) return json({ error: result.error }, 400);
+    return json({ fact: result.fact });
+  }
+
+  if (request.method === "DELETE" && !keyPath) {
+    const deleted = await clearMemory(db, identity.scope);
+    return json({ cleared: deleted });
+  }
+
+  if (request.method === "DELETE" && keyPath) {
+    const removed = await deleteMemoryKey(db, identity.scope, decodeURIComponent(keyPath));
+    if (!removed) return json({ error: "Not found." }, 404);
+    return json({ deleted: keyPath });
+  }
+
+  return json({ error: "Method not allowed." }, 405);
 }
 
 export async function handleAgent(
@@ -232,7 +252,13 @@ export async function handleAgent(
   const url = new URL(request.url);
   const path = url.pathname.replace(/\/+$/, "") || "/";
   if (request.method === "OPTIONS") {
-    return new Response(null, { status: 204, headers: { Allow: "GET, POST, OPTIONS" } });
+    return new Response(null, {
+      status: 204,
+      headers: { Allow: "GET, POST, PUT, DELETE, OPTIONS" },
+    });
+  }
+  if (path === "/agent/memory" || path.startsWith("/agent/memory/")) {
+    return handleMemory(request, env, path);
   }
   let body: Record<string, unknown> | null = null;
   if (request.method === "POST") {
