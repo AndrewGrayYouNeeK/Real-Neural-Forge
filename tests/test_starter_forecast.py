@@ -102,11 +102,18 @@ def test_lite_forecast_matches_full_point_forecast_and_stays_fast() -> None:
     elapsed = time.perf_counter() - started
     assert sequential == [sequential[0]] * 10
     assert concurrent == [sequential[0]] * 3
-    assert elapsed < 8.0, f"10 sequential + 3 concurrent lite forecasts took {elapsed:.2f}s"
+    assert elapsed < 8.0, (
+        f"10 sequential + 3 concurrent lite forecasts took {elapsed:.2f}s"
+    )
 
     client = TestClient(app, raise_server_exceptions=True)
     # Warm once, then time a sequential HTTP burst on the lite endpoint.
-    assert client.get("/starters/weather/forecast", params={"points": 120, "lite": 1}).status_code == 200
+    assert (
+        client.get(
+            "/starters/weather/forecast", params={"points": 120, "lite": 1}
+        ).status_code
+        == 200
+    )
     latencies: list[float] = []
     for _ in range(10):
         t0 = time.perf_counter()
