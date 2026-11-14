@@ -666,6 +666,37 @@ describe("agent tool dispatch", () => {
     expect((result.data as { summary?: string }).summary).toMatch(/move together/);
   });
 
+  it("runs analyze_regimes against a workspace dataset", async () => {
+    const fetchContainer = vi.fn(async (path: string) => {
+      expect(path).toContain("/workspace/datasets/dst_demo/kmeans");
+      return {
+        status: 200,
+        json: {
+          dataset_id: "dst_demo",
+          summary: "Auto-selected k=3. Regimes: calm days; steady days; volatile days.",
+          k: 3,
+          k_selection: "silhouette",
+          regimes: [
+            { cluster: 0, label: "calm days", count: 40, share: 0.4 },
+            { cluster: 1, label: "steady days", count: 35, share: 0.35 },
+            { cluster: 2, label: "volatile days", count: 25, share: 0.25 },
+          ],
+          anomaly_count: 2,
+          anomalies: [{ index: 9, distance: 3.2 }],
+          silhouette: 0.55,
+        },
+      };
+    });
+    const result = await dispatchTool(
+      "analyze_regimes",
+      { dataset_id: "dst_demo" },
+      toolContext({ fetchContainer }),
+    );
+    expect(result.ok).toBe(true);
+    expect((result.data as { summary?: string }).summary).toMatch(/Regimes/);
+    expect((result.data as { anomaly_count?: number }).anomaly_count).toBe(2);
+  });
+
   it("returns a clear degraded eval answer after container retries are exhausted", async () => {
     const result = await dispatchTool(
       "get_evaluation_metrics",

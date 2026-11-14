@@ -28,6 +28,7 @@ from src.accounts.actor import (
 )
 from src.accounts.limits import Limits, load_limits
 from src.accounts.passwords import hash_password, validate_password, verify_password
+from src.analysis.kmeans import cluster_csv_bytes
 from src.analysis.pca import analyze_csv_bytes
 from src.evaluation.backtest import rolling_origin_backtest
 from src.evaluation.run import _predictor_fn, save_backtest, stored_backtest
@@ -439,6 +440,41 @@ def analyze_dataset_pca(
         )
     try:
         report = analyze_csv_bytes(blob, columns=chosen, n_components=n_components)
+    except ValueError as exc:
+        raise WorkspaceError(422, str(exc)) from exc
+    return {
+        "dataset_id": dataset_id,
+        "name": row["name"],
+        **report.as_dict(),
+    }
+
+
+def analyze_dataset_kmeans(
+    actor: Actor,
+    dataset_id: str,
+    *,
+    columns: list[str] | None = None,
+    k: int | None = None,
+    max_k: int = 8,
+    window: int | None = None,
+) -> dict[str, Any]:
+    """Cluster a workspace dataset into regimes and flag unusual points."""
+    store = require_store()
+    row = store.get_dataset(actor.user_id, dataset_id)
+    if row is None:
+        raise WorkspaceError(404, "Dataset not found.")
+    blob = store.get_blob(str(row["object_key"]))
+    if blob is None:
+        raise WorkspaceError(404, "Dataset blob not found.")
+    inspected = inspect_csv_columns(blob, minimum_rows=_MIN_CSV_ROWS)
+    usable = [str(column["name"]) for column in inspected if column.get("usable")]
+    chosen = columns if columns else usable
+    if not chosen:
+        raise WorkspaceError(422, "K-Means needs at least one numeric column.")
+    try:
+        report = cluster_csv_bytes(
+            blob, columns=chosen, k=k, max_k=max_k, window=window
+        )
     except ValueError as exc:
         raise WorkspaceError(422, str(exc)) from exc
     return {

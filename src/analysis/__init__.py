@@ -1,5 +1,6 @@
-"""Lightweight analytical helpers (PCA, etc.) that stay off the request-path training loop."""
+"""Lightweight analytical helpers (PCA, K-Means, …) off the request-path train loop."""
 
+from src.analysis.kmeans import KMeansReport, cluster_dataframe, cluster_matrix
 from src.analysis.pca import (
     PCAModel,
     PCAReport,
@@ -9,9 +10,12 @@ from src.analysis.pca import (
 )
 
 __all__ = [
+    "KMeansReport",
     "PCAModel",
     "PCAReport",
     "analyze_dataframe",
     "analyze_matrix",
+    "cluster_dataframe",
+    "cluster_matrix",
     "fit_pca",
 ]
