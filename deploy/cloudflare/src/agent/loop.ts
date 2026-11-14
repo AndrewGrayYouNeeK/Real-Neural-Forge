@@ -369,7 +369,7 @@ export function factualFallback(results: ToolResult[]): string {
         name?: unknown;
         unit?: unknown;
         series?: unknown;
-        recent_accuracy?: { comparison?: unknown; metrics?: { mae?: unknown } };
+        recent_accuracy?: { comparison?: unknown; metrics?: { mae?: unknown }; unit?: unknown };
       };
       const values = Array.isArray(data.forecast)
         ? data.forecast
@@ -377,15 +377,13 @@ export function factualFallback(results: ToolResult[]): string {
             .filter((v): v is number => v != null)
         : [];
       if (values.length) {
-        const seriesId = typeof data.series === "string" ? data.series : "";
         const label = typeof data.name === "string" ? data.name : String(data.series || "series");
-        const weather = seriesId === "weather";
-        const displayValues = weather
-          ? values.map((celsius) => `${(celsius * (9 / 5) + 32).toFixed(2)}°F`)
-          : values.map((value) => {
-              const unit = typeof data.unit === "string" && data.unit ? ` ${data.unit}` : "";
-              return `${value}${unit}`.trim();
-            });
+        // Tool output already converts weather °C → °F; trust unit + values as-is.
+        const unit = typeof data.unit === "string" && data.unit ? data.unit : "";
+        const displayValues = values.map((value) => {
+          const rendered = Number.isInteger(value) ? String(value) : value.toFixed(2);
+          return unit ? `${rendered}${unit}` : rendered;
+        });
         let line = `Forecast for ${label}: ${displayValues.join(", ")}.`;
         const comparison =
           data.recent_accuracy && typeof data.recent_accuracy.comparison === "string"
@@ -398,8 +396,12 @@ export function factualFallback(results: ToolResult[]): string {
           typeof data.recent_accuracy.metrics.mae === "number"
             ? data.recent_accuracy.metrics.mae
             : null;
-        if (weather && mae != null) {
-          line += ` MAE about ${(mae * (9 / 5)).toFixed(2)}°F.`;
+        if (mae != null) {
+          const maeUnit =
+            (data.recent_accuracy && typeof data.recent_accuracy.unit === "string"
+              ? data.recent_accuracy.unit
+              : unit) || "";
+          line += ` MAE about ${mae.toFixed(2)}${maeUnit}.`;
         }
         lines.push(line);
         continue;
@@ -409,16 +411,19 @@ export function factualFallback(results: ToolResult[]): string {
       const data = result.data as {
         model_id?: unknown;
         comparison?: unknown;
+        unit?: unknown;
         metrics?: { mae?: unknown; directional_accuracy?: unknown };
       };
       const modelId = typeof data.model_id === "string" ? data.model_id : "model";
       const mae = data.metrics?.mae;
-      if (modelId === "weather" && typeof mae === "number") {
+      const unit = typeof data.unit === "string" && data.unit ? data.unit : "";
+      if (typeof mae === "number" && (modelId === "weather" || unit)) {
         const comparison =
           typeof data.comparison === "string" && data.comparison.trim()
             ? ` ${data.comparison.trim()}.`
             : "";
-        lines.push(`weather MAE about ${(mae * (9 / 5)).toFixed(2)}°F.${comparison}`);
+        const maeUnit = unit || (modelId === "weather" ? "°F" : "");
+        lines.push(`${modelId} MAE about ${mae.toFixed(2)}${maeUnit}.${comparison}`);
         continue;
       }
       if (typeof data.comparison === "string" && data.comparison.trim()) {
@@ -426,7 +431,7 @@ export function factualFallback(results: ToolResult[]): string {
         continue;
       }
       if (typeof mae === "number") {
-        lines.push(`${modelId} MAE: ${mae}.`);
+        lines.push(`${modelId} MAE: ${mae}${unit}.`);
         continue;
       }
     }

@@ -108,11 +108,8 @@
               <button class="chip" type="button" data-question="What will the weather be tomorrow?">
                 Predict tomorrow's weather
               </button>
-              <button class="chip" type="button" data-question="Moon phase">
-                Moon phase
-              </button>
-              <button class="chip" type="button" data-question="What's coming close to Earth?">
-                What's coming close to Earth?
+              <button class="chip" type="button" data-question="Try the Central Park temperature sample">
+                Central Park temperature
               </button>
               <button class="chip" type="button" data-question="How are the markets doing?">
                 How are the markets?
@@ -122,10 +119,11 @@
               </button>
             </nav>
 
-            <p class="chip-label" id="demo-chips-label">
+            <!-- Extra sample chips stay in the DOM for contracts; hidden on the empty Grok shell. -->
+            <p class="chip-label" id="demo-chips-label" hidden>
               Try a sample model — no account needed
             </p>
-            <nav class="chip-row" id="demo-chips" aria-labelledby="demo-chips-label">
+            <nav class="chip-row" id="demo-chips" aria-labelledby="demo-chips-label" hidden>
               <button class="chip" type="button" data-question="Try the Central Park temperature sample">
                 Central Park temperature
               </button>
@@ -140,6 +138,12 @@
               </button>
               <button class="chip" type="button" data-question="Try the moon illumination sample">
                 Moon illumination
+              </button>
+              <button class="chip" type="button" data-question="Moon phase">
+                Moon phase
+              </button>
+              <button class="chip" type="button" data-question="What's coming close to Earth?">
+                What's coming close to Earth?
               </button>
             </nav>
 

@@ -94,7 +94,7 @@ export const TOOL_DEFINITIONS = [
     type: "function" as const,
     name: "forecast",
     description:
-      "Run a model forecast for a series. series is a starter id (weather, stocks, crypto, near-earth, lunar), a workspace model id, or 'loaded' for the shared champion. Returns prediction values with interval/confidence and recent accuracy when available.",
+      "Run a model forecast for a series. series is a starter id (weather, stocks, crypto, near-earth, lunar), a workspace model id, or 'loaded' for the shared champion. Returns prediction values with interval/confidence and recent accuracy when available. Weather values and errors are already converted to °F.",
     parameters: {
       type: "object",
       properties: {
@@ -138,7 +138,7 @@ export const TOOL_DEFINITIONS = [
     type: "function" as const,
     name: "get_evaluation_metrics",
     description:
-      "Return rolling-origin backtest metrics (MAE, RMSE, MAPE, directional accuracy) and baseline comparison for a starter or workspace model.",
+      "Return rolling-origin backtest metrics (MAE, RMSE, MAPE, directional accuracy) and baseline comparison for a starter or workspace model. Weather MAE/RMSE are already converted to °F.",
     parameters: {
       type: "object",
       properties: {
@@ -390,11 +390,120 @@ async function withContainerRetries<T>(
   throw lastError;
 }
 
-function compactForecast(payload: Record<string, unknown>): Record<string, unknown> {
+/** Weather starter stores °C; agent tool payloads always expose °F so the model cannot mislabel. */
+const C_TO_F_SCALE = 9 / 5;
+
+function celsiusToFahrenheit(celsius: number): number {
+  return celsius * C_TO_F_SCALE + 32;
+}
+
+/** Absolute error / RMSE scale from °C to °F (no offset). */
+function scaleCelsiusDeltaToF(delta: number): number {
+  return delta * C_TO_F_SCALE;
+}
+
+function roundDisplay(value: number): number {
+  return Math.round(value * 100) / 100;
+}
+
+function isWeatherSeries(id: unknown): boolean {
+  return typeof id === "string" && id.toLowerCase() === "weather";
+}
+
+function convertTempFields(
+  row: Record<string, unknown>,
+  keys: string[],
+  convert: (n: number) => number,
+): Record<string, unknown> {
+  const next = { ...row };
+  for (const key of keys) {
+    const value = next[key];
+    if (typeof value === "number" && Number.isFinite(value)) {
+      next[key] = roundDisplay(convert(value));
+    }
+  }
+  return next;
+}
+
+function convertForecastRows(rows: unknown): unknown {
+  if (!Array.isArray(rows)) return rows;
+  return rows.map((row) => {
+    if (!row || typeof row !== "object") return row;
+    return convertTempFields(row as Record<string, unknown>, ["value", "p10", "p50", "p90", "actual", "predicted"], celsiusToFahrenheit);
+  });
+}
+
+function convertUncertainty(uncertainty: unknown): unknown {
+  if (!uncertainty || typeof uncertainty !== "object") return uncertainty;
+  const src = uncertainty as Record<string, unknown>;
+  const next: Record<string, unknown> = { ...src };
+  for (const key of ["p10", "p50", "p90", "low", "high"]) {
+    const value = src[key];
+    if (Array.isArray(value)) {
+      next[key] = value.map((item) =>
+        typeof item === "number" && Number.isFinite(item) ? roundDisplay(celsiusToFahrenheit(item)) : item,
+      );
+    } else if (typeof value === "number" && Number.isFinite(value)) {
+      next[key] = roundDisplay(celsiusToFahrenheit(value));
+    }
+  }
+  return next;
+}
+
+function convertWeatherForecastPayload(payload: Record<string, unknown>): Record<string, unknown> {
+  return {
+    ...payload,
+    unit: "°F",
+    storage_unit: "°C",
+    forecast: convertForecastRows(payload.forecast),
+    history: convertForecastRows(payload.history),
+    uncertainty: convertUncertainty(payload.uncertainty),
+  };
+}
+
+function convertMetricBag(block: unknown): unknown {
+  if (!block || typeof block !== "object") return block;
+  const src = block as Record<string, unknown>;
+  const next: Record<string, unknown> = { ...src };
+  for (const key of ["mae", "rmse"]) {
+    const value = next[key];
+    if (typeof value === "number" && Number.isFinite(value)) {
+      next[key] = roundDisplay(scaleCelsiusDeltaToF(value));
+    }
+  }
+  if (typeof next.mse === "number" && Number.isFinite(next.mse)) {
+    next.mse = roundDisplay(next.mse * C_TO_F_SCALE * C_TO_F_SCALE);
+  }
+  return next;
+}
+
+function convertWeatherMetricsPayload(report: Record<string, unknown>): Record<string, unknown> {
+  const baselines =
+    report.baselines && typeof report.baselines === "object"
+      ? Object.fromEntries(
+          Object.entries(report.baselines as Record<string, unknown>).map(([name, value]) => [
+            name,
+            convertMetricBag(value),
+          ]),
+        )
+      : report.baselines;
+  return {
+    ...report,
+    unit: "°F",
+    storage_unit: "°C",
+    metrics: convertMetricBag(report.metrics),
+    baselines,
+  };
+}
+
+function compactForecast(
+  payload: Record<string, unknown>,
+  seriesHint?: string,
+): Record<string, unknown> {
   const forecast = Array.isArray(payload.forecast) ? payload.forecast.slice(0, 8) : payload.forecast;
   const uncertainty = payload.uncertainty;
   const history = Array.isArray(payload.history) ? payload.history.slice(-4) : undefined;
-  return {
+  const compact: Record<string, unknown> = {
     starter_id: payload.starter_id,
     name: payload.name,
     unit: payload.unit,
@@ -405,11 +514,15 @@ function compactForecast(payload: Record<string, unknown>): Record<string, unkno
     history,
     checkpoint_loaded: payload.checkpoint_loaded,
   };
+  if (isWeatherSeries(payload.starter_id) || isWeatherSeries(seriesHint)) {
+    return convertWeatherForecastPayload(compact);
+  }
+  return compact;
 }
 
-function metricsSummary(report: Record<string, unknown>): Record<string, unknown> {
+function metricsSummary(report: Record<string, unknown>, modelId?: string): Record<string, unknown> {
   const metrics = report.metrics && typeof report.metrics === "object" ? report.metrics : null;
-  return {
+  const summary: Record<string, unknown> = {
     horizon: report.horizon,
     n: report.n,
     metrics,
@@ -418,6 +531,14 @@ function metricsSummary(report: Record<string, unknown>): Record<string, unknown
     comparison: report.comparison,
     improvement_pct: report.improvement_pct,
   };
+  const weather =
+    isWeatherSeries(modelId) ||
+    isWeatherSeries(report.model_id) ||
+    isWeatherSeries(report.starter_id);
+  if (weather) {
+    return convertWeatherMetricsPayload(summary);
+  }
+  return summary;
 }
 
 function throwIfContainerStatusError(status: number, label: string): void {
@@ -442,7 +563,7 @@ async function fetchOptionalAccuracy(
     refreshOnHit: false,
     load: async () => {
       const stored = await readStoredBacktest(ctx.db, series);
-      if (stored) return metricsSummary(stored);
+      if (stored) return metricsSummary(stored, series);
       const summary = await withTimeout(
         ctx.fetchContainer(
           `/evaluation/${encodeURIComponent(series)}`,
@@ -458,7 +579,7 @@ async function fetchOptionalAccuracy(
         typeof (summary.json as { backtest?: unknown }).backtest === "object"
           ? ((summary.json as { backtest: Record<string, unknown> }).backtest)
           : null;
-      if (report) return metricsSummary(report);
+      if (report) return metricsSummary(report, series);
       throw new Error("accuracy unavailable");
     },
   }).catch(() => null);
@@ -477,7 +598,7 @@ async function loadStarterForecast(
     containerInit(ctx, { method: "GET", headers: ctx.authHeaders }),
   );
   throwIfContainerStatusError(result.status, "Starter forecast");
-  const payload = compactForecast(result.json as Record<string, unknown>);
+  const payload = compactForecast(result.json as Record<string, unknown>, series);
   return { series, horizon, ...payload };
 }
 
@@ -503,7 +624,9 @@ async function runForecast(ctx: ToolContext, args: Record<string, unknown>): Pro
     });
     // Accuracy is optional and must not block a cache hit.
     const accuracy = cacheHit
-      ? await readStoredBacktest(ctx.db, series).then((row) => (row ? metricsSummary(row) : null))
+      ? await readStoredBacktest(ctx.db, series).then((row) =>
+          row ? metricsSummary(row, series) : null,
+        )
       : await fetchOptionalAccuracy(ctx, series, horizon);
     return { ...value, recent_accuracy: accuracy, cache_hit: cacheHit };
   }
@@ -602,7 +725,7 @@ async function loadStarterEvaluation(
 ): Promise<Record<string, unknown>> {
   // Prefer already-stored metrics (D1 / GET summary) before any recompute.
   const stored = await readStoredBacktest(ctx.db, modelId);
-  if (stored) return { model_id: modelId, ...metricsSummary(stored) };
+  if (stored) return { model_id: modelId, ...metricsSummary(stored, modelId) };
 
   const summary = await ctx.fetchContainer(
     `/evaluation/${encodeURIComponent(modelId)}`,
@@ -617,7 +740,10 @@ async function loadStarterEvaluation(
   ) {
     return {
       model_id: modelId,
-      ...metricsSummary((summary.json as { backtest: Record<string, unknown> }).backtest),
+      ...metricsSummary(
+        (summary.json as { backtest: Record<string, unknown> }).backtest,
+        modelId,
+      ),
     };
   }
 
@@ -632,7 +758,10 @@ async function loadStarterEvaluation(
   );
   if (result.status >= 500) throw new Error(`Backtest failed (${result.status}).`);
   if (result.status >= 400) throw new Error("Backtest unavailable for that model.");
-  return { model_id: modelId, ...metricsSummary(result.json as Record<string, unknown>) };
+  return {
+    model_id: modelId,
+    ...metricsSummary(result.json as Record<string, unknown>, modelId),
+  };
 }
 
 async function runEvaluation(ctx: ToolContext, args: Record<string, unknown>): Promise<ToolResult["data"]> {
@@ -674,7 +803,7 @@ async function runCompareHorizons(ctx: ToolContext, args: Record<string, unknown
       rows.push({ horizon, error: `unavailable (${result.status})` });
       continue;
     }
-    rows.push(metricsSummary(result.json as Record<string, unknown>));
+    rows.push(metricsSummary(result.json as Record<string, unknown>, modelId));
   }
   return { model_id: modelId, horizons: rows };
 }
