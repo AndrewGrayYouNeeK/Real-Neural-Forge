@@ -397,13 +397,14 @@ function forecastChart(series, steps) {
   };
 }
 
-function stepText(steps) {
+function stepText(steps, starterId) {
   if (!steps.length) return null;
+  const format = (raw) => formatStarterValue(starterId || "", raw) || formatMetric(raw);
   const parts = steps.slice(0, 5).map((step, index) => {
-    const value = formatMetric(step.p50 != null ? step.p50 : step.value);
+    const value = format(step.p50 != null ? step.p50 : step.value);
     const band =
       step.p10 != null && step.p90 != null
-        ? ` (likely between ${formatMetric(step.p10)} and ${formatMetric(step.p90)})`
+        ? ` (likely between ${format(step.p10)} and ${format(step.p90)})`
         : "";
     const label = steps.length > 1 ? `Step ${step.step || index + 1}` : "Next value";
     return `${label}: ${value}${band}.`;
@@ -420,13 +421,30 @@ const FORECAST_STARTERS = {
   crypto: "crypto",
 };
 
+function celsiusToFahrenheit(celsius) {
+  return celsius * (9 / 5) + 32;
+}
+
 function formatStarterValue(kind, value) {
   const number = asNumber(value);
   if (number == null) return null;
-  if (kind === "weather") return `${formatMetric(number)}°C`;
+  // Weather samples are stored in °C; user-facing replies always label °F.
+  if (kind === "weather") return `${formatMetric(celsiusToFahrenheit(number))}°F`;
   if (kind === "lunar") return formatMetric(number);
   if (kind === "near-earth") return formatMetric(number);
   return formatMetric(number);
+}
+
+function displayUnitForStarter(starterId, rawUnit) {
+  if (starterId === "weather") return "°F";
+  return typeof rawUnit === "string" && rawUnit ? rawUnit : "";
+}
+
+function formatWeatherMaeFahrenheit(maeCelsius) {
+  const mae = asNumber(maeCelsius);
+  if (mae == null) return null;
+  // Temperature MAE scales by 9/5 (no offset).
+  return formatMetric(mae * (9 / 5));
 }
 
 function forecastPlainLines(kind, series, steps) {
@@ -461,7 +479,7 @@ function forecastPlainLines(kind, series, steps) {
     }
   } else {
     lines.push(`Here is what the sample model expects next on ${name}.`);
-    const nextText = stepText(steps);
+    const nextText = stepText(steps, kind);
     if (nextText) lines.push(nextText);
     else lines.push("The sample is too short right now for a forecast.");
   }
@@ -509,7 +527,8 @@ function starterIdFromQuestion(question) {
 
 function sampleModelLines(starterId, series, steps) {
   const name = series.name || series.dataset || "this sample series";
-  const unit = series.unit ? ` (${series.unit})` : "";
+  const unitLabel = displayUnitForStarter(starterId, series.unit);
+  const unit = unitLabel ? ` (${unitLabel})` : "";
   const next = steps[0];
   const value = next
     ? formatStarterValue(starterId, next.p50 != null ? next.p50 : next.value)
@@ -525,7 +544,9 @@ function sampleModelLines(starterId, series, steps) {
     `This is the shipped “${name}” sample model, not a live forecast. No account is required to try it.`,
   ];
   if (value) {
-    lines.push(`It expects the next step to be about ${value}${unit}.`);
+    // formatStarterValue already includes °F for weather — do not append raw °C.
+    const suffix = starterId === "weather" ? "" : unit;
+    lines.push(`It expects the next step to be about ${value}${suffix}.`);
   } else {
     lines.push("The sample is too short right now for a next-step read.");
   }
@@ -548,7 +569,7 @@ function approachHighlightLine(highlights) {
   return `Closest catalogued approaches in this saved snapshot: ${bits.join("; ")}.`;
 }
 
-function uncertaintyText(uncertainty) {
+function uncertaintyText(uncertainty, starterId) {
   if (!uncertainty || typeof uncertainty !== "object") return "";
   const lows = Array.isArray(uncertainty.p10) ? uncertainty.p10 : [];
   const highs = Array.isArray(uncertainty.p90) ? uncertainty.p90 : [];
@@ -556,7 +577,13 @@ function uncertaintyText(uncertainty) {
   const high = asNumber(highs[0]);
   const lines = [];
   if (low != null && high != null && low !== high) {
-    lines.push(`Likely range: ${formatMetric(low)} to ${formatMetric(high)}.`);
+    if (starterId === "weather") {
+      lines.push(
+        `Likely range: ${formatMetric(celsiusToFahrenheit(low))}°F to ${formatMetric(celsiusToFahrenheit(high))}°F.`
+      );
+    } else {
+      lines.push(`Likely range: ${formatMetric(low)} to ${formatMetric(high)}.`);
+    }
   }
   const confidence = asNumber(uncertainty.confidence);
   if (confidence != null) {
@@ -572,10 +599,10 @@ function sampleReplyParts(starterId, series, steps) {
   const extra = approachHighlightLine(series.highlights);
   if (extra) lines.push(extra);
   if (steps.length > 1) {
-    const path = stepText(steps);
+    const path = stepText(steps, starterId);
     if (path) lines.push(path);
   }
-  const band = uncertaintyText(series.uncertainty);
+  const band = uncertaintyText(series.uncertainty, starterId);
   if (band) lines.push(band);
   return { text: lines.join("\n\n"), chart: forecastChart(series, steps) };
 }
@@ -587,7 +614,18 @@ async function baselineComparison(modelId) {
       headers: { "Content-Type": "application/json" },
       body: "{}",
     });
-    return report && typeof report.comparison === "string" ? report.comparison : "";
+    if (!report || typeof report !== "object") return "";
+    const comparison =
+      typeof report.comparison === "string" ? report.comparison.trim() : "";
+    const mae = report.metrics && asNumber(report.metrics.mae);
+    if (modelId === "weather") {
+      const maeF = formatWeatherMaeFahrenheit(mae);
+      const bits = [];
+      if (comparison) bits.push(comparison);
+      if (maeF != null) bits.push(`MAE about ${maeF}°F on the holdout.`);
+      return bits.join(" ");
+    }
+    return comparison;
   } catch {
     return "";
   }
@@ -1883,14 +1921,7 @@ async function buyVoicePack(packId, signedIn) {
 }
 
 function openVoicePanel() {
-  document.getElementById("voice-panel").open = true;
-  const sidebar = document.getElementById("sidebar");
-  sidebar.scrollTop = 0;
-  document.getElementById("voice-panel").scrollIntoView({ block: "start" });
-  if (window.matchMedia("(max-width: 900px)").matches) {
-    document.body.classList.add("sidebar-open");
-    document.getElementById("sidebar-toggle").setAttribute("aria-expanded", "true");
-  }
+  showToolView("voice");
 }
 
 /* ------------------------------------------------------------------- auth */
@@ -2198,9 +2229,253 @@ function watchTraining() {
   }, 5000);
 }
 
+/* ----------------------------------------------------------- tool registry */
+
+const HISTORY_KEY = "neuralForgeChatHistory";
+const toolsApi =
+  (typeof window !== "undefined" && window.NeuralForgeTools) || {
+    TOOL_REGISTRY: [],
+    byId() {
+      return null;
+    },
+  };
+
+function syncHasChatClass() {
+  const log = chatLog();
+  const hasUser = Boolean(log && log.querySelector(".message.user"));
+  document.body.classList.toggle("has-chat", hasUser);
+}
+
+function closeMobileSidebar() {
+  document.body.classList.remove("sidebar-open");
+  const toggle = document.getElementById("sidebar-toggle");
+  if (toggle) toggle.setAttribute("aria-expanded", "false");
+  const backdrop = document.getElementById("sidebar-backdrop");
+  if (backdrop) backdrop.hidden = true;
+}
+
+function showToolView(viewId, toolMeta) {
+  const stage = document.getElementById("main-stage");
+  if (!stage) return;
+  const next = viewId || "chat";
+  stage.dataset.view = next;
+  document.querySelectorAll("[data-tool-view]").forEach((panel) => {
+    panel.hidden = panel.getAttribute("data-tool-view") !== next;
+  });
+  if (next === "coming-soon" && toolMeta) {
+    const title = document.getElementById("coming-soon-title");
+    const body = document.getElementById("coming-soon-body");
+    if (title) title.textContent = toolMeta.name || "Coming soon";
+    if (body) {
+      body.textContent =
+        (toolMeta.description || "This tool is on the roadmap.") +
+        " Chat and the live tools stay available meanwhile.";
+    }
+  }
+  document.querySelectorAll(".tool-nav-btn").forEach((button) => {
+    const current = button.dataset.toolId === (toolMeta && toolMeta.id);
+    button.setAttribute("aria-current", current || (next === "chat" && button.dataset.toolId === "chat") ? "page" : "false");
+  });
+  if (next === "chat") {
+    document.querySelectorAll("[data-tool-view]").forEach((panel) => {
+      panel.hidden = true;
+    });
+  }
+  closeMobileSidebar();
+  syncHasChatClass();
+}
+
+function activateTool(tool) {
+  if (!tool) return;
+  if (tool.href) {
+    window.location.assign(tool.href);
+    return;
+  }
+  if (tool.id === "talk") {
+    showToolView("voice", tool);
+    const talkBtn = document.getElementById("talk-toggle");
+    if (talkBtn && !talk.active) talkBtn.focus();
+    return;
+  }
+  if (tool.status === "coming-soon") {
+    showToolView("coming-soon", tool);
+    return;
+  }
+  showToolView(tool.view || "chat", tool);
+}
+
+function renderToolNav() {
+  const nav = document.getElementById("tool-nav");
+  if (!nav || !toolsApi.TOOL_REGISTRY) return;
+  nav.replaceChildren();
+  const label = document.createElement("p");
+  label.className = "sidebar-section-label";
+  label.textContent = "Tools";
+  nav.append(label);
+  for (const tool of toolsApi.TOOL_REGISTRY) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "tool-nav-btn";
+    button.dataset.toolId = tool.id;
+    const icon = document.createElement("span");
+    icon.className = "tool-nav-icon";
+    icon.setAttribute("aria-hidden", "true");
+    icon.textContent = tool.icon || "·";
+    const meta = document.createElement("span");
+    meta.className = "tool-nav-meta";
+    const name = document.createElement("span");
+    name.className = "tool-nav-name";
+    name.textContent = tool.name;
+    meta.append(name);
+    if (tool.status === "coming-soon") {
+      const status = document.createElement("span");
+      status.className = "tool-nav-status";
+      status.textContent = "Coming soon";
+      meta.append(status);
+    }
+    button.append(icon, meta);
+    button.addEventListener("click", () => activateTool(tool));
+    nav.append(button);
+  }
+}
+
+function renderToolsMenu() {
+  const menu = document.getElementById("tools-menu");
+  if (!menu || !toolsApi.TOOL_REGISTRY) return;
+  menu.replaceChildren();
+  for (const tool of toolsApi.TOOL_REGISTRY) {
+    const item = document.createElement("button");
+    item.type = "button";
+    item.className = "tools-menu-item";
+    item.setAttribute("role", "menuitem");
+    const title = document.createElement("strong");
+    title.textContent = `${tool.icon || ""} ${tool.name}`.trim();
+    const desc = document.createElement("span");
+    desc.className = "muted";
+    desc.textContent =
+      tool.status === "coming-soon"
+        ? `Coming soon — ${tool.description || ""}`
+        : tool.description || "";
+    item.append(title, desc);
+    item.addEventListener("click", () => {
+      menu.hidden = true;
+      const toggle = document.getElementById("tools-menu-btn");
+      if (toggle) toggle.setAttribute("aria-expanded", "false");
+      activateTool(tool);
+    });
+    menu.append(item);
+  }
+}
+
+function historyBucket(iso) {
+  const when = new Date(iso);
+  if (Number.isNaN(when.getTime())) return "Previous 7 days";
+  const now = new Date();
+  const startToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const startYesterday = new Date(startToday);
+  startYesterday.setDate(startYesterday.getDate() - 1);
+  const weekAgo = new Date(startToday);
+  weekAgo.setDate(weekAgo.getDate() - 7);
+  if (when >= startToday) return "Today";
+  if (when >= startYesterday) return "Yesterday";
+  if (when >= weekAgo) return "Previous 7 days";
+  return "Older";
+}
+
+function loadChatHistory() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(HISTORY_KEY) || "[]");
+    return Array.isArray(raw) ? raw : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveChatHistory(entries) {
+  try {
+    localStorage.setItem(HISTORY_KEY, JSON.stringify(entries.slice(0, 40)));
+  } catch {
+    // History is best-effort when storage is blocked.
+  }
+}
+
+function rememberChatTurn(question) {
+  const title = String(question || "").replace(/\s+/g, " ").trim().slice(0, 80);
+  if (!title) return;
+  const entries = loadChatHistory().filter((row) => row && row.title !== title);
+  entries.unshift({ title, at: new Date().toISOString() });
+  saveChatHistory(entries);
+  renderChatHistory();
+}
+
+function renderChatHistory(filterText) {
+  const host = document.getElementById("history-groups");
+  if (!host) return;
+  const needle = String(filterText || "").trim().toLowerCase();
+  let entries = loadChatHistory();
+  if (needle) {
+    entries = entries.filter((row) => String(row.title || "").toLowerCase().includes(needle));
+  }
+  host.replaceChildren();
+  if (!entries.length) {
+    const empty = document.createElement("p");
+    empty.className = "hint history-empty";
+    empty.textContent = needle ? "No matching chats." : "No saved chats yet.";
+    host.append(empty);
+    return;
+  }
+  const order = ["Today", "Yesterday", "Previous 7 days", "Older"];
+  const groups = new Map(order.map((name) => [name, []]));
+  for (const entry of entries) {
+    const bucket = historyBucket(entry.at);
+    if (!groups.has(bucket)) groups.set(bucket, []);
+    groups.get(bucket).push(entry);
+  }
+  for (const name of order) {
+    const rows = groups.get(name) || [];
+    if (!rows.length) continue;
+    const label = document.createElement("p");
+    label.className = "history-group-label";
+    label.textContent = name;
+    host.append(label);
+    for (const row of rows) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "history-item";
+      button.textContent = row.title;
+      button.addEventListener("click", () => {
+        showToolView("chat");
+        handleQuestion(row.title);
+      });
+      host.append(button);
+    }
+  }
+}
+
+function startNewChat() {
+  const log = chatLog();
+  if (log) log.replaceChildren();
+  showToolView("chat");
+  syncHasChatClass();
+  const input = document.getElementById("chat-input");
+  if (input) input.focus();
+}
+
+function resizeComposer() {
+  const input = document.getElementById("chat-input");
+  if (!input || input.tagName !== "TEXTAREA") return;
+  input.style.height = "auto";
+  input.style.height = `${Math.min(input.scrollHeight, 160)}px`;
+}
+
 /* ------------------------------------------------------------------ wire-up */
 
 setChatMode(chatMode());
+renderToolNav();
+renderToolsMenu();
+renderChatHistory();
+showToolView("chat");
+
 document.getElementById("unhinged-toggle").addEventListener("click", () => {
   setChatMode(chatMode() === "unhinged" ? "normal" : "unhinged");
 });
@@ -2212,14 +2487,93 @@ document.getElementById("chat-form").addEventListener("submit", (event) => {
   const question = input.value.trim();
   if (!question) return;
   input.value = "";
-  handleQuestion(question);
+  resizeComposer();
+  rememberChatTurn(question);
+  handleQuestion(question).then(() => syncHasChatClass());
 });
+
+const chatInput = document.getElementById("chat-input");
+if (chatInput) {
+  chatInput.addEventListener("input", resizeComposer);
+  chatInput.addEventListener("keydown", (event) => {
+    if (event.key === "Enter" && !event.shiftKey) {
+      event.preventDefault();
+      document.getElementById("chat-form").requestSubmit();
+    }
+  });
+}
 
 document.querySelectorAll("#suggestion-chips .chip, #demo-chips .chip").forEach((chip) => {
   chip.addEventListener("click", () => {
-    handleQuestion(chip.dataset.question);
+    rememberChatTurn(chip.dataset.question);
+    handleQuestion(chip.dataset.question).then(() => syncHasChatClass());
   });
 });
+
+document.querySelectorAll(".tool-view .chip[data-question]").forEach((chip) => {
+  chip.addEventListener("click", () => {
+    showToolView("chat");
+    rememberChatTurn(chip.dataset.question);
+    handleQuestion(chip.dataset.question).then(() => syncHasChatClass());
+  });
+});
+
+document.querySelectorAll(".back-to-chat").forEach((button) => {
+  button.addEventListener("click", () => showToolView("chat"));
+});
+
+const newChatBtn = document.getElementById("new-chat-btn");
+if (newChatBtn) newChatBtn.addEventListener("click", startNewChat);
+
+const historySearch = document.getElementById("history-search");
+if (historySearch) {
+  historySearch.addEventListener("input", () => renderChatHistory(historySearch.value));
+}
+
+const toolsMenuBtn = document.getElementById("tools-menu-btn");
+const toolsMenu = document.getElementById("tools-menu");
+if (toolsMenuBtn && toolsMenu) {
+  toolsMenuBtn.addEventListener("click", () => {
+    const open = toolsMenu.hidden;
+    toolsMenu.hidden = !open;
+    toolsMenuBtn.setAttribute("aria-expanded", open ? "true" : "false");
+  });
+}
+
+const attachCsvBtn = document.getElementById("attach-csv-btn");
+if (attachCsvBtn) {
+  attachCsvBtn.addEventListener("click", () => {
+    promptCsvPicker();
+  });
+}
+
+const trainCsvPanelBtn = document.getElementById("train-csv-panel-btn");
+if (trainCsvPanelBtn) {
+  trainCsvPanelBtn.addEventListener("click", () => {
+    showToolView("chat");
+    handleQuestion("Train on my CSV").then(() => syncHasChatClass());
+  });
+}
+
+const forecastActions = document.getElementById("forecast-panel-actions");
+if (forecastActions) {
+  for (const [label, question] of [
+    ["Central Park temperature", "Try the Central Park temperature sample"],
+    ["AAPL sample", "Try the AAPL sample"],
+    ["Bitcoin sample", "Try the Bitcoin sample"],
+  ]) {
+    const chip = document.createElement("button");
+    chip.type = "button";
+    chip.className = "chip";
+    chip.textContent = label;
+    chip.addEventListener("click", () => {
+      showToolView("chat");
+      rememberChatTurn(question);
+      handleQuestion(question).then(() => syncHasChatClass());
+    });
+    forecastActions.append(chip);
+  }
+}
 
 document.getElementById("account-btn").addEventListener("click", openSignInModal);
 const heroSignup = document.getElementById("hero-signup-btn");
@@ -2360,6 +2714,7 @@ document.getElementById("csv-train-file").addEventListener("change", (event) => 
 });
 
 const sidebarToggle = document.getElementById("sidebar-toggle");
+const sidebarBackdrop = document.getElementById("sidebar-backdrop");
 const isMobile = () => window.matchMedia("(max-width: 900px)").matches;
 
 function setSidebarControls() {
@@ -2367,12 +2722,16 @@ function setSidebarControls() {
     ? document.body.classList.contains("sidebar-open")
     : !document.body.classList.contains("sidebar-collapsed");
   sidebarToggle.setAttribute("aria-expanded", expanded ? "true" : "false");
+  if (sidebarBackdrop) {
+    sidebarBackdrop.hidden = !(isMobile() && document.body.classList.contains("sidebar-open"));
+  }
 }
 
 sidebarToggle.addEventListener("click", () => {
   if (isMobile()) {
     const open = document.body.classList.toggle("sidebar-open");
     sidebarToggle.setAttribute("aria-expanded", open ? "true" : "false");
+    if (sidebarBackdrop) sidebarBackdrop.hidden = !open;
   } else {
     const collapsed = document.body.classList.toggle("sidebar-collapsed");
     sidebarToggle.setAttribute("aria-expanded", collapsed ? "false" : "true");
@@ -2383,21 +2742,23 @@ document.getElementById("sidebar-close").addEventListener("click", () => {
   if (isMobile()) {
     document.body.classList.remove("sidebar-open");
     sidebarToggle.setAttribute("aria-expanded", "false");
+    if (sidebarBackdrop) sidebarBackdrop.hidden = true;
   } else {
     document.body.classList.add("sidebar-collapsed");
     sidebarToggle.setAttribute("aria-expanded", "false");
   }
 });
 
+if (sidebarBackdrop) {
+  sidebarBackdrop.addEventListener("click", closeMobileSidebar);
+}
+
 window.addEventListener("resize", setSidebarControls);
 setSidebarControls();
+syncHasChatClass();
 
 /* ------------------------------------------------------------------- boot */
 
-addMessage(
-  "assistant",
-  "Hi! I am Neural Forge. Ask me in plain words for a live weather forecast, a market or crypto price, the moon, space, a sample model, training, or a general question. Text is free. Listening uses voice credits; payments are not live. Every reply comes with a speaker button that reads it aloud in GQ voice."
-);
 loadDefaultDemos().catch(() => {});
 
 refreshAccount()

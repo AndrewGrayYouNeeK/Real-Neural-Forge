@@ -881,16 +881,28 @@ class TestForecastDashboard:
         assert 'id="workspace-panel"' in html
         assert 'id="training-panel"' in html
         assert 'id="voice-panel"' in html
+        assert 'id="new-chat-btn"' in html
+        assert 'id="tool-nav"' in html
+        assert 'id="tools-menu"' in html
         assert "/assets/chart.js" in html
-        for path in ("/assets/app.js", "/assets/chart.js"):
+        assert "/assets/tools.js" in html
+        for path in ("/assets/app.js", "/assets/chart.js", "/assets/tools.js"):
             script = client.get(path)
             assert script.status_code == 200
             source = script.text
             assert ".innerHTML" not in source
             assert "insertAdjacentHTML" not in source
             assert "document.write" not in source
-            assert "textContent" in source
+            assert "textContent" in source or "TOOL_REGISTRY" in source
+        tools_js = client.get("/assets/tools.js").text
+        assert "TOOL_REGISTRY" in tools_js
+        assert "Train on my CSV" in tools_js
+        assert "Coming soon" in tools_js or "coming-soon" in tools_js
+        assert "lottery" not in tools_js.lower()
         app_js = client.get("/assets/app.js").text
+        assert "celsiusToFahrenheit" in app_js
+        assert 'return `${formatMetric(celsiusToFahrenheit(number))}°F`' in app_js
+        assert "formatWeatherMaeFahrenheit" in app_js
         assert "neuralForgeApiToken" in app_js
         assert "Authorization" in app_js
         assert "Bearer " in app_js
