@@ -617,6 +617,19 @@ def get_dataset(actor: Actor, dataset_id: str) -> dict[str, Any]:
     return _dataset_public(row)
 
 
+def rename_dataset(actor: Actor, dataset_id: str, name: str) -> dict[str, Any]:
+    store = require_store()
+    row = store.get_dataset(actor.user_id, dataset_id)
+    if row is None:
+        raise WorkspaceError(404, "Dataset not found.")
+    cleaned = _safe_name(name)
+    store.update_dataset_name(actor.user_id, dataset_id, cleaned)
+    updated = store.get_dataset(actor.user_id, dataset_id)
+    if updated is None:
+        raise WorkspaceError(404, "Dataset not found.")
+    return _dataset_public(updated)
+
+
 def replace_dataset(
     actor: Actor, dataset_id: str, data: bytes, config: dict[str, Any] | None
 ) -> dict[str, Any]:

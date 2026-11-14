@@ -319,6 +319,51 @@ export const TOOL_DEFINITIONS = [
       additionalProperties: false,
     },
   },
+  {
+    type: "function" as const,
+    name: "rename_user_series",
+    description: "Rename an uploaded workspace CSV dataset by id. Requires sign-in.",
+    parameters: {
+      type: "object",
+      properties: {
+        dataset_id: { type: "string", description: "Workspace dataset id." },
+        name: { type: "string", description: "New display name." },
+      },
+      required: ["dataset_id", "name"],
+      additionalProperties: false,
+    },
+  },
+  {
+    type: "function" as const,
+    name: "delete_user_series",
+    description: "Delete an uploaded workspace CSV dataset by id. Requires sign-in.",
+    parameters: {
+      type: "object",
+      properties: {
+        dataset_id: { type: "string", description: "Workspace dataset id." },
+      },
+      required: ["dataset_id"],
+      additionalProperties: false,
+    },
+  },
+  {
+    type: "function" as const,
+    name: "retrain_user_series",
+    description:
+      "Queue a capped retrain on an uploaded workspace CSV dataset. Requires sign-in.",
+    parameters: {
+      type: "object",
+      properties: {
+        dataset_id: { type: "string", description: "Workspace dataset id." },
+        target_column: {
+          type: "string",
+          description: "Optional target column name.",
+        },
+      },
+      required: ["dataset_id"],
+      additionalProperties: false,
+    },
+  },
 ];
 
 export function toolsForResponsesApi(): Array<Record<string, unknown>> {
@@ -957,6 +1002,73 @@ async function runListSeries(ctx: ToolContext): Promise<ToolResult["data"]> {
   };
 }
 
+async function runRenameUserSeries(
+  ctx: ToolContext,
+  args: Record<string, unknown>,
+): Promise<ToolResult["data"]> {
+  const datasetId = stringArg(args, "dataset_id");
+  const name = stringArg(args, "name");
+  if (!datasetId || !name) {
+    return { ok: false, text: "dataset_id and name are required." };
+  }
+  const result = await ctx.fetchContainer(`/workspace/datasets/${encodeURIComponent(datasetId)}`, {
+    method: "PATCH",
+    headers: { ...ctx.authHeaders, "Content-Type": "application/json" },
+    body: JSON.stringify({ name }),
+  });
+  if (result.status === 401 || result.status === 403) {
+    return { signed_in: false, text: "Sign in to rename your uploaded series." };
+  }
+  if (result.status >= 400) {
+    throw new Error(`Rename failed (${result.status}).`);
+  }
+  return { ok: true, dataset: result.json, text: `Renamed series to ${name}.` };
+}
+
+async function runDeleteUserSeries(
+  ctx: ToolContext,
+  args: Record<string, unknown>,
+): Promise<ToolResult["data"]> {
+  const datasetId = stringArg(args, "dataset_id");
+  if (!datasetId) return { ok: false, text: "dataset_id is required." };
+  const result = await ctx.fetchContainer(`/workspace/datasets/${encodeURIComponent(datasetId)}`, {
+    method: "DELETE",
+    headers: ctx.authHeaders,
+  });
+  if (result.status === 401 || result.status === 403) {
+    return { signed_in: false, text: "Sign in to delete your uploaded series." };
+  }
+  if (result.status >= 400) {
+    throw new Error(`Delete failed (${result.status}).`);
+  }
+  return { ok: true, deleted: datasetId, text: `Deleted series ${datasetId}.` };
+}
+
+async function runRetrainUserSeries(
+  ctx: ToolContext,
+  args: Record<string, unknown>,
+): Promise<ToolResult["data"]> {
+  const datasetId = stringArg(args, "dataset_id");
+  if (!datasetId) return { ok: false, text: "dataset_id is required." };
+  const target = stringArg(args, "target_column");
+  const body = target ? { target_column: target } : {};
+  const result = await ctx.fetchContainer(
+    `/workspace/datasets/${encodeURIComponent(datasetId)}/train`,
+    {
+      method: "POST",
+      headers: { ...ctx.authHeaders, "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    },
+  );
+  if (result.status === 401 || result.status === 403) {
+    return { signed_in: false, text: "Sign in to retrain your uploaded series." };
+  }
+  if (result.status >= 400) {
+    throw new Error(`Retrain failed (${result.status}).`);
+  }
+  return { ok: true, job: result.json, text: `Queued retrain for ${datasetId}.` };
+}
+
 function requireMemoryDb(ctx: ToolContext): { db: D1Like; scope: string } {
   if (!ctx.db) throw new Error("Memory store unavailable.");
   const scope = typeof ctx.memoryScope === "string" ? ctx.memoryScope.trim() : "";
@@ -1153,6 +1265,12 @@ export async function dispatchTool(
         return runListScenarios(keyed);
       case "run_scenario":
         return runRunScenario(keyed, args);
+      case "rename_user_series":
+        return runRenameUserSeries(keyed, args);
+      case "delete_user_series":
+        return runDeleteUserSeries(keyed, args);
+      case "retrain_user_series":
+        return runRetrainUserSeries(keyed, args);
       default: {
         const unexpected: never = toolName;
         throw new Error(`Unhandled tool: ${String(unexpected)}`);

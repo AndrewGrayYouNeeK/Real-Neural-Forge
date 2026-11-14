@@ -337,6 +337,16 @@ class WorkspaceStore:
             (object_key, size, shared, utc_now(), user_id, dataset_id),
         )
 
+    def update_dataset_name(self, user_id: str, dataset_id: str, name: str) -> None:
+        self.sql.query(
+            """
+            UPDATE datasets
+            SET name = ?, updated_at = ?
+            WHERE user_id = ? AND id = ?
+            """,
+            (name, utc_now(), user_id, dataset_id),
+        )
+
     def delete_dataset_row(self, user_id: str, dataset_id: str) -> None:
         self.sql.query(
             "DELETE FROM datasets WHERE user_id = ? AND id = ?",

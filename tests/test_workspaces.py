@@ -445,6 +445,19 @@ def test_one_click_csv_train_flow_is_capped_and_private(workspace_client):
     assert body["limits"]["max_epochs"] >= 1
     dataset_id = body["id"]
 
+    renamed = client.patch(
+        f"/workspace/datasets/{dataset_id}",
+        json={"name": "Central Park highs.csv"},
+    )
+    assert renamed.status_code == 200, renamed.text
+    assert renamed.json()["name"] == "Central Park highs.csv"
+    assert renamed.json()["id"] == dataset_id
+    listed = client.get("/workspace/datasets").json()["datasets"]
+    assert any(
+        row["id"] == dataset_id and row["name"] == "Central Park highs.csv"
+        for row in listed
+    )
+
     missing = client.post(
         f"/workspace/datasets/{dataset_id}/train",
         json={"target_column": "not-a-column"},

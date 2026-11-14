@@ -915,6 +915,10 @@ class TestForecastDashboard:
         assert "openSavedChat" in app_js
         assert "runSavedScenario" in app_js
         assert "loadScenarioPanel" in app_js
+        assert "renameWorkspaceDataset" in app_js
+        assert "deleteWorkspaceDataset" in app_js
+        assert "retrainWorkspaceDataset" in app_js
+        assert 'method: "PATCH"' in app_js
         assert "celsiusToFahrenheit" in app_js
         assert "return `${formatMetric(celsiusToFahrenheit(number))}°F`" in app_js
         assert "formatWeatherMaeFahrenheit" in app_js
