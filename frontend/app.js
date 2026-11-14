@@ -1308,12 +1308,17 @@ async function askLive(question, options) {
   if (facts) payload.facts = facts;
   const history = chatHistoryPayload();
   if (history.length) payload.history = history;
+  if (currentThreadId) payload.thread_id = currentThreadId;
   try {
     const agentResult = await fetchJson("/agent/chat", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
     });
+    if (agentResult && typeof agentResult.thread_id === "string" && agentResult.thread_id.trim()) {
+      currentThreadId = agentResult.thread_id.trim();
+      void refreshRemoteChatHistory();
+    }
     const normalized = normalizeAskResult(agentResult, facts);
     if (normalized) return normalized;
   } catch {
@@ -2237,6 +2242,8 @@ function watchTraining() {
 /* ----------------------------------------------------------- tool registry */
 
 const HISTORY_KEY = "neuralForgeChatHistory";
+let currentThreadId = null;
+let remoteChatThreads = null;
 const toolsApi =
   (typeof window !== "undefined" && window.NeuralForgeTools) || {
     TOOL_REGISTRY: [],
@@ -2465,16 +2472,65 @@ function rememberChatTurn(question) {
   const title = String(question || "").replace(/\s+/g, " ").trim().slice(0, 80);
   if (!title) return;
   const entries = loadChatHistory().filter((row) => row && row.title !== title);
-  entries.unshift({ title, at: new Date().toISOString() });
+  entries.unshift({
+    title,
+    at: new Date().toISOString(),
+    id: currentThreadId || null,
+  });
   saveChatHistory(entries);
   renderChatHistory();
+}
+
+async function refreshRemoteChatHistory() {
+  try {
+    const data = await fetchJson("/agent/chats");
+    const threads = Array.isArray(data.threads) ? data.threads : [];
+    remoteChatThreads = threads.map((row) => ({
+      id: row.id,
+      title: row.title,
+      at: row.updated_at || row.created_at || new Date().toISOString(),
+    }));
+    saveChatHistory(remoteChatThreads);
+    const search = document.getElementById("history-search");
+    renderChatHistory(search ? search.value : "");
+  } catch {
+    remoteChatThreads = null;
+    const search = document.getElementById("history-search");
+    renderChatHistory(search ? search.value : "");
+  }
+}
+
+async function openSavedChat(entry) {
+  showToolView("chat");
+  if (!entry || !entry.id) {
+    if (entry && entry.title) await handleQuestion(entry.title);
+    return;
+  }
+  try {
+    const data = await fetchJson(`/agent/chats/${encodeURIComponent(entry.id)}`);
+    const messages = Array.isArray(data.messages) ? data.messages : [];
+    const log = chatLog();
+    if (log) log.replaceChildren();
+    currentThreadId = entry.id;
+    for (const message of messages) {
+      if (!message || (message.role !== "user" && message.role !== "assistant")) continue;
+      const text = String(message.content || "").trim();
+      if (!text) continue;
+      if (message.role === "user") addMessage("user", text);
+      else addReply(text);
+    }
+    syncHasChatClass();
+    closeMobileSidebar();
+  } catch {
+    if (entry.title) await handleQuestion(entry.title);
+  }
 }
 
 function renderChatHistory(filterText) {
   const host = document.getElementById("history-groups");
   if (!host) return;
   const needle = String(filterText || "").trim().toLowerCase();
-  let entries = loadChatHistory();
+  let entries = remoteChatThreads || loadChatHistory();
   if (needle) {
     entries = entries.filter((row) => String(row.title || "").toLowerCase().includes(needle));
   }
@@ -2504,10 +2560,10 @@ function renderChatHistory(filterText) {
       const button = document.createElement("button");
       button.type = "button";
       button.className = "history-item";
+      if (row.id && row.id === currentThreadId) button.setAttribute("aria-current", "true");
       button.textContent = row.title;
       button.addEventListener("click", () => {
-        showToolView("chat");
-        handleQuestion(row.title);
+        void openSavedChat(row);
       });
       host.append(button);
     }
@@ -2517,8 +2573,11 @@ function renderChatHistory(filterText) {
 function startNewChat() {
   const log = chatLog();
   if (log) log.replaceChildren();
+  currentThreadId = null;
   showToolView("chat");
   syncHasChatClass();
+  const search = document.getElementById("history-search");
+  renderChatHistory(search ? search.value : "");
   const input = document.getElementById("chat-input");
   if (input) input.focus();
 }
@@ -2536,6 +2595,7 @@ setChatMode(chatMode());
 renderToolNav();
 renderToolsMenu();
 renderChatHistory();
+void refreshRemoteChatHistory();
 showToolView("chat");
 
 const memoryRefresh = document.getElementById("memory-refresh");

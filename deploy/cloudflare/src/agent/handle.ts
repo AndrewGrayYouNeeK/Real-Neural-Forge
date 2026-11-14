@@ -10,6 +10,16 @@ import {
   type ChatMode,
   type D1Like,
 } from "../live/ai";
+import {
+  appendMessage,
+  createThread,
+  deleteThread,
+  ensureThreadForTurn,
+  getThreadOwned,
+  historyFromMessages,
+  listMessages,
+  listThreads,
+} from "./chats";
 import { runAgentTurn, type HistoryMessage } from "./loop";
 import {
   clearMemory,
@@ -128,12 +138,20 @@ function makeContainerFetcher(env: AgentEnv, request: Request): ContainerFetcher
   };
 }
 
+function threadIdFrom(body: Record<string, unknown> | null): string | null {
+  const raw = body?.thread_id;
+  if (typeof raw !== "string") return null;
+  const id = raw.trim();
+  return id || null;
+}
+
 async function answerAgentChat(
   request: Request,
   env: AgentEnv,
   question: string,
   mode: ChatMode,
   history: HistoryMessage[],
+  threadId: string | null,
   waitUntil?: (promise: Promise<unknown>) => void,
 ): Promise<Response> {
   const clean = question.replace(/\s+/g, " ").trim();
@@ -157,8 +175,23 @@ async function answerAgentChat(
   } catch {
     memoryPrompt = memoryPromptBlock([]);
   }
+
+  let activeThreadId: string | null = null;
+  let modelHistory = history;
   try {
-    const result = await runAgentTurn(clean, mode, history, {
+    const thread = await ensureThreadForTurn(env.WORKSPACES_DB, identity.scope, threadId, clean);
+    activeThreadId = thread.id;
+    await appendMessage(env.WORKSPACES_DB, thread.id, "user", clean);
+    const stored = await listMessages(env.WORKSPACES_DB, thread.id);
+    const fromStore = historyFromMessages(stored);
+    if (fromStore.length) modelHistory = fromStore;
+  } catch {
+    // Persistence is best-effort; chat still answers without a saved thread.
+    activeThreadId = null;
+  }
+
+  try {
+    const result = await runAgentTurn(clean, mode, modelHistory, {
       ai: env.AI,
       db: env.WORKSPACES_DB,
       ip,
@@ -176,6 +209,13 @@ async function answerAgentChat(
         memoryScope: identity.scope,
       },
     });
+    if (activeThreadId && result.text) {
+      try {
+        await appendMessage(env.WORKSPACES_DB, activeThreadId, "assistant", result.text);
+      } catch {
+        // Ignore persistence failures after a successful answer.
+      }
+    }
     return json({
       text: result.text,
       model: true,
@@ -186,6 +226,7 @@ async function answerAgentChat(
       capped: result.capped || false,
       reason: result.reason,
       memory_scope: identity.signedIn ? (identity.owner ? "owner" : "user") : "visitor",
+      thread_id: activeThreadId,
     });
   } catch {
     return json({
@@ -244,6 +285,57 @@ async function handleMemory(
   return json({ error: "Method not allowed." }, 405);
 }
 
+async function handleChats(
+  request: Request,
+  env: AgentEnv,
+  path: string,
+  body: Record<string, unknown> | null,
+): Promise<Response> {
+  if (!env.WORKSPACES_DB) {
+    return json({ error: "Chat store is not configured." }, 503);
+  }
+  const identity = await identityFor(request, env);
+  const db = env.WORKSPACES_DB;
+  const rest = path.replace(/^\/agent\/chats\/?/, "");
+
+  if (request.method === "GET" && !rest) {
+    const threads = await listThreads(db, identity.scope);
+    return json({
+      scope: identity.signedIn ? (identity.owner ? "owner" : "user") : "visitor",
+      threads,
+    });
+  }
+
+  if (request.method === "POST" && !rest) {
+    const title =
+      typeof body?.title === "string" ? body.title : typeof body?.question === "string" ? body.question : "New chat";
+    const thread = await createThread(db, identity.scope, title);
+    return json({ thread });
+  }
+
+  if (!rest) {
+    return json({ error: "Method not allowed." }, 405);
+  }
+
+  const threadId = decodeURIComponent(rest.split("/")[0] || "");
+  if (!threadId) return json({ error: "Not found." }, 404);
+
+  if (request.method === "GET") {
+    const thread = await getThreadOwned(db, identity.scope, threadId);
+    if (!thread) return json({ error: "Not found." }, 404);
+    const messages = await listMessages(db, threadId);
+    return json({ thread, messages });
+  }
+
+  if (request.method === "DELETE") {
+    const removed = await deleteThread(db, identity.scope, threadId);
+    if (!removed) return json({ error: "Not found." }, 404);
+    return json({ deleted: threadId });
+  }
+
+  return json({ error: "Method not allowed." }, 405);
+}
+
 export async function handleAgent(
   request: Request,
   env: AgentEnv,
@@ -261,7 +353,7 @@ export async function handleAgent(
     return handleMemory(request, env, path);
   }
   let body: Record<string, unknown> | null = null;
-  if (request.method === "POST") {
+  if (request.method === "POST" || request.method === "PUT") {
     const text = await request.text();
     if (text) {
       try {
@@ -270,6 +362,9 @@ export async function handleAgent(
         return json({ text: "I could not read that request." }, 400);
       }
     }
+  }
+  if (path === "/agent/chats" || path.startsWith("/agent/chats/")) {
+    return handleChats(request, env, path, body);
   }
   if (path === "/agent/chat") {
     if (request.method !== "POST" && request.method !== "GET") {
@@ -281,6 +376,7 @@ export async function handleAgent(
       questionFrom(url, body),
       modeFrom(url, body),
       historyFrom(body),
+      threadIdFrom(body),
       ctx?.waitUntil?.bind(ctx),
     );
   }
