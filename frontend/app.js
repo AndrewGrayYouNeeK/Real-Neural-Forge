@@ -16,6 +16,7 @@ const state = {
   voiceResting: false,
   toldVoiceResting: false,
   lastPca: null,
+  lastRegimes: null,
 };
 
 const VOICE_RESTING_MESSAGE = "Voice is resting for today, text still works.";
@@ -2268,6 +2269,48 @@ function closeMobileSidebar() {
   if (backdrop) backdrop.hidden = true;
 }
 
+function renderRegimesReport(report) {
+  const empty = document.getElementById("regimes-empty");
+  const panel = document.getElementById("regimes-report");
+  const summary = document.getElementById("regimes-summary");
+  const list = document.getElementById("regimes-list");
+  const anomalies = document.getElementById("regimes-anomalies");
+  if (!empty || !panel || !summary || !list || !anomalies) return;
+  if (!report || !Array.isArray(report.regimes)) {
+    empty.hidden = false;
+    panel.hidden = true;
+    return;
+  }
+  empty.hidden = true;
+  panel.hidden = false;
+  summary.textContent = report.summary || "Regime report ready.";
+  list.replaceChildren();
+  report.regimes.forEach((regime) => {
+    const item = document.createElement("li");
+    const share = ((Number(regime.share) || 0) * 100).toFixed(0);
+    item.textContent = `${regime.label || "regime"} — ${regime.count || 0} samples (${share}%)`;
+    list.appendChild(item);
+  });
+  anomalies.replaceChildren();
+  const rows = Array.isArray(report.anomalies) ? report.anomalies : [];
+  if (!rows.length) {
+    const item = document.createElement("li");
+    item.textContent = "No points flagged as far from every centroid.";
+    anomalies.appendChild(item);
+    return;
+  }
+  rows.slice(0, 12).forEach((row) => {
+    const item = document.createElement("li");
+    item.textContent = `Index ${row.index}: distance ${Number(row.distance).toFixed(2)} (cluster ${row.cluster})`;
+    anomalies.appendChild(item);
+  });
+  if (rows.length > 12) {
+    const more = document.createElement("li");
+    more.textContent = `…and ${rows.length - 12} more.`;
+    anomalies.appendChild(more);
+  }
+}
+
 function renderPcaReport(report) {
   const empty = document.getElementById("pca-empty");
   const panel = document.getElementById("pca-report");
@@ -2348,6 +2391,9 @@ function showToolView(viewId, toolMeta) {
   }
   if (next === "pca") {
     renderPcaReport(state.lastPca);
+  }
+  if (next === "regimes") {
+    renderRegimesReport(state.lastRegimes);
   }
   document.querySelectorAll(".tool-nav-btn").forEach((button) => {
     const current = button.dataset.toolId === (toolMeta && toolMeta.id);

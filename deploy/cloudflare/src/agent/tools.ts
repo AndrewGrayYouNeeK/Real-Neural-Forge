@@ -284,6 +284,27 @@ export const TOOL_DEFINITIONS = [
       additionalProperties: false,
     },
   },
+  {
+    type: "function" as const,
+    name: "analyze_regimes",
+    description:
+      "K-Means clustering on a workspace CSV: finds regimes/patterns (auto k via silhouette, k≤8), plain labels like calm/volatile or low/high, and points far from any centroid (anomalies). Use for 'what patterns are in my data' or 'anything unusual?'.",
+    parameters: {
+      type: "object",
+      properties: {
+        dataset_id: {
+          type: "string",
+          description: "Workspace dataset id (dst_…).",
+        },
+        k: {
+          type: "integer",
+          description: "Optional fixed cluster count (2-8). Omit to auto-pick.",
+        },
+      },
+      required: ["dataset_id"],
+      additionalProperties: false,
+    },
+  },
 ];
 
 export function toolsForResponsesApi(): Array<Record<string, unknown>> {
@@ -996,7 +1017,7 @@ async function runForgetMemory(ctx: ToolContext, args: Record<string, unknown>):
 async function runAnalyzePca(ctx: ToolContext, args: Record<string, unknown>): Promise<ToolResult["data"]> {
   const datasetId = stringArg(args, "dataset_id", "");
   if (!datasetId) {
-    throw new Error("analyze_pca requires dataset_id (from list_user_series or a CSV upload).");
+    throw new Error("analyze_pca requires dataset_id (from list_user_series or a recent CSV upload).");
   }
   const nComponents = args.n_components;
   const body: Record<string, unknown> = {};
@@ -1030,6 +1051,54 @@ async function runAnalyzePca(ctx: ToolContext, args: Record<string, unknown>): P
     loadings: payload.loadings,
     feature_names: payload.feature_names,
     n_components: payload.n_components,
+  };
+}
+
+async function runAnalyzeRegimes(
+  ctx: ToolContext,
+  args: Record<string, unknown>,
+): Promise<ToolResult["data"]> {
+  const datasetId = stringArg(args, "dataset_id", "");
+  if (!datasetId) {
+    throw new Error(
+      "analyze_regimes requires dataset_id (from list_user_series or a recent CSV upload).",
+    );
+  }
+  const body: Record<string, unknown> = {};
+  const k = args.k;
+  if (typeof k === "number" && Number.isFinite(k) && k >= 2 && k <= 8) {
+    body.k = Math.floor(k);
+  }
+  const result = await ctx.fetchContainer(
+    `/workspace/datasets/${encodeURIComponent(datasetId)}/kmeans`,
+    containerInit(ctx, {
+      method: "POST",
+      headers: { ...ctx.authHeaders, "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    }),
+  );
+  if (result.status === 401 || result.status === 403) {
+    throw new Error("Sign in to cluster a private workspace CSV.");
+  }
+  if (result.status >= 400) {
+    const detail =
+      result.json && typeof result.json === "object" && "detail" in (result.json as object)
+        ? String((result.json as { detail?: unknown }).detail)
+        : `K-Means failed (${result.status}).`;
+    throw new Error(detail);
+  }
+  const payload = result.json as Record<string, unknown>;
+  return {
+    dataset_id: datasetId,
+    summary: typeof payload.summary === "string" ? payload.summary : "",
+    k: payload.k,
+    k_selection: payload.k_selection,
+    regimes: payload.regimes,
+    anomaly_count: payload.anomaly_count,
+    anomalies: Array.isArray(payload.anomalies)
+      ? (payload.anomalies as unknown[]).slice(0, 12)
+      : [],
+    silhouette: payload.silhouette,
   };
 }
 
@@ -1088,6 +1157,8 @@ export async function dispatchTool(
         return runForgetMemory(keyed, args);
       case "analyze_pca":
         return runAnalyzePca(keyed, args);
+      case "analyze_regimes":
+        return runAnalyzeRegimes(keyed, args);
       default: {
         const unexpected: never = toolName;
         throw new Error(`Unhandled tool: ${String(unexpected)}`);

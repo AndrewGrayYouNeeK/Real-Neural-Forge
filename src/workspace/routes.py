@@ -12,6 +12,7 @@ from src.accounts.actor import Actor
 from src.workspace.errors import WorkspaceError
 from src.workspace.runtime import runtime
 from src.workspace.service import (
+    analyze_dataset_kmeans,
     analyze_dataset_pca,
     apply_session_cookie,
     cancel_job,
@@ -68,6 +69,13 @@ class DatasetTrainBody(BaseModel):
 class DatasetPcaBody(BaseModel):
     columns: list[str] | None = None
     n_components: int | None = Field(default=None, ge=1)
+
+
+class DatasetKMeansBody(BaseModel):
+    columns: list[str] | None = None
+    k: int | None = Field(default=None, ge=2, le=8)
+    max_k: int = Field(default=8, ge=2, le=8)
+    window: int | None = Field(default=None, ge=2, le=256)
 
 
 def _raise(exc: WorkspaceError) -> NoReturn:
@@ -237,6 +245,28 @@ def workspace_dataset_pca(
             dataset_id,
             columns=payload.columns,
             n_components=payload.n_components,
+        )
+    )
+
+
+@router.post("/workspace/datasets/{dataset_id}/kmeans", tags=["workspace"])
+def workspace_dataset_kmeans(
+    dataset_id: str,
+    request: Request,
+    body: DatasetKMeansBody | None = None,
+    authorization: str | None = Header(default=None),
+) -> dict[str, Any]:
+    """Cluster regimes in a dataset and flag unusual points (K-Means)."""
+    actor = _actor(request, authorization)
+    payload = body or DatasetKMeansBody()
+    return _call(
+        lambda: analyze_dataset_kmeans(
+            actor,
+            dataset_id,
+            columns=payload.columns,
+            k=payload.k,
+            max_k=payload.max_k,
+            window=payload.window,
         )
     )
 

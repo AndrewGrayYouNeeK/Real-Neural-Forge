@@ -433,6 +433,45 @@
             </div>
           </section>
 
+          <section class="tool-view" id="view-regimes" data-tool-view="regimes" hidden>
+            <header class="tool-view-head">
+              <h2>Regimes / patterns</h2>
+              <button type="button" class="btn secondary back-to-chat" data-view="chat">Back to chat</button>
+            </header>
+            <p class="hint">
+              K-Means clusters windows or multi-column rows into up to 8 regimes
+              (auto-picked by silhouette). Ask chat “what patterns are in my data”
+              or “anything unusual?” after a workspace CSV upload.
+            </p>
+            <div id="regimes-empty" class="hint">
+              No regime report yet. Upload a CSV in Train on my CSV, then ask chat
+              to cluster it — or open this panel after a run.
+            </div>
+            <div id="regimes-report" hidden>
+              <p id="regimes-summary" class="pca-summary"></p>
+              <h3 class="pca-groups-title">Regimes</h3>
+              <ul id="regimes-list" class="side-list"></ul>
+              <h3 class="pca-groups-title">Unusual points</h3>
+              <ul id="regimes-anomalies" class="side-list"></ul>
+            </div>
+            <div class="chip-row">
+              <button
+                class="chip"
+                type="button"
+                data-question="What patterns or regimes are in my latest CSV?"
+              >
+                Ask about patterns
+              </button>
+              <button
+                class="chip"
+                type="button"
+                data-question="Anything unusual in my latest CSV?"
+              >
+                Ask about anomalies
+              </button>
+            </div>
+          </section>
+
           <section class="tool-view" id="view-live" data-tool-view="live" hidden>
             <header class="tool-view-head">
               <h2>Live data</h2>

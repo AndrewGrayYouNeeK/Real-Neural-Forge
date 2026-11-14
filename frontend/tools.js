@@ -53,6 +53,14 @@
       view: "pca",
     },
     {
+      id: "regimes",
+      name: "Regimes / patterns",
+      icon: "⬡",
+      description: "K-Means regimes in your series and unusual points.",
+      status: "live",
+      view: "regimes",
+    },
+    {
       id: "live",
       name: "Live data",
       icon: "◉",
@@ -113,7 +121,8 @@
       id: "alerts",
       name: "Alerts",
       icon: "⚠",
-      description: "Notify when a series crosses a threshold.",
+      description:
+        "Notify when a series crosses a threshold (Phase 3; K-Means anomaly flags feed this).",
       status: "coming-soon",
       view: "coming-soon",
     },
