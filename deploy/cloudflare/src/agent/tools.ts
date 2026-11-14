@@ -3,11 +3,21 @@
  * Tools never invent live weather or prices.
  */
 
+import type { D1Like } from "../live/ai";
 import { visitorFromCf, wantsCurrentConditions, type CfIncoming, type VisitorGeo } from "../live/geo";
 import { isWeatherAsk, resolveFetchLiveKind } from "../live/kind";
 import { answerWeather } from "../live/weather";
 import { answerQuote } from "../live/markets";
 import { AGENT_TOOL_NAMES, type AgentToolName } from "./protocol";
+import {
+  EVAL_CACHE_TTL_SECONDS,
+  FORECAST_CACHE_TTL_SECONDS,
+  cacheGetOrLoad,
+  evalCacheKey,
+  forecastCacheKey,
+  readStoredBacktest,
+  type WaitUntil,
+} from "./toolCache";
 
 /**
  * Build the weather lookup string from the user's original question and the
@@ -71,6 +81,10 @@ export type ToolContext = {
   authHeaders: Record<string, string>;
   /** AbortSignal for the current timed attempt (cancels hung container fetches). */
   signal?: AbortSignal;
+  /** Optional D1 for stored backtest metrics (0005_backtest). */
+  db?: D1Like;
+  /** Schedule background cache refresh without blocking the chat reply. */
+  waitUntil?: WaitUntil;
 };
 
 const STARTER_IDS = new Set(["weather", "stocks", "crypto", "near-earth", "lunar"]);
@@ -420,32 +434,56 @@ async function fetchOptionalAccuracy(
   series: string,
   horizon: number,
 ): Promise<unknown> {
-  try {
-    const backtest = await withTimeout(
-      ctx.fetchContainer(
-        `/evaluation/${encodeURIComponent(series)}/backtest`,
-        containerInit(ctx, {
-          method: "POST",
-          headers: { ...ctx.authHeaders, "Content-Type": "application/json" },
-          body: JSON.stringify({ horizon }),
-        }),
-      ),
-      ACCURACY_FETCH_TIMEOUT_MS,
-    );
-    if (backtest.status < 400 && backtest.json && typeof backtest.json === "object") {
-      return metricsSummary(backtest.json as Record<string, unknown>);
-    }
-  } catch {
-    // Accuracy is optional — never fail the forecast for a slow backtest.
-  }
-  return null;
+  // Prefer D1 / Cache API — never spend the forecast budget on a backtest recompute.
+  const cached = await cacheGetOrLoad({
+    key: evalCacheKey(series, horizon),
+    ttlSeconds: EVAL_CACHE_TTL_SECONDS,
+    waitUntil: ctx.waitUntil,
+    refreshOnHit: false,
+    load: async () => {
+      const stored = await readStoredBacktest(ctx.db, series);
+      if (stored) return metricsSummary(stored);
+      const summary = await withTimeout(
+        ctx.fetchContainer(
+          `/evaluation/${encodeURIComponent(series)}`,
+          containerInit(ctx, { method: "GET", headers: ctx.authHeaders }),
+        ),
+        ACCURACY_FETCH_TIMEOUT_MS,
+      );
+      const report =
+        summary.status < 400 &&
+        summary.json &&
+        typeof summary.json === "object" &&
+        (summary.json as { backtest?: unknown }).backtest &&
+        typeof (summary.json as { backtest?: unknown }).backtest === "object"
+          ? ((summary.json as { backtest: Record<string, unknown> }).backtest)
+          : null;
+      if (report) return metricsSummary(report);
+      throw new Error("accuracy unavailable");
+    },
+  }).catch(() => null);
+  return cached?.value ?? null;
+}
+
+async function loadStarterForecast(
+  ctx: ToolContext,
+  series: string,
+  horizon: number,
+): Promise<Record<string, unknown>> {
+  // lite=1 skips the CPU-heavy history replay; same deterministic point forecast.
+  const path = `/starters/${encodeURIComponent(series)}/forecast?points=120&lite=1`;
+  const result = await ctx.fetchContainer(
+    path,
+    containerInit(ctx, { method: "GET", headers: ctx.authHeaders }),
+  );
+  throwIfContainerStatusError(result.status, "Starter forecast");
+  const payload = compactForecast(result.json as Record<string, unknown>);
+  return { series, horizon, ...payload };
 }
 
 async function runForecast(ctx: ToolContext, args: Record<string, unknown>): Promise<ToolResult["data"]> {
   const series = stringArg(args, "series", "weather").toLowerCase() || "weather";
   const horizon = intArg(args, "horizon", 1, 1, 24);
-  // Same path the dashboard warmup uses: /starters/{id}/forecast?points=120
-  // Container wake happens in fetchContainer via startAndWaitForPorts (every call).
 
   if (series === "loaded") {
     const recent = await ctx.fetchContainer(
@@ -456,15 +494,18 @@ async function runForecast(ctx: ToolContext, args: Record<string, unknown>): Pro
     return { series: "loaded", horizon, ...compactForecast(recent.json as Record<string, unknown>) };
   }
   if (STARTER_IDS.has(series)) {
-    const path = `/starters/${encodeURIComponent(series)}/forecast?points=120`;
-    const result = await ctx.fetchContainer(
-      path,
-      containerInit(ctx, { method: "GET", headers: ctx.authHeaders }),
-    );
-    throwIfContainerStatusError(result.status, "Starter forecast");
-    const payload = compactForecast(result.json as Record<string, unknown>);
-    const accuracy = await fetchOptionalAccuracy(ctx, series, horizon);
-    return { series, horizon, ...payload, recent_accuracy: accuracy };
+    const { value, cacheHit } = await cacheGetOrLoad({
+      key: forecastCacheKey(series, horizon),
+      ttlSeconds: FORECAST_CACHE_TTL_SECONDS,
+      waitUntil: ctx.waitUntil,
+      refreshOnHit: true,
+      load: () => loadStarterForecast(ctx, series, horizon),
+    });
+    // Accuracy is optional and must not block a cache hit.
+    const accuracy = cacheHit
+      ? await readStoredBacktest(ctx.db, series).then((row) => (row ? metricsSummary(row) : null))
+      : await fetchOptionalAccuracy(ctx, series, horizon);
+    return { ...value, recent_accuracy: accuracy, cache_hit: cacheHit };
   }
   const predict = await ctx.fetchContainer(
     `/workspace/models/${encodeURIComponent(series)}/predict-latest`,
@@ -554,21 +595,58 @@ async function runLiveData(ctx: ToolContext, args: Record<string, unknown>): Pro
   }
 }
 
+async function loadStarterEvaluation(
+  ctx: ToolContext,
+  modelId: string,
+  horizon: number,
+): Promise<Record<string, unknown>> {
+  // Prefer already-stored metrics (D1 / GET summary) before any recompute.
+  const stored = await readStoredBacktest(ctx.db, modelId);
+  if (stored) return { model_id: modelId, ...metricsSummary(stored) };
+
+  const summary = await ctx.fetchContainer(
+    `/evaluation/${encodeURIComponent(modelId)}`,
+    containerInit(ctx, { method: "GET", headers: ctx.authHeaders }),
+  );
+  if (
+    summary.status < 400 &&
+    summary.json &&
+    typeof summary.json === "object" &&
+    (summary.json as { backtest?: unknown }).backtest &&
+    typeof (summary.json as { backtest?: unknown }).backtest === "object"
+  ) {
+    return {
+      model_id: modelId,
+      ...metricsSummary((summary.json as { backtest: Record<string, unknown> }).backtest),
+    };
+  }
+
+  // Cold path only: run once and let the container persist to D1.
+  const result = await ctx.fetchContainer(
+    `/evaluation/${encodeURIComponent(modelId)}/backtest`,
+    containerInit(ctx, {
+      method: "POST",
+      headers: { ...ctx.authHeaders, "Content-Type": "application/json" },
+      body: JSON.stringify({ horizon }),
+    }),
+  );
+  if (result.status >= 500) throw new Error(`Backtest failed (${result.status}).`);
+  if (result.status >= 400) throw new Error("Backtest unavailable for that model.");
+  return { model_id: modelId, ...metricsSummary(result.json as Record<string, unknown>) };
+}
+
 async function runEvaluation(ctx: ToolContext, args: Record<string, unknown>): Promise<ToolResult["data"]> {
   const modelId = stringArg(args, "model_id", "weather") || "weather";
   const horizon = intArg(args, "horizon", 1, 1, 24);
   if (STARTER_IDS.has(modelId)) {
-    const result = await ctx.fetchContainer(
-      `/evaluation/${encodeURIComponent(modelId)}/backtest`,
-      containerInit(ctx, {
-        method: "POST",
-        headers: { ...ctx.authHeaders, "Content-Type": "application/json" },
-        body: JSON.stringify({ horizon }),
-      }),
-    );
-    if (result.status >= 500) throw new Error(`Backtest failed (${result.status}).`);
-    if (result.status >= 400) throw new Error("Backtest unavailable for that model.");
-    return { model_id: modelId, ...metricsSummary(result.json as Record<string, unknown>) };
+    const { value, cacheHit } = await cacheGetOrLoad({
+      key: evalCacheKey(modelId, horizon),
+      ttlSeconds: EVAL_CACHE_TTL_SECONDS,
+      waitUntil: ctx.waitUntil,
+      refreshOnHit: false,
+      load: () => loadStarterEvaluation(ctx, modelId, horizon),
+    });
+    return { ...value, cache_hit: cacheHit };
   }
   const metrics = await ctx.fetchContainer(`/workspace/models/${encodeURIComponent(modelId)}/metrics`, {
     method: "GET",
@@ -586,10 +664,11 @@ async function runCompareHorizons(ctx: ToolContext, args: Record<string, unknown
   }
   const rows: Array<Record<string, unknown>> = [];
   for (const horizon of horizons) {
+    // Prefer stored reports; horizon-specific refresh only when missing.
     const result = await ctx.fetchContainer(`/evaluation/${encodeURIComponent(modelId)}/backtest`, {
       method: "POST",
       headers: { ...ctx.authHeaders, "Content-Type": "application/json" },
-      body: JSON.stringify({ horizon, refresh: true }),
+      body: JSON.stringify({ horizon, refresh: false }),
     });
     if (result.status >= 400) {
       rows.push({ horizon, error: `unavailable (${result.status})` });

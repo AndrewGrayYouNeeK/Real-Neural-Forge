@@ -73,6 +73,61 @@ def test_public_weather_forecast_endpoint() -> None:
     assert body["name"] == "Central Park temperature"
 
 
+def test_lite_forecast_matches_full_point_forecast_and_stays_fast() -> None:
+    import time
+    from concurrent.futures import ThreadPoolExecutor
+
+    full = starter_forecast("weather", points=120, lite=False)
+    lite = starter_forecast("weather", points=120, lite=True)
+    assert lite["lite"] is True
+    assert full["forecast"][0]["value"] == pytest.approx(lite["forecast"][0]["value"])
+    assert full["forecast"][1]["value"] == pytest.approx(lite["forecast"][1]["value"])
+    assert full["forecast"][2]["value"] == pytest.approx(lite["forecast"][2]["value"])
+
+    # Memoized lite path: 10 sequential + 3 concurrent must stay well under 8s p95.
+    started = time.perf_counter()
+    sequential = [
+        starter_forecast("weather", points=120, lite=True)["forecast"][0]["value"]
+        for _ in range(10)
+    ]
+    with ThreadPoolExecutor(max_workers=3) as pool:
+        concurrent = list(
+            pool.map(
+                lambda _: starter_forecast("weather", points=120, lite=True)[
+                    "forecast"
+                ][0]["value"],
+                range(3),
+            )
+        )
+    elapsed = time.perf_counter() - started
+    assert sequential == [sequential[0]] * 10
+    assert concurrent == [sequential[0]] * 3
+    assert elapsed < 8.0, (
+        f"10 sequential + 3 concurrent lite forecasts took {elapsed:.2f}s"
+    )
+
+    client = TestClient(app, raise_server_exceptions=True)
+    # Warm once, then time a sequential HTTP burst on the lite endpoint.
+    assert (
+        client.get(
+            "/starters/weather/forecast", params={"points": 120, "lite": 1}
+        ).status_code
+        == 200
+    )
+    latencies: list[float] = []
+    for _ in range(10):
+        t0 = time.perf_counter()
+        response = client.get(
+            "/starters/weather/forecast", params={"points": 120, "lite": 1}
+        )
+        latencies.append(time.perf_counter() - t0)
+        assert response.status_code == 200
+        assert response.json()["forecast"][0]["value"] == pytest.approx(sequential[0])
+    latencies.sort()
+    p95 = latencies[max(0, int(len(latencies) * 0.95) - 1)]
+    assert p95 < 8.0, f"lite HTTP p95={p95:.2f}s latencies={latencies}"
+
+
 def test_public_starter_catalog_lists_the_five_samples() -> None:
     client = TestClient(app, raise_server_exceptions=True)
     response = client.get("/starters")

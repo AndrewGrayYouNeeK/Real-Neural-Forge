@@ -378,7 +378,7 @@ function forwardedRequest(request: Request): Request {
 }
 
 export default {
-  async fetch(request: Request, env: Env): Promise<Response> {
+  async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
     if (url.pathname === "/_bindings/sql" || url.pathname === "/_bindings/object") {
       return handleBindings(request, env);
@@ -387,7 +387,7 @@ export default {
       return handleLive(request, env);
     }
     if (url.pathname === "/agent" || url.pathname.startsWith("/agent/")) {
-      return handleAgent(request, env);
+      return handleAgent(request, env, ctx);
     }
     const container = getContainer(env.NEURAL_FORGE, "primary");
     await container.startAndWaitForPorts({

@@ -150,6 +150,7 @@ function toolContext(overrides: Partial<ToolContext> = {}): ToolContext {
 
 afterEach(() => {
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
 });
 
 describe("agent protocol", () => {
@@ -327,6 +328,7 @@ describe("agent tool dispatch", () => {
     let forecastAttempts = 0;
     const fetchContainer = vi.fn(async (path: string) => {
       if (path.includes("/starters/weather/forecast")) {
+        expect(path).toContain("lite=1");
         forecastAttempts += 1;
         if (forecastAttempts === 1) {
           throw new Error("The container is not running.");
@@ -342,7 +344,10 @@ describe("agent tool dispatch", () => {
         };
       }
       if (path.includes("/evaluation/")) {
-        return { status: 200, json: { horizon: 1, metrics: { mae: 1.1 }, comparison: "ok" } };
+        return {
+          status: 200,
+          json: { backtest: { horizon: 1, metrics: { mae: 1.1 }, comparison: "ok" } },
+        };
       }
       return { status: 404, json: {} };
     });
@@ -356,6 +361,61 @@ describe("agent tool dispatch", () => {
     expect(result.ok).toBe(true);
     expect(forecastAttempts).toBe(2);
     expect((result.data as { forecast?: Array<{ value?: number }> }).forecast?.[0]?.value).toBe(15.15);
+  });
+
+  it("serves starter forecasts from Cache API on the second call", async () => {
+    const memory = new Map<string, Response>();
+    vi.stubGlobal("caches", {
+      default: {
+        match: async (request: Request) => {
+          const hit = memory.get(request.url);
+          return hit ? hit.clone() : undefined;
+        },
+        put: async (request: Request, response: Response) => {
+          memory.set(request.url, response.clone());
+        },
+      },
+    });
+    let forecastHits = 0;
+    const fetchContainer = vi.fn(async (path: string) => {
+      if (path.includes("/starters/weather/forecast")) {
+        forecastHits += 1;
+        return {
+          status: 200,
+          json: {
+            starter_id: "weather",
+            name: "Central Park",
+            unit: "°C",
+            forecast: [
+              { step: 1, value: 15.15 },
+              { step: 2, value: 15.52 },
+              { step: 3, value: 15.61 },
+            ],
+          },
+        };
+      }
+      if (path.includes("/evaluation/")) {
+        return {
+          status: 200,
+          json: { backtest: { comparison: "ok", metrics: { mae: 1 } } },
+        };
+      }
+      return { status: 404, json: {} };
+    });
+    const ctx = toolContext({ fetchContainer });
+    const first = await dispatchTool("forecast", { series: "weather", horizon: 3 }, ctx, 2000, {
+      coldStartWaitMs: 0,
+    });
+    const second = await dispatchTool("forecast", { series: "weather", horizon: 3 }, ctx, 2000, {
+      coldStartWaitMs: 0,
+    });
+    expect(first.ok).toBe(true);
+    expect(second.ok).toBe(true);
+    expect(forecastHits).toBe(1);
+    expect((first.data as { cache_hit?: boolean }).cache_hit).toBe(false);
+    expect((second.data as { cache_hit?: boolean }).cache_hit).toBe(true);
+    expect((second.data as { forecast?: Array<{ value?: number }> }).forecast?.[2]?.value).toBe(15.61);
+    vi.unstubAllGlobals();
   });
 
   it("treats high/low place forecasts as weather and never leaks tool errors", async () => {
@@ -419,6 +479,18 @@ describe("agent tool dispatch", () => {
         await new Promise((resolve) => setTimeout(resolve, 40));
         return { status: 200, json: {} };
       }
+      if (path.endsWith("/evaluation/weather") || path.includes("/evaluation/weather?")) {
+        return {
+          status: 200,
+          json: {
+            backtest: {
+              horizon: 1,
+              metrics: { mae: 1.1, rmse: 1.4, mape: 0.08, directional_accuracy: 0.66 },
+              comparison: "10.0% better than the best simple baseline",
+            },
+          },
+        };
+      }
       return {
         status: 200,
         json: {
@@ -440,10 +512,42 @@ describe("agent tool dispatch", () => {
     expect((result.data as { comparison?: string }).comparison).toContain("baseline");
   });
 
+  it("reads evaluation metrics from D1 without hitting the container", async () => {
+    vi.stubGlobal("caches", { default: undefined });
+    const fetchContainer = vi.fn(async () => ({ status: 500, json: {} }));
+    const db = {
+      prepare: () => ({
+        bind: () => ({
+          first: async () => ({
+            report_json: JSON.stringify({
+              comparison: "12.0% better than the best simple baseline",
+              metrics: { mae: 0.9 },
+            }),
+          }),
+          all: async () => ({ results: [] }),
+          run: async () => ({}),
+        }),
+        all: async () => ({ results: [] }),
+        run: async () => ({}),
+      }),
+    };
+    const result = await dispatchTool(
+      "get_evaluation_metrics",
+      { model_id: "weather", horizon: 11 },
+      toolContext({ fetchContainer, db }),
+      2000,
+      { coldStartWaitMs: 0 },
+    );
+    expect(result.ok).toBe(true);
+    expect(fetchContainer).not.toHaveBeenCalled();
+    expect((result.data as { comparison?: string }).comparison).toContain("12.0%");
+  });
+
   it("dispatches forecast to the container starter path", async () => {
     const fetchContainer = vi.fn(async (path: string) => {
       if (path.includes("/health")) return { status: 200, json: { status: "ok" } };
       if (path.includes("/starters/weather/forecast")) {
+        expect(path).toContain("lite=1");
         return {
           status: 200,
           json: {
@@ -454,15 +558,17 @@ describe("agent tool dispatch", () => {
           },
         };
       }
-      if (path.includes("/evaluation/weather/backtest")) {
+      if (path.includes("/evaluation/weather") && !path.includes("backtest")) {
         return {
           status: 200,
           json: {
-            horizon: 1,
-            n: 20,
-            metrics: { mae: 1.2, rmse: 1.5, mape: 0.1, directional_accuracy: 0.7 },
-            comparison: "10.0% better than the best simple baseline",
-            best_baseline: "naive",
+            backtest: {
+              horizon: 1,
+              n: 20,
+              metrics: { mae: 1.2, rmse: 1.5, mape: 0.1, directional_accuracy: 0.7 },
+              comparison: "10.0% better than the best simple baseline",
+              best_baseline: "naive",
+            },
           },
         };
       }

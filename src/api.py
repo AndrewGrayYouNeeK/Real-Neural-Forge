@@ -549,11 +549,16 @@ def lunar_calendar(when: str | None = Query(None, alias="date")) -> dict[str, An
 
 @app.get("/starters/{starter_id}/forecast", tags=["starters"])
 def public_starter_forecast(
-    starter_id: str, points: int = Query(120, ge=8, le=400)
+    starter_id: str,
+    points: int = Query(120, ge=8, le=400),
+    lite: bool = Query(
+        False,
+        description="Skip history-window replay and outcome tracking (agent / cache path).",
+    ),
 ) -> dict[str, Any]:
     """Next-step forecast for a shipped sample dataset. No account required."""
     try:
-        return starter_forecast(starter_id, points=points)
+        return starter_forecast(starter_id, points=points, lite=lite)
     except WorkspaceError as exc:
         raise _workspace_http(exc) from exc
 
