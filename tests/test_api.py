@@ -904,7 +904,6 @@ class TestForecastDashboard:
         assert 'id: "memory"' in tools_js
         assert 'view: "memory"' in tools_js
         assert "Coming soon" in tools_js or "coming-soon" in tools_js
-        assert "in-progress" in tools_js
         assert "Already live" in tools_js
         assert "Phase 2" in tools_js
         assert "Phase 3" in tools_js
@@ -920,6 +919,9 @@ class TestForecastDashboard:
         assert "K-Means clustering" in tools_js
         assert "Diffusion forecaster" in tools_js
         assert "JEPA pretraining" in tools_js
+        assert 'id: "ml-tools"' in tools_js
+        ml_tools = tools_js.split('id: "ml-tools"', 1)[1][:280]
+        assert 'status: "live"' in ml_tools
         assert "lottery" not in tools_js.lower()
         assert 'id="view-memory"' in html
         assert 'id="memory-list"' in html

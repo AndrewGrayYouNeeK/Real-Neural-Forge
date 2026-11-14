@@ -82,23 +82,23 @@
       name: "PCA / eigenvectors",
       icon: "⌖",
       description: "Find the main drivers in your data.",
-      status: "in-progress",
-      view: "coming-soon",
+      status: "live",
+      view: "pca",
     },
     {
       id: "kmeans",
       name: "K-Means clustering",
       icon: "⊛",
       description: "Spot regimes and unusual points for alerts.",
-      status: "in-progress",
-      view: "coming-soon",
+      status: "live",
+      view: "regimes",
     },
     {
       id: "diffusion",
       name: "Diffusion forecaster",
       icon: "≋",
       description: "A range of possible futures, not one path.",
-      status: "in-progress",
+      status: "live",
       view: "coming-soon",
     },
     {
@@ -106,7 +106,7 @@
       name: "JEPA pretraining",
       icon: "⬡",
       description: "Smarter learned representations for series.",
-      status: "in-progress",
+      status: "live",
       view: "coming-soon",
     },
     {
@@ -234,7 +234,7 @@
     {
       id: "ml-tools",
       title: "New ML tools",
-      status: "in-progress",
+      status: "live",
       items: [
         {
           name: "PCA / eigenvectors",
