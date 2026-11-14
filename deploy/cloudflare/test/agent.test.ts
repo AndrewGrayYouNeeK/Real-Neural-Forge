@@ -634,6 +634,38 @@ describe("agent tool dispatch", () => {
     expect((result.data as { signed_in?: boolean }).signed_in).toBe(false);
   });
 
+  it("runs analyze_pca against a workspace dataset", async () => {
+    const fetchContainer = vi.fn(async (path: string) => {
+      expect(path).toContain("/workspace/datasets/dst_demo/pca");
+      return {
+        status: 200,
+        json: {
+          dataset_id: "dst_demo",
+          summary: "PC1 explains 90.0% of the variance. a and b move together.",
+          explained_variance_ratio: [0.9, 0.08, 0.02],
+          groups: [
+            {
+              component: 1,
+              direction: "same",
+              features: ["a", "b"],
+              explained_variance_ratio: 0.9,
+            },
+          ],
+          loadings: [],
+          feature_names: ["a", "b", "c"],
+          n_components: 3,
+        },
+      };
+    });
+    const result = await dispatchTool(
+      "analyze_pca",
+      { dataset_id: "dst_demo" },
+      toolContext({ fetchContainer }),
+    );
+    expect(result.ok).toBe(true);
+    expect((result.data as { summary?: string }).summary).toMatch(/move together/);
+  });
+
   it("returns a clear degraded eval answer after container retries are exhausted", async () => {
     const result = await dispatchTool(
       "get_evaluation_metrics",

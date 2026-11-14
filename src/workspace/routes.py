@@ -12,6 +12,7 @@ from src.accounts.actor import Actor
 from src.workspace.errors import WorkspaceError
 from src.workspace.runtime import runtime
 from src.workspace.service import (
+    analyze_dataset_pca,
     apply_session_cookie,
     cancel_job,
     clear_session_cookie,
@@ -67,6 +68,11 @@ class DatasetTrainBody(BaseModel):
 
 class DatasetRenameBody(BaseModel):
     name: str = Field(min_length=1, max_length=120)
+
+
+class DatasetPcaBody(BaseModel):
+    columns: list[str] | None = None
+    n_components: int | None = Field(default=None, ge=1)
 
 
 def _raise(exc: WorkspaceError) -> NoReturn:
@@ -217,6 +223,26 @@ def workspace_dataset_train(
     config = _app_config()
     return _call(
         lambda: enqueue_dataset(actor, dataset_id, payload.target_column, config)
+    )
+
+
+@router.post("/workspace/datasets/{dataset_id}/pca", tags=["workspace"])
+def workspace_dataset_pca(
+    dataset_id: str,
+    request: Request,
+    body: DatasetPcaBody | None = None,
+    authorization: str | None = Header(default=None),
+) -> dict[str, Any]:
+    """Which numeric columns matter and move together (covariance PCA)."""
+    actor = _actor(request, authorization)
+    payload = body or DatasetPcaBody()
+    return _call(
+        lambda: analyze_dataset_pca(
+            actor,
+            dataset_id,
+            columns=payload.columns,
+            n_components=payload.n_components,
+        )
     )
 
 

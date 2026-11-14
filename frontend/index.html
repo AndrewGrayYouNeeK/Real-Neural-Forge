@@ -406,6 +406,49 @@
             </div>
           </section>
 
+          <section class="tool-view" id="view-pca" data-tool-view="pca" hidden>
+            <header class="tool-view-head">
+              <h2>Column analysis (PCA)</h2>
+              <button type="button" class="btn secondary back-to-chat" data-view="chat">Back to chat</button>
+            </header>
+            <p class="hint">
+              Upload a multi-column CSV (Train on my CSV) or ask chat “which columns
+              move together” for a signed-in dataset. PCA uses eigenvectors of the
+              covariance matrix — no heavy training on the request path.
+            </p>
+            <div id="pca-empty" class="hint">
+              No PCA report yet. Upload a CSV with at least two numeric columns, or
+              ask in chat after a workspace upload.
+            </div>
+            <div id="pca-report" hidden>
+              <p id="pca-summary" class="pca-summary"></p>
+              <div class="table-wrap table-scroll">
+                <table>
+                  <caption class="visually-hidden">Explained variance by component</caption>
+                  <thead>
+                    <tr>
+                      <th scope="col">Component</th>
+                      <th scope="col">Variance</th>
+                      <th scope="col">Cumulative</th>
+                    </tr>
+                  </thead>
+                  <tbody id="pca-variance-body"></tbody>
+                </table>
+              </div>
+              <h3 class="pca-groups-title">Columns that move together</h3>
+              <ul id="pca-groups" class="side-list"></ul>
+            </div>
+            <div class="chip-row">
+              <button
+                class="chip"
+                type="button"
+                data-question="Which columns in my latest CSV move together?"
+              >
+                Ask chat about my columns
+              </button>
+            </div>
+          </section>
+
           <section class="tool-view" id="view-live" data-tool-view="live" hidden>
             <header class="tool-view-head">
               <h2>Live data</h2>

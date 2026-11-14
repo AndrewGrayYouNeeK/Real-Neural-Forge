@@ -1099,6 +1099,19 @@ td {
   border-bottom: 1px solid var(--border);
 }
 
+.pca-summary {
+  margin: 0;
+  line-height: 1.45;
+}
+
+.pca-groups-title {
+  margin: 8px 0 0;
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+
 .hint {
   margin: 0;
   color: var(--muted);

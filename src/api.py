@@ -18,6 +18,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from src import __version__
+from src.analysis.routes import router as analysis_router
 from src.dashboard_data import recent_series, validation_predictions
 from src.data.lunar import lunar_now, lunar_on
 from src.evaluation.routes import router as evaluation_router
@@ -275,6 +276,7 @@ if FRONTEND_DIR.exists():
 app.include_router(workspace_router)
 app.include_router(evaluation_router)
 app.include_router(voice_router)
+app.include_router(analysis_router)
 
 
 class PredictRequest(BaseModel):

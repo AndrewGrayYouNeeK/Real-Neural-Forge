@@ -9,6 +9,7 @@ from typing import cast
 import torch
 import torch.nn as nn
 
+from src.analysis.pca import PCAModel
 from src.data.scaling import StandardScaler
 from src.forecasting.intervals import apply_qhat
 from src.forecasting.output import point_forecast, quantile_bounds
@@ -44,12 +45,14 @@ class Predictor:
         model: nn.Module,
         device: str | torch.device = "cpu",
         scaler: StandardScaler | None = None,
+        pca: PCAModel | None = None,
         spec: ForecastSpec | None = None,
         forecast_meta: dict[str, object] | None = None,
     ) -> None:
         self.model = model.to(device).eval()
         self.device = torch.device(device)
         self.scaler = scaler
+        self.pca = pca
         self.spec = spec or ForecastSpec()
         meta = forecast_meta or {}
         qhat = meta.get("conformal_qhat")
@@ -87,10 +90,12 @@ class Predictor:
         if isinstance(ckpt, dict) and "model_state_dict" in ckpt:
             state_dict = ckpt["model_state_dict"]
             scaler_state = ckpt.get("scaler")
+            pca_state = ckpt.get("pca")
             forecast_meta = ckpt.get("forecast")
         else:
             state_dict = ckpt
             scaler_state = None
+            pca_state = None
             forecast_meta = None
         try:
             model.load_state_dict(state_dict)
@@ -105,12 +110,16 @@ class Predictor:
             if isinstance(scaler_state, dict)
             else None
         )
+        pca = (
+            PCAModel.from_state_dict(pca_state) if isinstance(pca_state, dict) else None
+        )
         meta = forecast_meta if isinstance(forecast_meta, dict) else None
         resolved = _spec_from_checkpoint(meta, spec)
         return cls(
             model,
             device=device,
             scaler=scaler,
+            pca=pca,
             spec=resolved,
             forecast_meta=meta,
         )
@@ -170,6 +179,8 @@ class Predictor:
         scaled = (
             self.scaler.transform_inputs(window) if self.scaler is not None else window
         )
+        if self.pca is not None:
+            scaled = self.pca.transform_torch(scaled)
         return cast(torch.Tensor, self.model(scaled))
 
     def _to_original(self, output: torch.Tensor) -> torch.Tensor:
