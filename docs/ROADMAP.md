@@ -22,8 +22,8 @@ and never deploy the frontend Worker `real-neural-forge`.
 3. **Saved scenarios** — D1 `saved_scenarios` (migration `0008_*`); save/list/run
    via agent tools and the Memory panel; re-run opens chat with the stored
    question/series.
-4. **Manage your own series** — list / rename / delete uploaded CSV series and
-   retrain (on top of Train on my CSV).
+4. **Manage your own series** — workspace UI + `PATCH /workspace/datasets/{id}`
+   rename; delete and retrain actions on uploaded CSV series (Train on my CSV).
 
 Flip matching “coming soon” tool-registry entries to live as each piece ships
 (Memory first; saved scenarios when that PR lands).

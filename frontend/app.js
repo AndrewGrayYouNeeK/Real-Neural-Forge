@@ -2026,6 +2026,49 @@ function appendTextItem(list, text) {
   list.append(item);
 }
 
+async function renameWorkspaceDataset(dataset) {
+  const next = window.prompt("Rename series", dataset.name || "");
+  if (next == null) return;
+  const name = String(next).trim();
+  if (!name || name === dataset.name) return;
+  await fetchJson(`/workspace/datasets/${encodeURIComponent(dataset.id)}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name }),
+  });
+  await refreshWorkspace();
+}
+
+async function deleteWorkspaceDataset(dataset) {
+  const ok = window.confirm(`Delete series “${dataset.name}”? This cannot be undone.`);
+  if (!ok) return;
+  await fetchJson(`/workspace/datasets/${encodeURIComponent(dataset.id)}`, {
+    method: "DELETE",
+  });
+  await refreshWorkspace();
+}
+
+async function retrainWorkspaceDataset(dataset) {
+  const pending = addMessage("assistant", `Queueing a retrain on “${dataset.name}”…`);
+  try {
+    const result = await fetchJson(
+      `/workspace/datasets/${encodeURIComponent(dataset.id)}/train`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      }
+    );
+    pending.querySelector(".bubble").textContent =
+      `Queued retrain for “${dataset.name}”` +
+      (result && result.job_id ? ` (job ${result.job_id}).` : ".");
+    watchTraining();
+  } catch (error) {
+    pending.querySelector(".bubble").textContent =
+      error.message || "Could not start retrain.";
+  }
+}
+
 function renderWorkspaceLists(datasets, models, predictions) {
   const datasetList = document.getElementById("dataset-list");
   const modelList = document.getElementById("model-list");
@@ -2035,8 +2078,37 @@ function renderWorkspaceLists(datasets, models, predictions) {
   predictionList.replaceChildren();
   if (!datasets.length) appendTextItem(datasetList, "No datasets yet.");
   for (const dataset of datasets) {
+    const row = document.createElement("li");
     const shared = dataset.shared ? "shared starter" : "private copy";
-    appendTextItem(datasetList, `${dataset.name} · ${shared}`);
+    const label = document.createElement("span");
+    label.textContent = `${dataset.name} · ${shared}`;
+    const actions = document.createElement("div");
+    actions.className = "message-actions";
+    const rename = document.createElement("button");
+    rename.type = "button";
+    rename.className = "btn secondary btn-small";
+    rename.textContent = "Rename";
+    rename.addEventListener("click", () => {
+      void renameWorkspaceDataset(dataset).catch((error) => reportError(error));
+    });
+    const retrain = document.createElement("button");
+    retrain.type = "button";
+    retrain.className = "btn secondary btn-small";
+    retrain.textContent = "Retrain";
+    retrain.addEventListener("click", () => {
+      showToolView("chat");
+      void retrainWorkspaceDataset(dataset).catch((error) => reportError(error));
+    });
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "btn secondary btn-small";
+    remove.textContent = "Delete";
+    remove.addEventListener("click", () => {
+      void deleteWorkspaceDataset(dataset).catch((error) => reportError(error));
+    });
+    actions.append(rename, retrain, remove);
+    row.append(label, actions);
+    datasetList.append(row);
   }
   if (!models.length) appendTextItem(modelList, "No models yet.");
   for (const model of models) {

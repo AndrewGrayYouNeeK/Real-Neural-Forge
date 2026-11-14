@@ -35,6 +35,7 @@ from src.workspace.service import (
     predict_latest_model,
     predict_model,
     predict_starter,
+    rename_dataset,
     replace_dataset,
     resolve_actor,
     signup,
@@ -62,6 +63,10 @@ class PredictBody(BaseModel):
 
 class DatasetTrainBody(BaseModel):
     target_column: str | None = None
+
+
+class DatasetRenameBody(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
 
 
 def _raise(exc: WorkspaceError) -> NoReturn:
@@ -234,6 +239,17 @@ async def workspace_replace_dataset(
     actor = _actor(request, authorization)
     data = await _read_upload(request)
     return _call(lambda: replace_dataset(actor, dataset_id, data, _app_config()))
+
+
+@router.patch("/workspace/datasets/{dataset_id}", tags=["workspace"])
+def workspace_rename_dataset(
+    dataset_id: str,
+    body: DatasetRenameBody,
+    request: Request,
+    authorization: str | None = Header(default=None),
+) -> dict[str, Any]:
+    actor = _actor(request, authorization)
+    return _call(lambda: rename_dataset(actor, dataset_id, body.name))
 
 
 @router.delete("/workspace/datasets/{dataset_id}", tags=["workspace"])

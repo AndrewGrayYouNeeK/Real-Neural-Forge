@@ -32,7 +32,7 @@
       id: "workspace",
       name: "My data / series",
       icon: "▤",
-      description: "Datasets, models, and predictions in your workspace.",
+      description: "List, rename, delete, and retrain your uploaded CSV series.",
       status: "live",
       view: "workspace",
     },
