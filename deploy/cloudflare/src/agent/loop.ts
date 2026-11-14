@@ -369,7 +369,7 @@ export function factualFallback(results: ToolResult[]): string {
         name?: unknown;
         unit?: unknown;
         series?: unknown;
-        recent_accuracy?: { comparison?: unknown };
+        recent_accuracy?: { comparison?: unknown; metrics?: { mae?: unknown } };
       };
       const values = Array.isArray(data.forecast)
         ? data.forecast
@@ -377,15 +377,30 @@ export function factualFallback(results: ToolResult[]): string {
             .filter((v): v is number => v != null)
         : [];
       if (values.length) {
+        const seriesId = typeof data.series === "string" ? data.series : "";
         const label = typeof data.name === "string" ? data.name : String(data.series || "series");
-        const unit = typeof data.unit === "string" && data.unit ? ` ${data.unit}` : "";
-        const joined = values.map((v) => `${v}${unit}`.trim()).join(", ");
-        let line = `Forecast for ${label}: ${joined}.`;
+        const weather = seriesId === "weather";
+        const displayValues = weather
+          ? values.map((celsius) => `${(celsius * (9 / 5) + 32).toFixed(2)}°F`)
+          : values.map((value) => {
+              const unit = typeof data.unit === "string" && data.unit ? ` ${data.unit}` : "";
+              return `${value}${unit}`.trim();
+            });
+        let line = `Forecast for ${label}: ${displayValues.join(", ")}.`;
         const comparison =
           data.recent_accuracy && typeof data.recent_accuracy.comparison === "string"
             ? data.recent_accuracy.comparison
             : null;
         if (comparison) line += ` Recent accuracy: ${comparison}.`;
+        const mae =
+          data.recent_accuracy &&
+          data.recent_accuracy.metrics &&
+          typeof data.recent_accuracy.metrics.mae === "number"
+            ? data.recent_accuracy.metrics.mae
+            : null;
+        if (weather && mae != null) {
+          line += ` MAE about ${(mae * (9 / 5)).toFixed(2)}°F.`;
+        }
         lines.push(line);
         continue;
       }
@@ -397,11 +412,19 @@ export function factualFallback(results: ToolResult[]): string {
         metrics?: { mae?: unknown; directional_accuracy?: unknown };
       };
       const modelId = typeof data.model_id === "string" ? data.model_id : "model";
+      const mae = data.metrics?.mae;
+      if (modelId === "weather" && typeof mae === "number") {
+        const comparison =
+          typeof data.comparison === "string" && data.comparison.trim()
+            ? ` ${data.comparison.trim()}.`
+            : "";
+        lines.push(`weather MAE about ${(mae * (9 / 5)).toFixed(2)}°F.${comparison}`);
+        continue;
+      }
       if (typeof data.comparison === "string" && data.comparison.trim()) {
         lines.push(`${modelId}: ${data.comparison}.`);
         continue;
       }
-      const mae = data.metrics?.mae;
       if (typeof mae === "number") {
         lines.push(`${modelId} MAE: ${mae}.`);
         continue;

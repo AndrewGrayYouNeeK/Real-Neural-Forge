@@ -892,7 +892,9 @@ describe("agent turn caps and fallback", () => {
       },
     );
     expect(result.toolsUsed).toContain("forecast");
-    expect(result.text).toMatch(/21/);
+    // Weather starter values are stored in °C; user-facing copy labels °F.
+    expect(result.text).toMatch(/69\.80°F/);
+    expect(result.text).not.toMatch(/°C/);
     expect(result.text).not.toMatch(/^!+$/);
     expect(result.text).not.toMatch(/could not finish/i);
   });
