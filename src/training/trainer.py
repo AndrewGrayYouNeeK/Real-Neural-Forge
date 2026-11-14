@@ -30,6 +30,7 @@ from src.forecasting.intervals import calibrate_intervals, pinball_loss
 from src.forecasting.output import horizon_targets, training_targets
 from src.forecasting.spec import ForecastSpec, forecast_spec_from_config
 from src.inference.predictor import Predictor
+from src.models.diffusion import DiffusionForecaster
 from src.models.registry import build_model
 from src.storage.experiments import ExperimentStore, db_path_from_config
 from src.utils.checkpoint import save_checkpoint
@@ -353,8 +354,13 @@ class TimeSeriesTrainer:
                 for batch_x, batch_y in loader:
                     batch_x, batch_y = batch_x.to(device), batch_y.to(device)
                     optimizer.zero_grad()
-                    preds = model(batch_x)
-                    loss = criterion(preds, batch_y)
+                    # Diffusion trains offline-style noise prediction; other
+                    # models keep the supervised head loss on the request-safe path.
+                    if isinstance(model, DiffusionForecaster):
+                        loss = model.diffusion_loss(batch_x, batch_y)
+                    else:
+                        preds = model(batch_x)
+                        loss = criterion(preds, batch_y)
                     loss.backward()
                     if max_grad_norm > 0:
                         torch.nn.utils.clip_grad_norm_(
@@ -369,7 +375,13 @@ class TimeSeriesTrainer:
                 # Select the best checkpoint on held-out loss when available.
                 select_loss = epoch_loss
                 if val_dataset is not None:
-                    if quantiles:
+                    if isinstance(model, DiffusionForecaster):
+                        # Keep validation on the cheap noise-prediction loss;
+                        # sampling every epoch would dominate CPU time.
+                        select_loss = _diffusion_mean_loss(
+                            model, val_dataset, device, int(t_cfg["batch_size"])
+                        )
+                    elif quantiles:
                         select_loss = _mean_loss(val_dataset)
                     else:
                         vp, vt = evaluate(val_dataset)
@@ -562,6 +574,23 @@ class TimeSeriesTrainer:
         if pca_report is not None:
             result["pca"] = pca_report
         return result
+
+
+def _diffusion_mean_loss(
+    model: DiffusionForecaster,
+    ds: Dataset[tuple[torch.Tensor, ...]],
+    device: torch.device,
+    batch_size: int,
+) -> float:
+    model.eval()
+    total = 0.0
+    count = 0
+    with torch.no_grad():
+        for bx, by in DataLoader(ds, batch_size=batch_size):
+            loss = model.diffusion_loss(bx.to(device), by.to(device))
+            total += float(loss.item()) * bx.size(0)
+            count += bx.size(0)
+    return total / max(count, 1)
 
 
 def _forecast_checkpoint(spec: ForecastSpec) -> dict[str, Any]:

@@ -48,10 +48,12 @@ Flip matching “coming soon” tool-registry entries to live as each piece ship
 
 - Synthetic training series with known patterns
 - What-if shocks on a forecast path
-- **Diffusion forecaster experiment** (also tracked under Phase 5) — small 1D
-  denoising diffusion conditioned on recent history → p10/p50/p90 bands; train
-  offline/CPU-small; selectable vs transformer via backtests; not default unless
-  it wins
+- **Diffusion forecaster experiment (in progress; selectable, not default)** —
+  small 1D conditional denoising diffusion `f_θ(x_t, t, c)` → many futures →
+  p10/p50/p90 bands; train offline/CPU-small with few inference steps; compare
+  via backtests/metrics against the transformer before any default swap
+  (`config/diffusion_experiment.yaml`, `model.name: diffusion_forecaster`);
+  landing registry stays **In progress**
 
 ## Phase 5 — World model / simulator
 
@@ -62,4 +64,3 @@ Flip matching “coming soon” tool-registry entries to live as each piece ship
   embeddings of future (or masked) windows rather than raw values; evaluate
   transfer into the existing supervised forecast fine-tune path before any
   production swap
-

@@ -9,6 +9,7 @@ from typing import Any
 import torch.nn as nn
 
 from src.forecasting.spec import forecast_spec_from_config
+from src.models.diffusion import DiffusionForecaster
 from src.models.ensemble import SeedEnsemble
 from src.models.lstm import LSTMForecaster
 from src.models.transformer import TimeSeriesTransformer
@@ -16,6 +17,7 @@ from src.models.transformer import TimeSeriesTransformer
 _REGISTRY: dict[str, Callable[..., nn.Module]] = {
     "time_series_transformer": TimeSeriesTransformer,
     "lstm": LSTMForecaster,
+    "diffusion_forecaster": DiffusionForecaster,
 }
 
 _MODEL_KEYS = (
@@ -34,6 +36,9 @@ _MODEL_KEYS = (
     "use_revin",
     "residual",
     "target_index",
+    "diffusion_steps",
+    "sample_steps",
+    "n_paths",
 )
 
 
