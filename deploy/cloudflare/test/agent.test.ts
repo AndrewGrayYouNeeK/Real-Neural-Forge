@@ -360,7 +360,9 @@ describe("agent tool dispatch", () => {
     );
     expect(result.ok).toBe(true);
     expect(forecastAttempts).toBe(2);
-    expect((result.data as { forecast?: Array<{ value?: number }> }).forecast?.[0]?.value).toBe(15.15);
+    // Tool output converts weather °C → °F (15.15°C → 59.27°F).
+    expect((result.data as { forecast?: Array<{ value?: number }> }).forecast?.[0]?.value).toBe(59.27);
+    expect((result.data as { unit?: string }).unit).toBe("°F");
   });
 
   it("serves starter forecasts from Cache API on the second call", async () => {
@@ -414,7 +416,9 @@ describe("agent tool dispatch", () => {
     expect(forecastHits).toBe(1);
     expect((first.data as { cache_hit?: boolean }).cache_hit).toBe(false);
     expect((second.data as { cache_hit?: boolean }).cache_hit).toBe(true);
-    expect((second.data as { forecast?: Array<{ value?: number }> }).forecast?.[2]?.value).toBe(15.61);
+    // 15.61°C → 60.10°F in tool output.
+    expect((second.data as { forecast?: Array<{ value?: number }> }).forecast?.[2]?.value).toBe(60.1);
+    expect((second.data as { unit?: string }).unit).toBe("°F");
     vi.unstubAllGlobals();
   });
 
@@ -541,6 +545,39 @@ describe("agent tool dispatch", () => {
     expect(result.ok).toBe(true);
     expect(fetchContainer).not.toHaveBeenCalled();
     expect((result.data as { comparison?: string }).comparison).toContain("12.0%");
+    // 0.9°C MAE → 1.62°F in tool output.
+    expect((result.data as { metrics?: { mae?: number }; unit?: string }).metrics?.mae).toBe(1.62);
+    expect((result.data as { unit?: string }).unit).toBe("°F");
+  });
+
+  it("converts weather MAE/RMSE to °F in evaluation tool output", async () => {
+    const fetchContainer = vi.fn(async (path: string) => {
+      if (path.includes("/evaluation/weather") && !path.includes("backtest")) {
+        return {
+          status: 200,
+          json: {
+            backtest: {
+              horizon: 1,
+              metrics: { mae: 3.31, rmse: 4.2 },
+              comparison: "beats naive",
+            },
+          },
+        };
+      }
+      return { status: 404, json: {} };
+    });
+    const result = await dispatchTool(
+      "get_evaluation_metrics",
+      { model_id: "weather", horizon: 1 },
+      toolContext({ fetchContainer }),
+      2000,
+      { coldStartWaitMs: 0 },
+    );
+    expect(result.ok).toBe(true);
+    const data = result.data as { metrics?: { mae?: number; rmse?: number }; unit?: string };
+    expect(data.unit).toBe("°F");
+    expect(data.metrics?.mae).toBe(5.96);
+    expect(data.metrics?.rmse).toBe(7.56);
   });
 
   it("dispatches forecast to the container starter path", async () => {
@@ -945,6 +982,44 @@ describe("agent turn caps and fallback", () => {
       },
     ]);
     expect(text).toMatch(/54°F/);
+  });
+
+  it("uses already-converted °F forecast and MAE from tool payloads", () => {
+    const forecastText = factualFallback([
+      {
+        ok: true,
+        name: "forecast",
+        summary: "forecast",
+        data: {
+          series: "weather",
+          name: "Central Park",
+          unit: "°F",
+          forecast: [{ step: 1, value: 59.27 }],
+          recent_accuracy: { metrics: { mae: 5.96 }, unit: "°F", comparison: "beats naive" },
+        },
+        durationMs: 12,
+      },
+    ]);
+    expect(forecastText).toMatch(/59\.27°F/);
+    expect(forecastText).toMatch(/5\.96°F/);
+    expect(forecastText).not.toMatch(/°C/);
+
+    const evalText = factualFallback([
+      {
+        ok: true,
+        name: "get_evaluation_metrics",
+        summary: "get_evaluation_metrics",
+        data: {
+          model_id: "weather",
+          unit: "°F",
+          metrics: { mae: 5.96 },
+          comparison: "beats naive",
+        },
+        durationMs: 8,
+      },
+    ]);
+    expect(evalText).toMatch(/5\.96°F/);
+    expect(evalText).not.toMatch(/3\.31/);
   });
 
   it("runs a tool then answers, and counts each model call against quota", async () => {

@@ -361,10 +361,16 @@ async function speakMessage(message, speakButton) {
 
 /* --------------------------------------------------------- topic replies */
 
-function forecastChart(series, steps) {
+function chartValue(starterId, value) {
+  const number = asNumber(value);
+  if (number == null) return null;
+  return starterId === "weather" ? celsiusToFahrenheit(number) : number;
+}
+
+function forecastChart(series, steps, starterId) {
   const history = Array.isArray(series.history) ? series.history : [];
   const labels = history.map((point) => point.time || String(point.index));
-  const actual = history.map((point) => asNumber(point.actual));
+  const actual = history.map((point) => chartValue(starterId, point.actual));
   const forecast = new Array(history.length).fill(null);
   const low = new Array(history.length).fill(null);
   const high = new Array(history.length).fill(null);
@@ -373,15 +379,15 @@ function forecastChart(series, steps) {
   steps.forEach((step, index) => {
     labels.push(`+${step.step || index + 1}`);
     actual.push(null);
-    forecast.push(step.p50 != null ? step.p50 : step.value);
-    low.push(step.p10);
-    high.push(step.p90);
+    forecast.push(chartValue(starterId, step.p50 != null ? step.p50 : step.value));
+    low.push(chartValue(starterId, step.p10));
+    high.push(chartValue(starterId, step.p90));
   });
-  const lines = [{ name: "Actual", color: "#e8f4ff", values: actual }];
+  const lines = [{ name: "Actual", color: "#e8eaed", values: actual }];
   if (forecast.some((value) => value != null)) {
     lines.push({
       name: "Forecast",
-      color: "#7cffd6",
+      color: "#a8b4c8",
       markers: true,
       values: forecast,
     });
@@ -391,7 +397,7 @@ function forecastChart(series, steps) {
     labels,
     series: lines,
     bands: hasInterval(steps)
-      ? [{ name: "p10–p90", color: "#7cffd6", low, high }]
+      ? [{ name: "p10–p90", color: "#a8b4c8", low, high }]
       : [],
     empty: "Not enough history to draw a forecast.",
   };
@@ -586,10 +592,10 @@ function uncertaintyText(uncertainty, starterId) {
     }
   }
   const confidence = asNumber(uncertainty.confidence);
-  if (confidence != null) {
+  // Omit uncalibrated / zero confidence — it reads as noise, not skill.
+  if (confidence != null && uncertainty.calibrated === true && confidence > 0) {
     const percent = Math.round(confidence * 100);
-    const state = uncertainty.calibrated ? "calibrated" : "not calibrated yet";
-    lines.push(`Confidence ${percent}% (${state}).`);
+    lines.push(`Confidence ${percent}% (calibrated).`);
   }
   return lines.join(" ");
 }
@@ -604,7 +610,7 @@ function sampleReplyParts(starterId, series, steps) {
   }
   const band = uncertaintyText(series.uncertainty, starterId);
   if (band) lines.push(band);
-  return { text: lines.join("\n\n"), chart: forecastChart(series, steps) };
+  return { text: lines.join("\n\n"), chart: forecastChart(series, steps, starterId) };
 }
 
 async function baselineComparison(modelId) {
@@ -632,6 +638,8 @@ async function baselineComparison(modelId) {
 }
 
 async function loadDefaultDemos() {
+  // Warm starter forecasts in the background only — never auto-post sample
+  // replies into the empty Grok-style chat.
   let ids = ["weather", "near-earth"];
   try {
     const catalog = await fetchJson("/starters");
@@ -640,20 +648,17 @@ async function loadDefaultDemos() {
       .map((row) => String(row.id));
     if (marked.length) ids = marked;
   } catch {
-    // The two shipped demos still load if the catalog request fails.
+    // The two shipped demos still warm if the catalog request fails.
   }
-  for (const id of ids) {
-    try {
-      const series = await fetchJson(`/starters/${id}/forecast?points=90`);
-      const steps = normalizeForecast(series);
-      const reply = sampleReplyParts(id, series, steps);
-      const comparison = await baselineComparison(id);
-      const text = comparison ? `${reply.text}\n\n${comparison}` : reply.text;
-      addReply(text, reply.chart);
-    } catch {
-      // The sample chips still open the same model if this preload fails.
-    }
-  }
+  await Promise.all(
+    ids.map(async (id) => {
+      try {
+        await fetchJson(`/starters/${id}/forecast?points=90`);
+      } catch {
+        // Sample chips still open the same model if warmup fails.
+      }
+    }),
+  );
 }
 
 async function sampleModelReply(question) {
