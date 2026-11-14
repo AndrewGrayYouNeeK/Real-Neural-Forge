@@ -901,7 +901,7 @@ class TestForecastDashboard:
         assert "lottery" not in tools_js.lower()
         app_js = client.get("/assets/app.js").text
         assert "celsiusToFahrenheit" in app_js
-        assert 'return `${formatMetric(celsiusToFahrenheit(number))}°F`' in app_js
+        assert "return `${formatMetric(celsiusToFahrenheit(number))}°F`" in app_js
         assert "formatWeatherMaeFahrenheit" in app_js
         assert "neuralForgeApiToken" in app_js
         assert "Authorization" in app_js
