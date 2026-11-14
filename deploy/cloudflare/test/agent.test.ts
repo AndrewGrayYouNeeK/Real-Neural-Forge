@@ -25,8 +25,14 @@ import {
   tryParseToolJson,
 } from "../src/agent/protocol";
 import {
+  FORECAST_TOOL_TIMEOUT_MS,
+  FORECAST_UNAVAILABLE_TEXT,
   MAX_TOOL_CALLS,
+  adaptiveToolTimeoutMs,
+  containerRetryDelayMs,
   dispatchTool,
+  ensureContainerReady,
+  isRetryableContainerError,
   weatherQuestionForTool,
   type ToolContext,
 } from "../src/agent/tools";
@@ -302,13 +308,25 @@ describe("agent tool dispatch", () => {
     expect(data.text?.toLowerCase()).not.toContain("weather");
   });
 
-  it("retries forecast once after container cold-start failure", async () => {
-    let attempts = 0;
+  it("retries forecast with backoff after container cold-start / 5xx", async () => {
+    expect(FORECAST_TOOL_TIMEOUT_MS).toBeGreaterThanOrEqual(20_000);
+    expect(isRetryableContainerError("Starter forecast failed (503).")).toBe(true);
+    expect(containerRetryDelayMs(0, 100)).toBe(100);
+    expect(containerRetryDelayMs(1, 100)).toBe(200);
+    expect(adaptiveToolTimeoutMs(20_000, 1)).toBe(30_000);
+
+    let forecastAttempts = 0;
     const fetchContainer = vi.fn(async (path: string) => {
+      if (path === "/health" || path.startsWith("/health")) {
+        return { status: 200, json: { status: "ok" } };
+      }
       if (path.includes("/starters/weather/forecast")) {
-        attempts += 1;
-        if (attempts === 1) {
+        forecastAttempts += 1;
+        if (forecastAttempts === 1) {
           throw new Error("The container is not running.");
+        }
+        if (forecastAttempts === 2) {
+          return { status: 503, json: { detail: "starting" } };
         }
         return {
           status: 200,
@@ -316,7 +334,7 @@ describe("agent tool dispatch", () => {
             starter_id: "weather",
             name: "Central Park",
             unit: "°C",
-            forecast: [{ step: 1, value: 22 }],
+            forecast: [{ step: 1, value: 15.15 }],
           },
         };
       }
@@ -333,16 +351,53 @@ describe("agent tool dispatch", () => {
       { coldStartWaitMs: 0 },
     );
     expect(result.ok).toBe(true);
-    expect(attempts).toBe(2);
-    expect((result.data as { forecast?: unknown[] }).forecast).toBeTruthy();
+    expect(forecastAttempts).toBe(3);
+    expect((result.data as { forecast?: Array<{ value?: number }> }).forecast?.[0]?.value).toBe(15.15);
+    expect(fetchContainer.mock.calls.some((call) => String(call[0]).includes("/health"))).toBe(true);
   });
 
-  it("retries get_evaluation_metrics once after tool timeout", async () => {
-    let attempts = 0;
-    const fetchContainer = vi.fn(async () => {
-      attempts += 1;
-      if (attempts === 1) {
-        await new Promise((resolve) => setTimeout(resolve, 30));
+  it("returns a clear degraded forecast answer after retries are exhausted", async () => {
+    const fetchContainer = vi.fn(async (path: string) => {
+      if (path.includes("/health")) return { status: 200, json: { status: "ok" } };
+      if (path.includes("/starters/weather/forecast")) {
+        throw new Error("tool timeout");
+      }
+      return { status: 404, json: {} };
+    });
+    const result = await dispatchTool(
+      "forecast",
+      { series: "weather", horizon: 1 },
+      toolContext({ fetchContainer }),
+      5,
+      { coldStartWaitMs: 0, retryAttempts: 2 },
+    );
+    expect(result.ok).toBe(true);
+    expect(result.summary).toBe("forecast_unavailable");
+    const data = result.data as { degraded?: boolean; text?: string };
+    expect(data.degraded).toBe(true);
+    expect(data.text).toBe(FORECAST_UNAVAILABLE_TEXT);
+  });
+
+  it("readiness ping waits until /health is ok", async () => {
+    let hits = 0;
+    await ensureContainerReady(
+      async () => {
+        hits += 1;
+        if (hits < 2) return { status: 503, json: { status: "starting" } };
+        return { status: 200, json: { status: "ok" } };
+      },
+      { attempts: 3, waitMs: 0 },
+    );
+    expect(hits).toBe(2);
+  });
+
+  it("retries get_evaluation_metrics after tool timeout", async () => {
+    let evalAttempts = 0;
+    const fetchContainer = vi.fn(async (path: string) => {
+      if (path.includes("/health")) return { status: 200, json: { status: "ok" } };
+      evalAttempts += 1;
+      if (evalAttempts === 1) {
+        await new Promise((resolve) => setTimeout(resolve, 40));
         return { status: 200, json: {} };
       }
       return {
@@ -358,16 +413,17 @@ describe("agent tool dispatch", () => {
       "get_evaluation_metrics",
       { model_id: "weather" },
       toolContext({ fetchContainer }),
-      5,
+      10,
       { coldStartWaitMs: 0 },
     );
     expect(result.ok).toBe(true);
-    expect(attempts).toBe(2);
+    expect(evalAttempts).toBeGreaterThanOrEqual(2);
     expect((result.data as { comparison?: string }).comparison).toContain("baseline");
   });
 
   it("dispatches forecast to the container starter path", async () => {
     const fetchContainer = vi.fn(async (path: string) => {
+      if (path.includes("/health")) return { status: 200, json: { status: "ok" } };
       if (path.includes("/starters/weather/forecast")) {
         return {
           status: 200,
@@ -416,18 +472,20 @@ describe("agent tool dispatch", () => {
     expect((result.data as { signed_in?: boolean }).signed_in).toBe(false);
   });
 
-  it("times out slow tools after the cold-start retry is exhausted", async () => {
+  it("times out slow tools after container retries are exhausted", async () => {
     const result = await dispatchTool(
       "get_evaluation_metrics",
       { model_id: "weather" },
       toolContext({
-        fetchContainer: async () =>
-          new Promise((resolve) => {
+        fetchContainer: async (path: string) => {
+          if (path.includes("/health")) return { status: 200, json: { status: "ok" } };
+          return new Promise((resolve) => {
             setTimeout(() => resolve({ status: 200, json: {} }), 40);
-          }),
+          });
+        },
       }),
       5,
-      { coldStartWaitMs: 0 },
+      { coldStartWaitMs: 0, retryAttempts: 2 },
     );
     expect(result.ok).toBe(false);
     expect(result.error).toMatch(/timeout/i);
@@ -678,6 +736,7 @@ describe("agent turn caps and fallback", () => {
         toolContext: toolContext({
           question: "forecast the next 3 values of the weather starter series",
           fetchContainer: async (path: string) => {
+            if (path.includes("/health")) return { status: 200, json: { status: "ok" } };
             if (path.includes("/starters/weather/forecast")) {
               return {
                 status: 200,

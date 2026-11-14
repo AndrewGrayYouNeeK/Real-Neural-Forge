@@ -31,10 +31,18 @@ export function weatherQuestionForTool(originalQuestion: string, toolQuery: stri
 
 export const MAX_TOOL_CALLS = 4;
 export const TOOL_TIMEOUT_MS = 8_000;
+/** Forecast/eval need more headroom: model inference + optional metrics. */
+export const FORECAST_TOOL_TIMEOUT_MS = 20_000;
 export const TURN_TIMEOUT_MS = 45_000;
-/** Wait before one retry when the container is still cold-starting. */
+/** Base wait before the first container retry (grows with backoff). */
 export const CONTAINER_COLD_START_WAIT_MS = 1_500;
-const COLD_START_RETRY_TOOLS = new Set<AgentToolName>(["forecast", "get_evaluation_metrics"]);
+export const CONTAINER_RETRY_ATTEMPTS = 3;
+/** Optional accuracy/backtest must not consume the forecast timeout budget. */
+export const ACCURACY_FETCH_TIMEOUT_MS = 3_000;
+export const FORECAST_UNAVAILABLE_TEXT =
+  "The forecast service is warming up or temporarily unavailable. Please try that forecast again in a moment — I could not load a reliable prediction just now.";
+
+const CONTAINER_RETRY_TOOLS = new Set<AgentToolName>(["forecast", "get_evaluation_metrics"]);
 
 export type ToolResult = {
   ok: boolean;
@@ -240,33 +248,96 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-/** Container cold-start / timeout errors that deserve one retry. */
+/** Container cold-start / timeout / 5xx errors that deserve retries with backoff. */
 export function isContainerColdStartError(message: string): boolean {
+  return isRetryableContainerError(message);
+}
+
+export function isRetryableContainerError(message: string): boolean {
   const text = message.toLowerCase();
   return (
     text.includes("container is not running") ||
-    text.includes("tool timeout") ||
     text.includes("container not running") ||
-    /\btimeout\b/.test(text)
+    text.includes("tool timeout") ||
+    text.includes("health check failed") ||
+    text.includes("econnreset") ||
+    text.includes("network connection lost") ||
+    /\btimeout\b/.test(text) ||
+    /\bfailed\s*\(5\d\d\)/.test(text) ||
+    /\b(502|503|504)\b/.test(text)
   );
 }
 
-async function withOptionalColdStartRetry<T>(
+export function containerRetryDelayMs(attempt: number, baseMs: number): number {
+  // attempt 0 → base, 1 → 2x, 2 → 4x
+  return Math.max(0, Math.round(baseMs * 2 ** Math.max(0, attempt)));
+}
+
+export function adaptiveToolTimeoutMs(baseTimeoutMs: number, attempt: number): number {
+  // Grow timeout on later attempts so a slow-but-alive container can finish.
+  return Math.round(baseTimeoutMs * (1 + attempt * 0.5));
+}
+
+/**
+ * Ping /health so forecast does not race a container that has a port open but
+ * is not serving yet.
+ */
+export async function ensureContainerReady(
+  fetchContainer: ContainerFetcher,
+  options?: { attempts?: number; waitMs?: number },
+): Promise<void> {
+  const attempts = options?.attempts ?? CONTAINER_RETRY_ATTEMPTS;
+  const waitMs = options?.waitMs ?? 400;
+  let lastError = "health check failed";
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    try {
+      const result = await withTimeout(
+        fetchContainer("/health", { method: "GET" }),
+        Math.max(1_500, waitMs * 4),
+      );
+      if (result.status > 0 && result.status < 500) {
+        const status =
+          result.json && typeof result.json === "object"
+            ? (result.json as { status?: unknown }).status
+            : null;
+        if (result.status < 400 && (status === "ok" || status == null || status === "healthy")) {
+          return;
+        }
+        lastError = `health check failed (${result.status})`;
+      } else {
+        lastError = `health check failed (${result.status})`;
+      }
+    } catch (error) {
+      lastError = error instanceof Error ? error.message : String(error);
+    }
+    if (attempt + 1 < attempts) {
+      await sleep(containerRetryDelayMs(attempt, waitMs));
+    }
+  }
+  throw new Error(`container is not running: ${lastError}`);
+}
+
+async function withContainerRetries<T>(
   toolName: AgentToolName,
   run: () => Promise<T>,
   timeoutMs: number,
-  waitMs = CONTAINER_COLD_START_WAIT_MS,
+  options?: { baseWaitMs?: number; attempts?: number },
 ): Promise<T> {
-  try {
-    return await withTimeout(run(), timeoutMs);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    if (!COLD_START_RETRY_TOOLS.has(toolName) || !isContainerColdStartError(message)) {
-      throw error;
+  const attempts = options?.attempts ?? (CONTAINER_RETRY_TOOLS.has(toolName) ? CONTAINER_RETRY_ATTEMPTS : 1);
+  const baseWaitMs = options?.baseWaitMs ?? CONTAINER_COLD_START_WAIT_MS;
+  let lastError: unknown = new Error("tool failed");
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    try {
+      return await withTimeout(run(), adaptiveToolTimeoutMs(timeoutMs, attempt));
+    } catch (error) {
+      lastError = error;
+      const message = error instanceof Error ? error.message : String(error);
+      const retryable = CONTAINER_RETRY_TOOLS.has(toolName) && isRetryableContainerError(message);
+      if (!retryable || attempt + 1 >= attempts) break;
+      await sleep(containerRetryDelayMs(attempt, baseWaitMs));
     }
-    await sleep(waitMs);
-    return withTimeout(run(), timeoutMs);
   }
+  throw lastError;
 }
 
 function compactForecast(payload: Record<string, unknown>): Record<string, unknown> {
@@ -299,43 +370,57 @@ function metricsSummary(report: Record<string, unknown>): Record<string, unknown
   };
 }
 
+function throwIfContainerStatusError(status: number, label: string): void {
+  if (status >= 500) {
+    throw new Error(`${label} failed (${status}).`);
+  }
+  if (status >= 400) {
+    throw new Error(`${label} unavailable (${status}).`);
+  }
+}
+
+async function fetchOptionalAccuracy(
+  ctx: ToolContext,
+  series: string,
+  horizon: number,
+): Promise<unknown> {
+  try {
+    const backtest = await withTimeout(
+      ctx.fetchContainer(`/evaluation/${encodeURIComponent(series)}/backtest`, {
+        method: "POST",
+        headers: { ...ctx.authHeaders, "Content-Type": "application/json" },
+        body: JSON.stringify({ horizon }),
+      }),
+      ACCURACY_FETCH_TIMEOUT_MS,
+    );
+    if (backtest.status < 400 && backtest.json && typeof backtest.json === "object") {
+      return metricsSummary(backtest.json as Record<string, unknown>);
+    }
+  } catch {
+    // Accuracy is optional — never fail the forecast for a slow backtest.
+  }
+  return null;
+}
+
 async function runForecast(ctx: ToolContext, args: Record<string, unknown>): Promise<ToolResult["data"]> {
   const series = stringArg(args, "series", "weather").toLowerCase() || "weather";
   const horizon = intArg(args, "horizon", 1, 1, 24);
+  await ensureContainerReady(ctx.fetchContainer, { attempts: 2, waitMs: 300 });
+
   if (series === "loaded") {
     const recent = await ctx.fetchContainer(`/series/recent?points=96`, {
       method: "GET",
       headers: ctx.authHeaders,
     });
-    if (recent.status >= 400) {
-      throw new Error(
-        typeof (recent.json as { detail?: unknown })?.detail === "string"
-          ? String((recent.json as { detail: string }).detail)
-          : "Loaded series forecast unavailable.",
-      );
-    }
+    throwIfContainerStatusError(recent.status, "Loaded series forecast");
     return { series: "loaded", horizon, ...compactForecast(recent.json as Record<string, unknown>) };
   }
   if (STARTER_IDS.has(series)) {
     const path = `/starters/${encodeURIComponent(series)}/forecast?points=120`;
     const result = await ctx.fetchContainer(path, { method: "GET", headers: ctx.authHeaders });
-    if (result.status >= 400) {
-      throw new Error(`Starter forecast failed (${result.status}).`);
-    }
+    throwIfContainerStatusError(result.status, "Starter forecast");
     const payload = compactForecast(result.json as Record<string, unknown>);
-    let accuracy: unknown = null;
-    try {
-      const backtest = await ctx.fetchContainer(`/evaluation/${encodeURIComponent(series)}/backtest`, {
-        method: "POST",
-        headers: { ...ctx.authHeaders, "Content-Type": "application/json" },
-        body: JSON.stringify({ horizon }),
-      });
-      if (backtest.status < 400 && backtest.json && typeof backtest.json === "object") {
-        accuracy = metricsSummary(backtest.json as Record<string, unknown>);
-      }
-    } catch {
-      accuracy = null;
-    }
+    const accuracy = await fetchOptionalAccuracy(ctx, series, horizon);
     return { series, horizon, ...payload, recent_accuracy: accuracy };
   }
   const predict = await ctx.fetchContainer(`/workspace/models/${encodeURIComponent(series)}/predict-latest`, {
@@ -343,15 +428,21 @@ async function runForecast(ctx: ToolContext, args: Record<string, unknown>): Pro
     headers: { ...ctx.authHeaders, "Content-Type": "application/json" },
     body: "{}",
   });
+  if (predict.status >= 500) {
+    throw new Error(`Workspace forecast failed (${predict.status}).`);
+  }
   if (predict.status >= 400) {
     throw new Error("Workspace forecast unavailable. Sign in or use a starter series id.");
   }
   let accuracy: unknown = null;
   try {
-    const metrics = await ctx.fetchContainer(`/workspace/models/${encodeURIComponent(series)}/metrics`, {
-      method: "GET",
-      headers: ctx.authHeaders,
-    });
+    const metrics = await withTimeout(
+      ctx.fetchContainer(`/workspace/models/${encodeURIComponent(series)}/metrics`, {
+        method: "GET",
+        headers: ctx.authHeaders,
+      }),
+      ACCURACY_FETCH_TIMEOUT_MS,
+    );
     if (metrics.status < 400) accuracy = metrics.json;
   } catch {
     accuracy = null;
@@ -421,12 +512,14 @@ async function runLiveData(ctx: ToolContext, args: Record<string, unknown>): Pro
 async function runEvaluation(ctx: ToolContext, args: Record<string, unknown>): Promise<ToolResult["data"]> {
   const modelId = stringArg(args, "model_id", "weather") || "weather";
   const horizon = intArg(args, "horizon", 1, 1, 24);
+  await ensureContainerReady(ctx.fetchContainer, { attempts: 2, waitMs: 300 });
   if (STARTER_IDS.has(modelId)) {
     const result = await ctx.fetchContainer(`/evaluation/${encodeURIComponent(modelId)}/backtest`, {
       method: "POST",
       headers: { ...ctx.authHeaders, "Content-Type": "application/json" },
       body: JSON.stringify({ horizon }),
     });
+    if (result.status >= 500) throw new Error(`Backtest failed (${result.status}).`);
     if (result.status >= 400) throw new Error("Backtest unavailable for that model.");
     return { model_id: modelId, ...metricsSummary(result.json as Record<string, unknown>) };
   }
@@ -492,12 +585,25 @@ async function runListSeries(ctx: ToolContext): Promise<ToolResult["data"]> {
   };
 }
 
+function defaultTimeoutForTool(toolName: AgentToolName, override?: number): number {
+  if (toolName === "forecast" || toolName === "get_evaluation_metrics") {
+    if (typeof override === "number" && Number.isFinite(override)) {
+      // Raise the loop's generic 8s default; keep intentionally short test overrides.
+      if (override >= TOOL_TIMEOUT_MS) return Math.max(override, FORECAST_TOOL_TIMEOUT_MS);
+      return override;
+    }
+    return FORECAST_TOOL_TIMEOUT_MS;
+  }
+  if (typeof override === "number" && Number.isFinite(override)) return override;
+  return TOOL_TIMEOUT_MS;
+}
+
 export async function dispatchTool(
   name: string,
   args: Record<string, unknown>,
   ctx: ToolContext,
-  timeoutMs = TOOL_TIMEOUT_MS,
-  options?: { coldStartWaitMs?: number },
+  timeoutMs?: number,
+  options?: { coldStartWaitMs?: number; retryAttempts?: number },
 ): Promise<ToolResult> {
   const started = Date.now();
   const toolName = AGENT_TOOL_NAMES.includes(name as AgentToolName) ? (name as AgentToolName) : null;
@@ -510,6 +616,7 @@ export async function dispatchTool(
       durationMs: Date.now() - started,
     };
   }
+  const effectiveTimeout = defaultTimeoutForTool(toolName, timeoutMs);
   const runOnce = (): Promise<unknown> => {
     switch (toolName) {
       case "forecast":
@@ -532,12 +639,10 @@ export async function dispatchTool(
   };
 
   try {
-    const data = await withOptionalColdStartRetry(
-      toolName,
-      runOnce,
-      timeoutMs,
-      options?.coldStartWaitMs ?? CONTAINER_COLD_START_WAIT_MS,
-    );
+    const data = await withContainerRetries(toolName, runOnce, effectiveTimeout, {
+      baseWaitMs: options?.coldStartWaitMs ?? CONTAINER_COLD_START_WAIT_MS,
+      attempts: options?.retryAttempts,
+    });
     return {
       ok: true,
       name: toolName,
@@ -547,6 +652,22 @@ export async function dispatchTool(
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
+    // Forecast: never leave the user with a raw failure — return a clear degraded answer.
+    if (toolName === "forecast") {
+      return {
+        ok: true,
+        name: toolName,
+        summary: "forecast_unavailable",
+        data: {
+          degraded: true,
+          text: FORECAST_UNAVAILABLE_TEXT,
+          series: stringArg(args, "series", "weather") || "weather",
+          horizon: intArg(args, "horizon", 1, 1, 24),
+          error: message.slice(0, 240),
+        },
+        durationMs: Date.now() - started,
+      };
+    }
     return {
       ok: false,
       name: toolName,

@@ -333,7 +333,13 @@ export function factualFallback(results: ToolResult[]): string {
   const lines: string[] = [];
   for (const result of results) {
     if (!result.ok) {
-      lines.push(`${result.name} failed: ${result.error || "unavailable"}`);
+      if (result.name === "forecast") {
+        lines.push(
+          "The forecast service is warming up or temporarily unavailable. Please try that forecast again in a moment.",
+        );
+      } else {
+        lines.push(`${result.name} failed: ${result.error || "unavailable"}`);
+      }
       continue;
     }
     if (result.data && typeof result.data === "object" && "text" in (result.data as object)) {
