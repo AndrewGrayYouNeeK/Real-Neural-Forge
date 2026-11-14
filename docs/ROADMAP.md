@@ -60,8 +60,9 @@ Flip matching “coming soon” tool-registry entries to live as each piece ship
 - Interactive multi-step simulator for rolling scenarios forward
 - **Diffusion forecaster experiment** (shared with Phase 4 synthetic path)
 - **JEPA-style (joint-embedding predictive) self-supervised pretraining
-  experiment for time series (selectable, not default)** — mask spans; context
-  encoder + EMA target encoder; predict target embeddings (not raw values);
-  then fine-tune the forecast head and compare via backtests
+  experiment for time series (in progress; selectable, not default)** — mask
+  spans; context encoder + EMA target encoder; predict target embeddings (not
+  raw values); then fine-tune the forecast head and compare via backtests
   (`config/jepa_experiment.yaml`, `model.name: jepa_forecaster`,
-  `training.jepa_pretrain_epochs`) before any production swap
+  `training.jepa_pretrain_epochs`) before any production swap; landing registry
+  stays **In progress**

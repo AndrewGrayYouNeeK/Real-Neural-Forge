@@ -158,15 +158,6 @@
       view: "coming-soon",
     },
     {
-      id: "jepa",
-      name: "JEPA pretrain",
-      icon: "⊕",
-      description:
-        "Experimental SSL: mask spans, predict embeddings, then fine-tune (not default).",
-      status: "coming-soon",
-      view: "coming-soon",
-    },
-    {
       id: "simulator",
       name: "Simulator",
       icon: "⟳",
