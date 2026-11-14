@@ -28,6 +28,7 @@ from src.forecasting.intervals import calibrate_intervals, pinball_loss
 from src.forecasting.output import horizon_targets, training_targets
 from src.forecasting.spec import ForecastSpec, forecast_spec_from_config
 from src.inference.predictor import Predictor
+from src.models.diffusion import DiffusionForecaster
 from src.models.lstm import LSTMForecaster
 from src.models.registry import build_model
 from src.storage.experiments import ExperimentStore, db_path_from_config
@@ -417,12 +418,15 @@ def _fit_model(
             batch_x = batch_x.to(device)
             batch_y = batch_y.to(device)
             optimizer.zero_grad()
-            predicted = model(batch_x)
-            loss = (
-                pinball_loss(predicted, batch_y, quantiles)
-                if quantiles
-                else mse_loss(predicted, batch_y)
-            )
+            if isinstance(model, DiffusionForecaster):
+                loss = model.diffusion_loss(batch_x, batch_y)
+            else:
+                predicted = model(batch_x)
+                loss = (
+                    pinball_loss(predicted, batch_y, quantiles)
+                    if quantiles
+                    else mse_loss(predicted, batch_y)
+                )
             loss.backward()
             optimizer.step()
     model.eval()
