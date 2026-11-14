@@ -29,6 +29,7 @@ from src.forecasting.output import horizon_targets, training_targets
 from src.forecasting.spec import ForecastSpec, forecast_spec_from_config
 from src.inference.predictor import Predictor
 from src.models.diffusion import DiffusionForecaster
+from src.models.jepa import TimeSeriesJEPA
 from src.models.lstm import LSTMForecaster
 from src.models.registry import build_model
 from src.storage.experiments import ExperimentStore, db_path_from_config
@@ -170,6 +171,9 @@ def compare_models(
     seed = training_cfg.get("seed")
     batch_size = int(training_cfg.get("batch_size", 32))
     learning_rate = float(training_cfg.get("learning_rate", 1e-3))
+    jepa_pretrain_epochs = int(training_cfg.get("jepa_pretrain_epochs", 0) or 0)
+    if jepa_pretrain_epochs < 0:
+        raise ValueError("training.jepa_pretrain_epochs must be >= 0")
     model_name = str(cfg.get("model", {}).get("name", "time_series_transformer"))
 
     if model_name != "lstm":
@@ -226,6 +230,7 @@ def compare_models(
             seed=int(seed) if seed is not None else None,
             normalize=normalize,
             device=device,
+            jepa_pretrain_epochs=jepa_pretrain_epochs,
         )
     )
 
@@ -343,6 +348,7 @@ def _score_neural(
     seed: int | None,
     normalize: bool,
     device: torch.device,
+    jepa_pretrain_epochs: int = 0,
 ) -> ComparisonRow:
     fit_targets = training_targets(y_train, spec)
     trained, scaler = _fit_model(
@@ -356,6 +362,7 @@ def _score_neural(
         quantiles=spec.quantiles,
         normalize=normalize,
         device=device,
+        jepa_pretrain_epochs=jepa_pretrain_epochs,
     )
     predictor = Predictor(trained, device=device, scaler=scaler, spec=spec)
     batch = predictor.forecast(x_val, horizon=spec.horizon)
@@ -398,6 +405,7 @@ def _fit_model(
     quantiles: tuple[float, ...],
     normalize: bool,
     device: torch.device,
+    jepa_pretrain_epochs: int = 0,
 ) -> tuple[nn.Module, StandardScaler | None]:
     if seed is not None:
         torch.manual_seed(seed)
@@ -412,6 +420,16 @@ def _fit_model(
         batch_size=max(1, min(batch_size, len(inputs))),
         shuffle=True,
     )
+    if isinstance(model, TimeSeriesJEPA) and jepa_pretrain_epochs > 0:
+        for _ in range(jepa_pretrain_epochs):
+            model.train()
+            for batch_x, _batch_y in loader:
+                batch_x = batch_x.to(device)
+                optimizer.zero_grad()
+                loss = model.jepa_loss(batch_x)
+                loss.backward()
+                optimizer.step()
+                model.update_ema()
     for _ in range(epochs):
         model.train()
         for batch_x, batch_y in loader:
@@ -429,6 +447,8 @@ def _fit_model(
                 )
             loss.backward()
             optimizer.step()
+            if isinstance(model, TimeSeriesJEPA):
+                model.update_ema()
     model.eval()
     return model, scaler
 

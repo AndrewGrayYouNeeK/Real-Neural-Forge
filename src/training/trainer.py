@@ -31,6 +31,7 @@ from src.forecasting.output import horizon_targets, training_targets
 from src.forecasting.spec import ForecastSpec, forecast_spec_from_config
 from src.inference.predictor import Predictor
 from src.models.diffusion import DiffusionForecaster
+from src.models.jepa import TimeSeriesJEPA
 from src.models.registry import build_model
 from src.storage.experiments import ExperimentStore, db_path_from_config
 from src.utils.checkpoint import save_checkpoint
@@ -348,6 +349,41 @@ class TimeSeriesTrainer:
         )
 
         try:
+            pretrain_epochs = int(t_cfg.get("jepa_pretrain_epochs", 0) or 0)
+            if pretrain_epochs < 0:
+                raise ValueError("training.jepa_pretrain_epochs must be >= 0")
+            if isinstance(model, TimeSeriesJEPA) and pretrain_epochs > 0:
+                logger.info(
+                    "JEPA pretrain for %d epoch(s) (embedding loss, offline).",
+                    pretrain_epochs,
+                )
+                for epoch in range(1, pretrain_epochs + 1):
+                    model.train()
+                    running_loss = 0.0
+                    for batch_x, _batch_y in loader:
+                        batch_x = batch_x.to(device)
+                        optimizer.zero_grad()
+                        loss = model.jepa_loss(batch_x)
+                        loss.backward()
+                        if max_grad_norm > 0:
+                            torch.nn.utils.clip_grad_norm_(
+                                model.parameters(), max_grad_norm
+                            )
+                        optimizer.step()
+                        model.update_ema()
+                        running_loss += loss.item() * batch_x.size(0)
+                    epoch_loss = running_loss / n_train
+                    self.store.log_metric(
+                        experiment_id, "jepa_pretrain_loss", epoch_loss, epoch
+                    )
+                    if epoch % log_interval == 0 or epoch == 1:
+                        logger.info(
+                            "JEPA pretrain %d/%d  loss=%.6f",
+                            epoch,
+                            pretrain_epochs,
+                            epoch_loss,
+                        )
+
             for epoch in range(1, t_cfg["epochs"] + 1):
                 model.train()
                 running_loss = 0.0
@@ -367,6 +403,9 @@ class TimeSeriesTrainer:
                             model.parameters(), max_grad_norm
                         )
                     optimizer.step()
+                    if isinstance(model, TimeSeriesJEPA):
+                        # Keep the EMA teacher aligned during supervised fine-tune.
+                        model.update_ema()
                     running_loss += loss.item() * batch_x.size(0)
 
                 epoch_loss = running_loss / n_train
