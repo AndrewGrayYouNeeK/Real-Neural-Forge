@@ -27,6 +27,7 @@ export const AGENT_TOOL_NAMES = [
   "delete_user_series",
   "retrain_user_series",
   "analyze_pca",
+  "analyze_regimes",
 ] as const;
 
 export type AgentToolName = (typeof AGENT_TOOL_NAMES)[number];
@@ -39,7 +40,7 @@ export type ParsedToolCall = {
 
 const TOOL_NAME_SET = new Set<string>(AGENT_TOOL_NAMES);
 const TOOL_NAME_HINT =
-  /\b(forecast|fetch_live_data|get_evaluation_metrics|compare_horizons|explain_prediction|list_user_series|remember_fact|recall_memory|forget_memory|save_scenario|list_scenarios|run_scenario|rename_user_series|delete_user_series|retrain_user_series|analyze_pca)\b/;
+  /\b(forecast|fetch_live_data|get_evaluation_metrics|compare_horizons|explain_prediction|list_user_series|remember_fact|recall_memory|forget_memory|save_scenario|list_scenarios|run_scenario|rename_user_series|delete_user_series|retrain_user_series|analyze_pca|analyze_regimes)\b/;
 
 function asToolName(value: unknown): AgentToolName | null {
   if (typeof value !== "string") return null;
@@ -358,7 +359,7 @@ export function sanitizeAgentAnswer(text: string): string {
   value = value.replace(/^\s*TOOL_CALL\s*:\s*\S+\s*\{[\s\S]*\}\s*$/gim, "").trim();
   // Strip "fetch_live_data failed: …" style leaks if the model echoes tool notes.
   value = value.replace(
-    /\b(?:fetch_live_data|get_evaluation_metrics|compare_horizons|explain_prediction|list_user_series|remember_fact|recall_memory|forget_memory|analyze_pca)\s+failed\s*:\s*[^\n]*/gi,
+    /\b(?:fetch_live_data|get_evaluation_metrics|compare_horizons|explain_prediction|list_user_series|remember_fact|recall_memory|forget_memory|analyze_pca|analyze_regimes)\s+failed\s*:\s*[^\n]*/gi,
     "",
   );
   value = value.replace(/\bforecast\s+failed\s*:\s*[^\n]*/gi, "");
