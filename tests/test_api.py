@@ -862,6 +862,9 @@ class TestForecastDashboard:
         assert "What's free, and what uses credits" in html
         assert "Payments are not live." in html
         assert "will not charge a real" in html
+        assert 'id="tools-roadmap"' in html
+        assert "Tools &amp; Roadmap" in html or "Tools & Roadmap" in html
+        assert 'id="tools-roadmap-list"' in html
         assert "Try a sample model" in html
         assert "Try the Central Park temperature sample" in html
         assert "Try the Bitcoin sample" in html
@@ -896,10 +899,27 @@ class TestForecastDashboard:
             assert "textContent" in source or "TOOL_REGISTRY" in source
         tools_js = client.get("/assets/tools.js").text
         assert "TOOL_REGISTRY" in tools_js
+        assert "ROADMAP" in tools_js
         assert "Train on my CSV" in tools_js
         assert 'id: "memory"' in tools_js
         assert 'view: "memory"' in tools_js
         assert "Coming soon" in tools_js or "coming-soon" in tools_js
+        assert "in-progress" in tools_js
+        assert "Already live" in tools_js
+        assert "Phase 2" in tools_js
+        assert "Phase 3" in tools_js
+        assert "Phase 4" in tools_js
+        assert "Phase 5" in tools_js
+        assert 'id: "phase-2"' in tools_js
+        phase2 = tools_js.split('id: "phase-2"', 1)[1][:280]
+        assert 'status: "live"' in phase2
+        assert "Saved chats in the sidebar" in tools_js
+        assert "Saved scenarios" in tools_js
+        assert "Manage your own data series" in tools_js
+        assert "PCA / eigenvectors" in tools_js
+        assert "K-Means clustering" in tools_js
+        assert "Diffusion forecaster" in tools_js
+        assert "JEPA pretraining" in tools_js
         assert "lottery" not in tools_js.lower()
         assert 'id="view-memory"' in html
         assert 'id="memory-list"' in html
@@ -907,6 +927,8 @@ class TestForecastDashboard:
         assert 'id="scenario-list"' in html
         assert 'id="scenario-save-form"' in html
         app_js = client.get("/assets/app.js").text
+        assert "function renderRoadmap" in app_js
+        assert "renderRoadmap()" in app_js
         assert "/agent/memory" in app_js
         assert "/agent/chats" in app_js
         assert "/agent/scenarios" in app_js

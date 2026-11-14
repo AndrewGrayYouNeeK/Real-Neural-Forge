@@ -2319,8 +2319,15 @@ let remoteChatThreads = null;
 const toolsApi =
   (typeof window !== "undefined" && window.NeuralForgeTools) || {
     TOOL_REGISTRY: [],
+    ROADMAP: [],
     byId() {
       return null;
+    },
+    statusLabel(status) {
+      if (status === "live") return "Live";
+      if (status === "in-progress") return "In progress";
+      if (status === "coming-soon") return "Coming soon";
+      return status || "";
     },
   };
 
@@ -2508,7 +2515,7 @@ function activateTool(tool) {
     if (talkBtn && !talk.active) talkBtn.focus();
     return;
   }
-  if (tool.status === "coming-soon") {
+  if (tool.status === "coming-soon" || tool.status === "in-progress") {
     showToolView("coming-soon", tool);
     return;
   }
@@ -2541,6 +2548,16 @@ async function saveScenarioFromForm(event) {
   }
 }
 
+function toolStatusBadgeText(status) {
+  if (typeof toolsApi.statusLabel === "function") {
+    return toolsApi.statusLabel(status);
+  }
+  if (status === "live") return "Live";
+  if (status === "in-progress") return "In progress";
+  if (status === "coming-soon") return "Coming soon";
+  return status || "";
+}
+
 function renderToolNav() {
   const nav = document.getElementById("tool-nav");
   if (!nav || !toolsApi.TOOL_REGISTRY) return;
@@ -2564,10 +2581,10 @@ function renderToolNav() {
     name.className = "tool-nav-name";
     name.textContent = tool.name;
     meta.append(name);
-    if (tool.status === "coming-soon") {
+    if (tool.status === "coming-soon" || tool.status === "in-progress") {
       const status = document.createElement("span");
       status.className = "tool-nav-status";
-      status.textContent = "Coming soon";
+      status.textContent = toolStatusBadgeText(tool.status);
       meta.append(status);
     }
     button.append(icon, meta);
@@ -2589,10 +2606,11 @@ function renderToolsMenu() {
     title.textContent = `${tool.icon || ""} ${tool.name}`.trim();
     const desc = document.createElement("span");
     desc.className = "muted";
-    desc.textContent =
-      tool.status === "coming-soon"
-        ? `Coming soon — ${tool.description || ""}`
-        : tool.description || "";
+    const pending =
+      tool.status === "coming-soon" || tool.status === "in-progress";
+    desc.textContent = pending
+      ? `${toolStatusBadgeText(tool.status)} — ${tool.description || ""}`
+      : tool.description || "";
     item.append(title, desc);
     item.addEventListener("click", () => {
       menu.hidden = true;
@@ -2601,6 +2619,60 @@ function renderToolsMenu() {
       activateTool(tool);
     });
     menu.append(item);
+  }
+}
+
+function renderRoadmap() {
+  const root = document.getElementById("tools-roadmap-list");
+  const phases = toolsApi.ROADMAP;
+  if (!root || !Array.isArray(phases)) return;
+  root.replaceChildren();
+  for (const phase of phases) {
+    const card = document.createElement("article");
+    card.className = "roadmap-phase";
+    card.dataset.status = phase.status || "coming-soon";
+
+    const head = document.createElement("header");
+    head.className = "roadmap-phase-head";
+    const title = document.createElement("h3");
+    title.className = "roadmap-phase-title";
+    title.textContent = phase.title || "";
+    const badge = document.createElement("span");
+    badge.className = "roadmap-status";
+    badge.dataset.status = phase.status || "coming-soon";
+    badge.textContent = toolStatusBadgeText(phase.status);
+    head.append(title, badge);
+
+    const list = document.createElement("ul");
+    list.className = "roadmap-item-list";
+    for (const item of phase.items || []) {
+      const li = document.createElement("li");
+      li.className = "roadmap-item";
+      const name = document.createElement("strong");
+      name.textContent = item.name || "";
+      const desc = document.createElement("span");
+      desc.textContent = item.description || "";
+      li.append(name, desc);
+      if (item.toolId) {
+        const tool = toolsApi.byId(item.toolId);
+        if (tool) {
+          li.classList.add("roadmap-item-link");
+          li.tabIndex = 0;
+          li.setAttribute("role", "link");
+          li.addEventListener("click", () => activateTool(tool));
+          li.addEventListener("keydown", (event) => {
+            if (event.key === "Enter" || event.key === " ") {
+              event.preventDefault();
+              activateTool(tool);
+            }
+          });
+        }
+      }
+      list.append(li);
+    }
+
+    card.append(head, list);
+    root.append(card);
   }
 }
 
@@ -2762,6 +2834,7 @@ function resizeComposer() {
 setChatMode(chatMode());
 renderToolNav();
 renderToolsMenu();
+renderRoadmap();
 renderChatHistory();
 void refreshRemoteChatHistory();
 showToolView("chat");

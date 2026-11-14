@@ -462,7 +462,8 @@ body.has-chat #suggestion-chips {
 }
 
 .capabilities,
-.pricing {
+.pricing,
+.tools-roadmap {
   margin: 12px auto 4px;
   max-width: 720px;
   padding: 14px 16px;
@@ -473,10 +474,112 @@ body.has-chat #suggestion-chips {
 }
 
 .capabilities h2,
-.pricing h2 {
+.pricing h2,
+.tools-roadmap h2 {
   margin: 0 0 10px;
   font-size: 1rem;
   text-align: center;
+}
+
+.tools-roadmap-lead {
+  margin: 0 auto 14px;
+  max-width: 520px;
+  color: var(--muted);
+  font-size: 0.9rem;
+  text-align: center;
+}
+
+.tools-roadmap-list {
+  display: grid;
+  gap: 10px;
+}
+
+.roadmap-phase {
+  padding: 12px 12px 10px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: rgba(12, 14, 18, 0.45);
+}
+
+.roadmap-phase-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.roadmap-phase-title {
+  margin: 0;
+  font-size: 0.92rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.roadmap-status {
+  flex: 0 0 auto;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--border-strong);
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--muted);
+  background: transparent;
+}
+
+.roadmap-status[data-status="live"] {
+  color: #b7d4b0;
+  border-color: rgba(183, 212, 176, 0.35);
+  background: rgba(183, 212, 176, 0.08);
+}
+
+.roadmap-status[data-status="in-progress"] {
+  color: var(--accent-2);
+  border-color: rgba(196, 181, 160, 0.4);
+  background: rgba(196, 181, 160, 0.1);
+}
+
+.roadmap-status[data-status="coming-soon"] {
+  color: var(--accent-3);
+  border-color: rgba(168, 180, 200, 0.35);
+  background: rgba(168, 180, 200, 0.08);
+}
+
+.roadmap-item-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 12px;
+}
+
+.roadmap-item {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+
+.roadmap-item strong {
+  display: block;
+  margin-bottom: 1px;
+  color: var(--text);
+  font-weight: 500;
+}
+
+.roadmap-item-link {
+  cursor: pointer;
+  border-radius: 8px;
+  padding: 4px 6px;
+  margin: -4px -6px;
+}
+
+.roadmap-item-link:hover,
+.roadmap-item-link:focus-visible {
+  background: var(--accent-soft);
+  outline: none;
 }
 
 .capability-list {
@@ -507,8 +610,13 @@ body.has-chat #suggestion-chips {
 }
 
 @media (max-width: 720px) {
-  .capability-list {
+  .capability-list,
+  .roadmap-item-list {
     grid-template-columns: 1fr;
+  }
+
+  .roadmap-phase-head {
+    align-items: flex-start;
   }
 }
 
