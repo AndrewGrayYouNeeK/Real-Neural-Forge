@@ -35,11 +35,11 @@ Flip matching “coming soon” tool-registry entries to live as each piece ship
   co-moving groups; optional `data.pca_reduce` / `data.pca_components` before
   training; API + `analyze_pca` agent tool; landing registry stays **In progress**.
   Feeds the later **Why this forecast** narratives.
-- **K-Means regimes / anomalies (shipped in this track)** — cluster windows or
-  multi-column rows into `k≤8` regimes (auto-pick via silhouette); plain labels
-  (e.g. calm/volatile, low/high); flag points far from centroids. API +
-  `analyze_regimes` agent tool; live “Regimes / patterns” tool. Anomaly flags
-  feed later **Alerts**.
+- **K-Means regimes / anomalies (in progress in this track)** — cluster windows
+  or multi-column rows into `k≤8` regimes (auto-pick via silhouette); plain
+  labels (e.g. calm/volatile, low/high); flag points far from centroids. API +
+  `analyze_regimes` agent tool; landing registry stays **In progress**. Anomaly
+  flags feed later **Alerts**.
 - Why-this-forecast narratives grounded in model/features (still coming soon)
 - Shareable accuracy / forecast reports
 - Threshold alerts on series (fed by K-Means anomaly flags)
