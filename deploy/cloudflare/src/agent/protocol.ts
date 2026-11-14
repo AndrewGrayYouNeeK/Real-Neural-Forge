@@ -346,7 +346,13 @@ export function sanitizeAgentAnswer(text: string): string {
   const kept = lines.filter((line) => !TOOL_JSON_LINE.test(line.trim()));
   value = kept.join("\n").replace(/\n{3,}/g, "\n\n").trim();
   value = value.replace(/^\s*TOOL_CALL\s*:\s*\S+\s*\{[\s\S]*\}\s*$/gim, "").trim();
-  return stripLeadingPlanning(value);
+  // Strip "fetch_live_data failed: …" style leaks if the model echoes tool notes.
+  value = value.replace(
+    /\b(?:fetch_live_data|get_evaluation_metrics|compare_horizons|explain_prediction|list_user_series)\s+failed\s*:\s*[^\n]*/gi,
+    "",
+  );
+  value = value.replace(/\bforecast\s+failed\s*:\s*[^\n]*/gi, "");
+  return stripLeadingPlanning(value.replace(/\s{2,}/g, " ").trim());
 }
 
 /**

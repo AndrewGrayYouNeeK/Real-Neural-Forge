@@ -20,6 +20,8 @@ describe("live data kind routing", () => {
     expect(isWeatherAsk("what's the weather in New York right now")).toBe(true);
     expect(isWeatherAsk("temperature in Dallas")).toBe(true);
     expect(isWeatherAsk("will it rain tomorrow")).toBe(true);
+    expect(isWeatherAsk("Forecast tomorrow's high and low in New York")).toBe(true);
+    expect(isWeatherAsk("forecast the high for Chicago tomorrow")).toBe(true);
     expect(isWeatherAsk("what's bitcoin at right now")).toBe(false);
     expect(isWeatherAsk("AAPL price")).toBe(false);
   });

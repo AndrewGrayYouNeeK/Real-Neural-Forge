@@ -24,9 +24,12 @@ import {
   extractNativeToolCalls,
   tryParseToolJson,
 } from "../src/agent/protocol";
+import { factualFallback, friendlyToolFailure } from "../src/agent/loop";
 import {
+  CONTAINER_TOOL_BUDGET_MS,
   FORECAST_TOOL_TIMEOUT_MS,
   FORECAST_UNAVAILABLE_TEXT,
+  LIVE_DATA_UNAVAILABLE_TEXT,
   MAX_TOOL_CALLS,
   adaptiveToolTimeoutMs,
   containerRetryDelayMs,
@@ -219,6 +222,11 @@ describe("agent protocol", () => {
     expect(cleaned).toBe("High is 72°F.");
     expect(cleaned).not.toContain("tool");
     expect(cleaned.toLowerCase()).not.toContain("need to respond");
+    expect(
+      sanitizeAgentAnswer(
+        "fetch_live_data failed: That does not look like a weather question. Ask about weather.",
+      ),
+    ).not.toMatch(/fetch_live_data|does not look like/i);
   });
 
   it("detects degenerate repeated-character answers", () => {
@@ -309,24 +317,19 @@ describe("agent tool dispatch", () => {
   });
 
   it("retries forecast with backoff after container cold-start / 5xx", async () => {
-    expect(FORECAST_TOOL_TIMEOUT_MS).toBeGreaterThanOrEqual(20_000);
+    expect(FORECAST_TOOL_TIMEOUT_MS).toBe(12_000);
+    expect(CONTAINER_TOOL_BUDGET_MS).toBeLessThanOrEqual(25_000);
     expect(isRetryableContainerError("Starter forecast failed (503).")).toBe(true);
     expect(containerRetryDelayMs(0, 100)).toBe(100);
     expect(containerRetryDelayMs(1, 100)).toBe(200);
-    expect(adaptiveToolTimeoutMs(20_000, 1)).toBe(30_000);
+    expect(adaptiveToolTimeoutMs(12_000, 1)).toBe(15_000);
 
     let forecastAttempts = 0;
     const fetchContainer = vi.fn(async (path: string) => {
-      if (path === "/health" || path.startsWith("/health")) {
-        return { status: 200, json: { status: "ok" } };
-      }
       if (path.includes("/starters/weather/forecast")) {
         forecastAttempts += 1;
         if (forecastAttempts === 1) {
           throw new Error("The container is not running.");
-        }
-        if (forecastAttempts === 2) {
-          return { status: 503, json: { detail: "starting" } };
         }
         return {
           status: 200,
@@ -351,9 +354,25 @@ describe("agent tool dispatch", () => {
       { coldStartWaitMs: 0 },
     );
     expect(result.ok).toBe(true);
-    expect(forecastAttempts).toBe(3);
+    expect(forecastAttempts).toBe(2);
     expect((result.data as { forecast?: Array<{ value?: number }> }).forecast?.[0]?.value).toBe(15.15);
-    expect(fetchContainer.mock.calls.some((call) => String(call[0]).includes("/health"))).toBe(true);
+  });
+
+  it("treats high/low place forecasts as weather and never leaks tool errors", async () => {
+    const result = await dispatchTool(
+      "fetch_live_data",
+      { kind: "weather", query: "New York" },
+      toolContext({ question: "Forecast tomorrow's high and low in New York" }),
+    );
+    expect(result.ok).toBe(true);
+    const data = result.data as { kind?: string; text?: string };
+    expect(data.kind).toBe("weather");
+    expect(data.text?.toLowerCase()).not.toContain("fetch_live_data");
+    expect(data.text?.toLowerCase()).not.toContain("does not look like");
+    expect(friendlyToolFailure("fetch_live_data")).toBe(LIVE_DATA_UNAVAILABLE_TEXT);
+    expect(factualFallback([{ ok: false, name: "fetch_live_data", summary: "x", error: "boom", durationMs: 1 }])).not.toContain(
+      "fetch_live_data",
+    );
   });
 
   it("returns a clear degraded forecast answer after retries are exhausted", async () => {
@@ -472,23 +491,25 @@ describe("agent tool dispatch", () => {
     expect((result.data as { signed_in?: boolean }).signed_in).toBe(false);
   });
 
-  it("times out slow tools after container retries are exhausted", async () => {
+  it("returns a clear degraded eval answer after container retries are exhausted", async () => {
     const result = await dispatchTool(
       "get_evaluation_metrics",
       { model_id: "weather" },
       toolContext({
-        fetchContainer: async (path: string) => {
-          if (path.includes("/health")) return { status: 200, json: { status: "ok" } };
-          return new Promise((resolve) => {
+        fetchContainer: async () =>
+          new Promise((resolve) => {
             setTimeout(() => resolve({ status: 200, json: {} }), 40);
-          });
-        },
+          }),
       }),
       5,
       { coldStartWaitMs: 0, retryAttempts: 2 },
     );
-    expect(result.ok).toBe(false);
-    expect(result.error).toMatch(/timeout/i);
+    expect(result.ok).toBe(true);
+    expect(result.summary).toBe("evaluation_unavailable");
+    const data = result.data as { degraded?: boolean; text?: string };
+    expect(data.degraded).toBe(true);
+    expect(data.text?.toLowerCase()).toContain("accuracy");
+    expect(data.text?.toLowerCase()).not.toContain("get_evaluation_metrics");
   });
 });
 
