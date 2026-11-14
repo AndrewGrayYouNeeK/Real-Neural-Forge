@@ -11,6 +11,7 @@ import torch.nn as nn
 from src.forecasting.spec import forecast_spec_from_config
 from src.models.diffusion import DiffusionForecaster
 from src.models.ensemble import SeedEnsemble
+from src.models.jepa import TimeSeriesJEPA
 from src.models.lstm import LSTMForecaster
 from src.models.transformer import TimeSeriesTransformer
 
@@ -18,6 +19,7 @@ _REGISTRY: dict[str, Callable[..., nn.Module]] = {
     "time_series_transformer": TimeSeriesTransformer,
     "lstm": LSTMForecaster,
     "diffusion_forecaster": DiffusionForecaster,
+    "jepa_forecaster": TimeSeriesJEPA,
 }
 
 _MODEL_KEYS = (
@@ -39,6 +41,10 @@ _MODEL_KEYS = (
     "diffusion_steps",
     "sample_steps",
     "n_paths",
+    "ema_momentum",
+    "mask_ratio",
+    "mask_spans",
+    "predictor_hidden",
 )
 
 

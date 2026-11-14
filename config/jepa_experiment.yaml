@@ -1,0 +1,56 @@
+# Experimental JEPA-style SSL pretrain + supervised fine-tune (CPU-small).
+# Not the default — compare via python -m src.compare against the transformer.
+dataset:
+  id: jepa-experiment
+  enabled: false
+
+retrain:
+  enabled: false
+  metric: mae
+
+model:
+  name: jepa_forecaster
+  input_dim: 1
+  output_dim: 1
+  d_model: 32
+  nhead: 4
+  num_encoder_layers: 1
+  dim_feedforward: 64
+  dropout: 0.0
+  max_seq_len: 128
+  ema_momentum: 0.996
+  mask_ratio: 0.25
+  mask_spans: 1
+  predictor_hidden: 64
+
+data:
+  source: synthetic
+  n_samples: 256
+  seq_len: 32
+  noise: 0.05
+  val_split: 0.2
+  split_seed: 0
+  seed: 0
+
+training:
+  experiment_name: jepa-experiment
+  batch_size: 32
+  learning_rate: 0.001
+  jepa_pretrain_epochs: 2
+  epochs: 4
+  device: cpu
+  checkpoint_dir: checkpoints/jepa
+  log_interval: 1
+  seed: 0
+  patience: 0
+
+forecast:
+  horizon: 1
+  strategy: direct
+
+inference:
+  device: cpu
+  checkpoint_path: checkpoints/jepa/best_model.pt
+
+api:
+  training_enabled: true
