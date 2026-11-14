@@ -8,16 +8,21 @@ import type { D1Like } from "../live/ai";
 
 export const FORECAST_CACHE_TTL_SECONDS = 60 * 60;
 export const EVAL_CACHE_TTL_SECONDS = 6 * 60 * 60;
+/**
+ * Bump whenever agent tool cache payload shape/units change (e.g. weather °C → °F).
+ * Invalidates both forecast and eval Cache API entries in one place.
+ */
+export const AGENT_TOOL_CACHE_VERSION = 2;
 const CACHE_ORIGIN = "https://agent-tool-cache.forge.invalid/";
 
 export type WaitUntil = (promise: Promise<unknown>) => void;
 
 export function forecastCacheKey(series: string, horizon: number, points = 120): string {
-  return `forecast:v1:${series}:h${horizon}:p${points}`;
+  return `forecast:v${AGENT_TOOL_CACHE_VERSION}:${series}:h${horizon}:p${points}`;
 }
 
 export function evalCacheKey(modelId: string, horizon: number): string {
-  return `eval:v1:${modelId}:h${horizon}`;
+  return `eval:v${AGENT_TOOL_CACHE_VERSION}:${modelId}:h${horizon}`;
 }
 
 function cacheRequest(key: string): Request {
