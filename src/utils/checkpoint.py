@@ -18,6 +18,7 @@ def save_checkpoint(
     path: str | Path,
     scaler: dict[str, Any] | None = None,
     forecast: dict[str, Any] | None = None,
+    pca: dict[str, Any] | None = None,
 ) -> None:
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -32,4 +33,6 @@ def save_checkpoint(
     # Omit the key on legacy saves so older readers see the same payload.
     if forecast is not None:
         payload["forecast"] = forecast
+    if pca is not None:
+        payload["pca"] = pca
     torch.save(payload, path)
