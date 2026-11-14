@@ -75,7 +75,6 @@ class DatasetPcaBody(BaseModel):
     n_components: int | None = Field(default=None, ge=1)
 
 
-
 def _raise(exc: WorkspaceError) -> NoReturn:
     headers = {"WWW-Authenticate": "Bearer"} if exc.status == 401 else None
     raise HTTPException(
