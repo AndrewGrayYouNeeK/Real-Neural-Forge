@@ -28,7 +28,12 @@ Flip matching “coming soon” tool-registry entries to live as each piece ship
 
 ## Phase 3 — Explainability & trust
 
-- Why-this-forecast narratives grounded in model/features
+- **PCA column analysis (shipped in this track)** — eigenvectors of the
+  covariance matrix for multi-column CSV uploads; explained variance and
+  co-moving groups; optional `data.pca_reduce` / `data.pca_components` before
+  training; API + `analyze_pca` agent tool; live “Column analysis (PCA)” tool.
+  Feeds the later **Why this forecast** narratives.
+- Why-this-forecast narratives grounded in model/features (still coming soon)
 - Shareable accuracy / forecast reports
 - Threshold alerts on series
 
@@ -36,10 +41,15 @@ Flip matching “coming soon” tool-registry entries to live as each piece ship
 
 - Synthetic training series with known patterns
 - What-if shocks on a forecast path
+- **Diffusion forecaster experiment** (also tracked under Phase 5) — small 1D
+  denoising diffusion conditioned on recent history → p10/p50/p90 bands; train
+  offline/CPU-small; selectable vs transformer via backtests; not default unless
+  it wins
 
 ## Phase 5 — World model / simulator
 
 - Interactive multi-step simulator for rolling scenarios forward
+- **Diffusion forecaster experiment** (shared with Phase 4 synthetic path)
 - **JEPA-style (joint-embedding predictive) self-supervised pretraining
   experiment for time series** — learn latent representations by predicting
   embeddings of future (or masked) windows rather than raw values; evaluate

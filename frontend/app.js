@@ -15,6 +15,7 @@ const state = {
   csvTrainJobId: null,
   voiceResting: false,
   toldVoiceResting: false,
+  lastPca: null,
 };
 
 const VOICE_RESTING_MESSAGE = "Voice is resting for today, text still works.";
@@ -994,6 +995,10 @@ async function handleCsvTrainFile(file) {
       );
       return;
     }
+    if (data.pca) {
+      state.lastPca = data.pca;
+      renderPcaReport(data.pca);
+    }
     if (columns.length === 1) {
       addReply(
         `I found a numeric column named “${columns[0].name}” (${columns[0].numeric_rows} rows). I’ll train a small capped model on it now.`
@@ -1003,8 +1008,12 @@ async function handleCsvTrainFile(file) {
     }
     const suggested = data.suggested_target;
     const names = columns.map((column) => column.name).join(", ");
+    const pcaLine =
+      data.pca && data.pca.summary
+        ? ` Column check (PCA): ${data.pca.summary}`
+        : "";
     const message = addReply(
-      `I found these numeric columns: ${names}. Which should I train on?`
+      `I found these numeric columns: ${names}.${pcaLine} Which should I train on?`
     );
     attachReplyActions(
       message,
@@ -2259,6 +2268,66 @@ function closeMobileSidebar() {
   if (backdrop) backdrop.hidden = true;
 }
 
+function renderPcaReport(report) {
+  const empty = document.getElementById("pca-empty");
+  const panel = document.getElementById("pca-report");
+  const summary = document.getElementById("pca-summary");
+  const body = document.getElementById("pca-variance-body");
+  const groups = document.getElementById("pca-groups");
+  if (!empty || !panel || !summary || !body || !groups) return;
+  if (!report || !Array.isArray(report.explained_variance_ratio)) {
+    empty.hidden = false;
+    panel.hidden = true;
+    return;
+  }
+  empty.hidden = true;
+  panel.hidden = false;
+  summary.textContent = report.summary || "PCA report ready.";
+  body.replaceChildren();
+  const ratios = report.explained_variance_ratio;
+  const cumulative = Array.isArray(report.cumulative_variance_ratio)
+    ? report.cumulative_variance_ratio
+    : ratios.map((_, index) =>
+        ratios.slice(0, index + 1).reduce((sum, value) => sum + value, 0)
+      );
+  ratios.forEach((ratio, index) => {
+    const row = document.createElement("tr");
+    const cells = [
+      `PC${index + 1}`,
+      `${(Number(ratio) * 100).toFixed(1)}%`,
+      `${(Number(cumulative[index]) * 100).toFixed(1)}%`,
+    ];
+    cells.forEach((text) => {
+      const cell = document.createElement("td");
+      cell.textContent = text;
+      row.appendChild(cell);
+    });
+    body.appendChild(row);
+  });
+  groups.replaceChildren();
+  const groupRows = Array.isArray(report.groups) ? report.groups : [];
+  if (!groupRows.length) {
+    const item = document.createElement("li");
+    item.textContent = "No strong co-moving groups at the default loading threshold.";
+    groups.appendChild(item);
+    return;
+  }
+  groupRows.forEach((group) => {
+    const item = document.createElement("li");
+    const share = ((Number(group.explained_variance_ratio) || 0) * 100).toFixed(1);
+    if (group.direction === "opposite") {
+      item.textContent =
+        `PC${group.component} (${share}%): ` +
+        `${(group.features_positive || []).join(", ")} ↔ ` +
+        `${(group.features_negative || []).join(", ")}`;
+    } else {
+      item.textContent =
+        `PC${group.component} (${share}%): ${(group.features || []).join(", ")} move together`;
+    }
+    groups.appendChild(item);
+  });
+}
+
 function showToolView(viewId, toolMeta) {
   const stage = document.getElementById("main-stage");
   if (!stage) return;
@@ -2276,6 +2345,9 @@ function showToolView(viewId, toolMeta) {
         (toolMeta.description || "This tool is on the roadmap.") +
         " Chat and the live tools stay available meanwhile.";
     }
+  }
+  if (next === "pca") {
+    renderPcaReport(state.lastPca);
   }
   document.querySelectorAll(".tool-nav-btn").forEach((button) => {
     const current = button.dataset.toolId === (toolMeta && toolMeta.id);

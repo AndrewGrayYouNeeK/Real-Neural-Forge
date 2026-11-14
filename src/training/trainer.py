@@ -13,6 +13,7 @@ import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader, Dataset, Subset, TensorDataset
 
+from src.analysis.pca import PCAModel, analyze_matrix
 from src.data.prepare import load_series, resolve_split_mode, split_indices
 from src.data.scaling import StandardScaler
 from src.data.windows import prepare_csv_series
@@ -235,13 +236,64 @@ class TimeSeriesTrainer:
         # Standardise features/targets (default on for CSV data). Statistics come
         # from the training split only so validation data never leaks into them.
         scaler: StandardScaler | None = None
+        working_inputs = inputs
+        working_targets = fit_targets
         if data_cfg.get("normalize", data_cfg.get("source") == "csv"):
             scaler = StandardScaler.fit(inputs[train_idx], fit_targets[train_idx])
-            full_dataset.tensors = (
-                scaler.transform_inputs(inputs),
-                scaler.transform_targets(fit_targets),
+            working_inputs = scaler.transform_inputs(inputs)
+            working_targets = scaler.transform_targets(fit_targets)
+
+        # Optional PCA reduction (eigenvectors of the feature covariance). Fit on
+        # the training split only; requires model.input_dim == pca_components.
+        pca_model: PCAModel | None = None
+        pca_report: dict[str, Any] | None = None
+        pca_components = data_cfg.get("pca_components")
+        pca_reduce = bool(data_cfg.get("pca_reduce", False)) or (
+            pca_components is not None
+        )
+        if pca_reduce and pca_components is None:
+            raise ValueError("data.pca_reduce requires data.pca_components.")
+        feature_dim = int(working_inputs.shape[-1])
+        feature_names = _feature_names(data_cfg, prepared, feature_dim)
+        if feature_dim >= 2 and (
+            pca_reduce or data_cfg.get("pca_report", data_cfg.get("source") == "csv")
+        ):
+            train_features = working_inputs[train_idx]
+            report_k = (
+                int(pca_components) if pca_components is not None else feature_dim
             )
+            report = analyze_matrix(
+                train_features,
+                n_components=report_k,
+                feature_names=feature_names,
+            )
+            pca_report = report.as_dict()
+            if pca_reduce:
+                k = report_k
+                if k < 1 or k > feature_dim:
+                    raise ValueError(
+                        f"data.pca_components must be in [1, {feature_dim}], got {k}."
+                    )
+                configured_dim = int(cfg.get("model", {}).get("input_dim", feature_dim))
+                if configured_dim != k:
+                    raise ValueError(
+                        f"data.pca_reduce projects to {k} components but "
+                        f"model.input_dim is {configured_dim}."
+                    )
+                pca_model = report.model
+                working_inputs = torch.as_tensor(
+                    pca_model.transform(working_inputs),
+                    dtype=working_inputs.dtype,
+                )
+                logger.info(
+                    "PCA reduction to %d components (PC1 explains %.1f%%).",
+                    k,
+                    float(pca_model.explained_variance_ratio[0]) * 100.0,
+                )
+
+        full_dataset.tensors = (working_inputs, working_targets)
         scaler_state = scaler.state_dict() if scaler is not None else None
+        pca_state = pca_model.state_dict() if pca_model is not None else None
 
         loader = DataLoader(dataset, batch_size=t_cfg["batch_size"], shuffle=True)
 
@@ -372,6 +424,7 @@ class TimeSeriesTrainer:
                         checkpoint_path,
                         scaler=scaler_state,
                         forecast=dict(forecast_meta),
+                        pca=pca_state,
                     )
                     self.store.complete_experiment(
                         experiment_id,
@@ -412,6 +465,7 @@ class TimeSeriesTrainer:
                 val_indices,
                 spec=spec,
                 scaler=scaler,
+                pca=pca_model,
                 device=device,
                 forecast_meta=forecast_meta,
             )
@@ -495,7 +549,7 @@ class TimeSeriesTrainer:
             best_loss,
             elapsed_seconds,
         )
-        return {
+        result: dict[str, Any] = {
             "experiment_id": experiment_id,
             "best_loss": best_loss,
             "metrics": metrics,
@@ -505,6 +559,9 @@ class TimeSeriesTrainer:
             "baselines": baseline_scores,
             "best_epoch": best_epoch,
         }
+        if pca_report is not None:
+            result["pca"] = pca_report
+        return result
 
 
 def _forecast_checkpoint(spec: ForecastSpec) -> dict[str, Any]:
@@ -522,6 +579,21 @@ def _forecast_checkpoint(spec: ForecastSpec) -> dict[str, Any]:
     return meta
 
 
+def _feature_names(
+    data_cfg: dict[str, Any],
+    prepared: Any,
+    feature_dim: int,
+) -> list[str]:
+    if prepared is not None and getattr(prepared, "feature_names", None):
+        names = list(prepared.feature_names)
+        if len(names) == feature_dim:
+            return names
+    columns = data_cfg.get("feature_columns")
+    if isinstance(columns, list) and len(columns) == feature_dim:
+        return [str(name) for name in columns]
+    return [f"f{i}" for i in range(feature_dim)]
+
+
 def _served_metrics(
     model: nn.Module,
     inputs: torch.Tensor,
@@ -532,6 +604,7 @@ def _served_metrics(
     scaler: StandardScaler | None,
     device: torch.device,
     forecast_meta: dict[str, Any],
+    pca: PCAModel | None = None,
 ) -> tuple[dict[str, float], torch.Tensor, torch.Tensor]:
     """Score the served horizon in original units and calibrate intervals.
 
@@ -541,7 +614,7 @@ def _served_metrics(
     forecast and labels are the same tensors the metrics use.
     """
     eval_indices = val_indices if val_indices is not None else list(range(len(inputs)))
-    predictor = Predictor(model, device=device, scaler=scaler, spec=spec)
+    predictor = Predictor(model, device=device, scaler=scaler, pca=pca, spec=spec)
     batch = predictor.forecast(inputs[eval_indices], horizon=spec.horizon)
     observed = horizon_targets(targets[eval_indices], spec.horizon)
     point = batch.point.detach().cpu()

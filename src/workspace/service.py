@@ -28,6 +28,7 @@ from src.accounts.actor import (
 )
 from src.accounts.limits import Limits, load_limits
 from src.accounts.passwords import hash_password, validate_password, verify_password
+from src.analysis.pca import analyze_csv_bytes
 from src.evaluation.backtest import rolling_origin_backtest
 from src.evaluation.run import _predictor_fn, save_backtest, stored_backtest
 from src.evaluation.tracking import default_tracker, record_payload, uncertainty_for
@@ -401,6 +402,52 @@ def suggested_target(columns: list[dict[str, Any]]) -> str | None:
     return usable[0]
 
 
+def _pca_for_upload(
+    data: bytes, columns: list[dict[str, Any]]
+) -> dict[str, Any] | None:
+    """Cheap PCA summary when a CSV has two or more usable numeric columns."""
+    usable = [str(column["name"]) for column in columns if column.get("usable")]
+    if len(usable) < 2:
+        return None
+    try:
+        return analyze_csv_bytes(data, columns=usable).as_dict()
+    except ValueError:
+        return None
+
+
+def analyze_dataset_pca(
+    actor: Actor,
+    dataset_id: str,
+    *,
+    columns: list[str] | None = None,
+    n_components: int | None = None,
+) -> dict[str, Any]:
+    """Run PCA on a workspace dataset (which columns matter / move together)."""
+    store = require_store()
+    row = store.get_dataset(actor.user_id, dataset_id)
+    if row is None:
+        raise WorkspaceError(404, "Dataset not found.")
+    blob = store.get_blob(str(row["object_key"]))
+    if blob is None:
+        raise WorkspaceError(404, "Dataset blob not found.")
+    inspected = inspect_csv_columns(blob, minimum_rows=_MIN_CSV_ROWS)
+    usable = [str(column["name"]) for column in inspected if column.get("usable")]
+    chosen = columns if columns else usable
+    if len(chosen) < 2:
+        raise WorkspaceError(
+            422, "PCA needs at least two numeric columns in this dataset."
+        )
+    try:
+        report = analyze_csv_bytes(blob, columns=chosen, n_components=n_components)
+    except ValueError as exc:
+        raise WorkspaceError(422, str(exc)) from exc
+    return {
+        "dataset_id": dataset_id,
+        "name": row["name"],
+        **report.as_dict(),
+    }
+
+
 def _csv_column_values(data: bytes, column: str) -> list[float]:
     names, rows = _csv_rows(data)
     if column not in names:
@@ -596,12 +643,16 @@ def upload_dataset(
         "updated_at": now,
     }
     store.insert_dataset(row)
-    return {
+    payload: dict[str, Any] = {
         **_dataset_public(row),
         "columns": columns,
         "suggested_target": suggested_target(columns),
         "limits": _limit_summary(limits),
     }
+    pca = _pca_for_upload(data, columns)
+    if pca is not None:
+        payload["pca"] = pca
+    return payload
 
 
 def _safe_name(name: str) -> str:

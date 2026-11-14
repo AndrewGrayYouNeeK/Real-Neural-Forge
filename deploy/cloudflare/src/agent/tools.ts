@@ -263,6 +263,27 @@ export const TOOL_DEFINITIONS = [
       additionalProperties: false,
     },
   },
+  {
+    type: "function" as const,
+    name: "analyze_pca",
+    description:
+      "Principal component analysis on a multi-column workspace CSV: explained variance and which columns move together. Use when the user asks which columns matter or which features co-vary. Requires a signed-in dataset id from list_user_series or a recent upload.",
+    parameters: {
+      type: "object",
+      properties: {
+        dataset_id: {
+          type: "string",
+          description: "Workspace dataset id (dst_…).",
+        },
+        n_components: {
+          type: "integer",
+          description: "Optional number of principal components to keep.",
+        },
+      },
+      required: ["dataset_id"],
+      additionalProperties: false,
+    },
+  },
 ];
 
 export function toolsForResponsesApi(): Array<Record<string, unknown>> {
@@ -972,6 +993,46 @@ async function runForgetMemory(ctx: ToolContext, args: Record<string, unknown>):
   };
 }
 
+async function runAnalyzePca(ctx: ToolContext, args: Record<string, unknown>): Promise<ToolResult["data"]> {
+  const datasetId = stringArg(args, "dataset_id", "");
+  if (!datasetId) {
+    throw new Error("analyze_pca requires dataset_id (from list_user_series or a CSV upload).");
+  }
+  const nComponents = args.n_components;
+  const body: Record<string, unknown> = {};
+  if (typeof nComponents === "number" && Number.isFinite(nComponents) && nComponents >= 1) {
+    body.n_components = Math.floor(nComponents);
+  }
+  const result = await ctx.fetchContainer(
+    `/workspace/datasets/${encodeURIComponent(datasetId)}/pca`,
+    containerInit(ctx, {
+      method: "POST",
+      headers: { ...ctx.authHeaders, "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    }),
+  );
+  if (result.status === 401 || result.status === 403) {
+    throw new Error("Sign in to analyze a private workspace CSV with PCA.");
+  }
+  if (result.status >= 400) {
+    const detail =
+      result.json && typeof result.json === "object" && "detail" in (result.json as object)
+        ? String((result.json as { detail?: unknown }).detail)
+        : `PCA failed (${result.status}).`;
+    throw new Error(detail);
+  }
+  const payload = result.json as Record<string, unknown>;
+  return {
+    dataset_id: datasetId,
+    summary: typeof payload.summary === "string" ? payload.summary : "",
+    explained_variance_ratio: payload.explained_variance_ratio,
+    groups: payload.groups,
+    loadings: payload.loadings,
+    feature_names: payload.feature_names,
+    n_components: payload.n_components,
+  };
+}
+
 function defaultTimeoutForTool(toolName: AgentToolName, override?: number): number {
   if (toolName === "forecast" || toolName === "get_evaluation_metrics") {
     if (typeof override === "number" && Number.isFinite(override)) {
@@ -1025,6 +1086,8 @@ export async function dispatchTool(
         return runRecallMemory(keyed, args);
       case "forget_memory":
         return runForgetMemory(keyed, args);
+      case "analyze_pca":
+        return runAnalyzePca(keyed, args);
       default: {
         const unexpected: never = toolName;
         throw new Error(`Unhandled tool: ${String(unexpected)}`);
