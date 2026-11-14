@@ -454,7 +454,36 @@
                 Clear all memory
               </button>
             </div>
-            <p class="hint">Saved scenarios (named forecast replays) ship in a follow-up.</p>
+
+            <h3>Saved scenarios</h3>
+            <p class="hint">
+              Name a forecast or question to replay later. Ask in chat to save one, or use the form below.
+            </p>
+            <form id="scenario-save-form" class="scenario-save-form">
+              <label class="visually-hidden" for="scenario-name">Scenario name</label>
+              <input id="scenario-name" name="name" type="text" maxlength="80" placeholder="Name" required />
+              <label class="visually-hidden" for="scenario-question">Question</label>
+              <input
+                id="scenario-question"
+                name="question"
+                type="text"
+                maxlength="500"
+                placeholder="Question to re-run"
+                required
+              />
+              <label class="visually-hidden" for="scenario-series">Series</label>
+              <input
+                id="scenario-series"
+                name="series"
+                type="text"
+                maxlength="64"
+                placeholder="Series id (optional, e.g. weather)"
+              />
+              <button class="btn secondary btn-small" type="submit">Save scenario</button>
+            </form>
+            <p id="scenario-note" class="hint" aria-live="polite"></p>
+            <ul id="scenario-list" class="side-list"></ul>
+            <p id="scenario-empty" class="hint" hidden>No saved scenarios yet.</p>
           </section>
 
           <section class="tool-view" id="view-coming-soon" data-tool-view="coming-soon" hidden>

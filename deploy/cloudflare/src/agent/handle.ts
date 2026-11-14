@@ -30,6 +30,13 @@ import {
   upsertMemory,
 } from "./memory";
 import {
+  createScenario,
+  deleteScenario,
+  getScenarioOwned,
+  listScenarios,
+  scenarioRerunQuestion,
+} from "./scenarios";
+import {
   authHeadersFromRequest,
   visitorFromRequest,
   type ContainerFetcher,
@@ -336,6 +343,59 @@ async function handleChats(
   return json({ error: "Method not allowed." }, 405);
 }
 
+async function handleScenarios(
+  request: Request,
+  env: AgentEnv,
+  path: string,
+  body: Record<string, unknown> | null,
+): Promise<Response> {
+  if (!env.WORKSPACES_DB) {
+    return json({ error: "Scenario store is not configured." }, 503);
+  }
+  const identity = await identityFor(request, env);
+  const db = env.WORKSPACES_DB;
+  const rest = path.replace(/^\/agent\/scenarios\/?/, "");
+
+  if (request.method === "GET" && !rest) {
+    const scenarios = await listScenarios(db, identity.scope);
+    return json({
+      scope: identity.signedIn ? (identity.owner ? "owner" : "user") : "visitor",
+      scenarios,
+    });
+  }
+
+  if (request.method === "POST" && !rest) {
+    const name = typeof body?.name === "string" ? body.name : "";
+    const question = typeof body?.question === "string" ? body.question : "";
+    const series = typeof body?.series === "string" ? body.series : null;
+    const horizon =
+      typeof body?.horizon === "number" && Number.isFinite(body.horizon) ? body.horizon : null;
+    const result = await createScenario(db, identity.scope, { name, question, series, horizon });
+    if (!result.ok) return json({ error: result.error }, 400);
+    return json({ scenario: result.scenario });
+  }
+
+  if (!rest) return json({ error: "Method not allowed." }, 405);
+
+  const parts = rest.split("/");
+  const scenarioId = decodeURIComponent(parts[0] || "");
+  if (!scenarioId) return json({ error: "Not found." }, 404);
+
+  if (request.method === "GET" && parts.length === 1) {
+    const scenario = await getScenarioOwned(db, identity.scope, scenarioId);
+    if (!scenario) return json({ error: "Not found." }, 404);
+    return json({ scenario, rerun_question: scenarioRerunQuestion(scenario) });
+  }
+
+  if (request.method === "DELETE" && parts.length === 1) {
+    const removed = await deleteScenario(db, identity.scope, scenarioId);
+    if (!removed) return json({ error: "Not found." }, 404);
+    return json({ deleted: scenarioId });
+  }
+
+  return json({ error: "Method not allowed." }, 405);
+}
+
 export async function handleAgent(
   request: Request,
   env: AgentEnv,
@@ -362,6 +422,9 @@ export async function handleAgent(
         return json({ text: "I could not read that request." }, 400);
       }
     }
+  }
+  if (path === "/agent/scenarios" || path.startsWith("/agent/scenarios/")) {
+    return handleScenarios(request, env, path, body);
   }
   if (path === "/agent/chats" || path.startsWith("/agent/chats/")) {
     return handleChats(request, env, path, body);
