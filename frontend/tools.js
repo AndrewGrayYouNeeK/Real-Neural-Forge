@@ -72,9 +72,9 @@
       id: "memory",
       name: "Memory & saved scenarios",
       icon: "◈",
-      description: "Keep preferred series and replay past what-ifs.",
-      status: "coming-soon",
-      view: "coming-soon",
+      description: "Preferences the chat remembers (units, location, favorites). Saved scenarios come next.",
+      status: "live",
+      view: "memory",
     },
     {
       id: "what-if",

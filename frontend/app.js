@@ -2290,6 +2290,60 @@ function showToolView(viewId, toolMeta) {
   syncHasChatClass();
 }
 
+async function loadMemoryPanel() {
+  const list = document.getElementById("memory-list");
+  const empty = document.getElementById("memory-empty");
+  const note = document.getElementById("memory-scope-note");
+  if (!list) return;
+  list.replaceChildren();
+  try {
+    const data = await fetchJson("/agent/memory");
+    const facts = Array.isArray(data.facts) ? data.facts : [];
+    if (note) {
+      const scope = data.scope === "owner" ? "owner account" : data.scope === "user" ? "signed-in account" : "this visitor";
+      note.textContent = `Showing memory for your ${scope}.`;
+    }
+    if (!facts.length) {
+      if (empty) empty.hidden = false;
+      return;
+    }
+    if (empty) empty.hidden = true;
+    for (const fact of facts) {
+      const row = document.createElement("li");
+      const label = document.createElement("span");
+      label.textContent = `${fact.key}: ${fact.value}`;
+      const forget = document.createElement("button");
+      forget.type = "button";
+      forget.className = "btn secondary btn-small";
+      forget.textContent = "Forget";
+      forget.addEventListener("click", async () => {
+        try {
+          await fetchJson(`/agent/memory/${encodeURIComponent(fact.key)}`, { method: "DELETE" });
+          await loadMemoryPanel();
+        } catch (error) {
+          if (note) note.textContent = error.message || "Could not forget that fact.";
+        }
+      });
+      row.append(label, forget);
+      list.append(row);
+    }
+  } catch (error) {
+    if (empty) empty.hidden = true;
+    if (note) note.textContent = error.message || "Could not load memory.";
+  }
+}
+
+async function clearAllMemory() {
+  const note = document.getElementById("memory-scope-note");
+  try {
+    await fetchJson("/agent/memory", { method: "DELETE" });
+    await loadMemoryPanel();
+    if (note) note.textContent = "Memory cleared.";
+  } catch (error) {
+    if (note) note.textContent = error.message || "Could not clear memory.";
+  }
+}
+
 function activateTool(tool) {
   if (!tool) return;
   if (tool.href) {
@@ -2307,6 +2361,9 @@ function activateTool(tool) {
     return;
   }
   showToolView(tool.view || "chat", tool);
+  if (tool.id === "memory") {
+    void loadMemoryPanel();
+  }
 }
 
 function renderToolNav() {
@@ -2480,6 +2537,11 @@ renderToolNav();
 renderToolsMenu();
 renderChatHistory();
 showToolView("chat");
+
+const memoryRefresh = document.getElementById("memory-refresh");
+if (memoryRefresh) memoryRefresh.addEventListener("click", () => void loadMemoryPanel());
+const memoryClear = document.getElementById("memory-clear");
+if (memoryClear) memoryClear.addEventListener("click", () => void clearAllMemory());
 
 document.getElementById("unhinged-toggle").addEventListener("click", () => {
   setChatMode(chatMode() === "unhinged" ? "normal" : "unhinged");

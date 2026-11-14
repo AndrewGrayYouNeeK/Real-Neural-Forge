@@ -75,6 +75,8 @@ export type AgentLoopDeps = {
   toolTimeoutMs?: number;
   turnTimeoutMs?: number;
   now?: Date;
+  /** Preloaded user memory block appended to the system prompt. */
+  memoryPrompt?: string;
 };
 
 const JSON_PROTOCOL =
@@ -102,25 +104,35 @@ export function isSmallTalk(question: string): boolean {
   );
 }
 
-export function agentSystemPrompt(mode: ChatMode, allowTools: boolean): string {
+export function agentSystemPrompt(
+  mode: ChatMode,
+  allowTools: boolean,
+  memoryPrompt?: string,
+): string {
   const base = systemPromptFor(mode);
+  const memory =
+    typeof memoryPrompt === "string" && memoryPrompt.trim()
+      ? `\n\n${memoryPrompt.trim()}`
+      : "";
   if (!allowTools) {
-    if (mode === "unhinged") return base;
+    if (mode === "unhinged") return `${base}${memory}`;
     return (
       `${base}\n\n` +
       "Directness: answer exactly what was asked. Lead with the answer. Keep it short. " +
       "No rambling, tangents, or unasked extras. Wit stays light and secondary. " +
-      "Do not call tools and do not emit tool JSON."
+      "Do not call tools and do not emit tool JSON." +
+      memory
     );
   }
   if (mode === "unhinged") {
-    return `${base}\n\n${JSON_PROTOCOL}`;
+    return `${base}\n\n${JSON_PROTOCOL}${memory}`;
   }
   return (
     `${base}\n\n` +
     "Directness: answer exactly what was asked. Lead with the answer. Keep it short. " +
     "No rambling, tangents, or unasked extras. Wit stays light and secondary.\n\n" +
-    JSON_PROTOCOL
+    JSON_PROTOCOL +
+    memory
   );
 }
 
@@ -497,7 +509,7 @@ export async function runAgentTurn(
     fallback: deps.models?.fallback?.trim() || resolveChatModels({}).fallback,
   };
   const allowTools = !isSmallTalk(clean);
-  const system = agentSystemPrompt(mode, allowTools);
+  const system = agentSystemPrompt(mode, allowTools, deps.memoryPrompt);
   const toolNotes: string[] = [];
   const toolLog: Array<Record<string, unknown>> = [];
   const toolsUsed: string[] = [];

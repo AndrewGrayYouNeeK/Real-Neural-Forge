@@ -8,6 +8,12 @@ import { visitorFromCf, wantsCurrentConditions, type CfIncoming, type VisitorGeo
 import { isWeatherAsk, resolveFetchLiveKind } from "../live/kind";
 import { answerWeather } from "../live/weather";
 import { answerQuote } from "../live/markets";
+import {
+  clearMemory,
+  deleteMemoryKey,
+  listMemory,
+  upsertMemory,
+} from "./memory";
 import { AGENT_TOOL_NAMES, type AgentToolName } from "./protocol";
 import {
   EVAL_CACHE_TTL_SECONDS,
@@ -81,10 +87,12 @@ export type ToolContext = {
   authHeaders: Record<string, string>;
   /** AbortSignal for the current timed attempt (cancels hung container fetches). */
   signal?: AbortSignal;
-  /** Optional D1 for stored backtest metrics (0005_backtest). */
+  /** Optional D1 for stored backtest metrics (0005_backtest) and user memory (0006). */
   db?: D1Like;
   /** Schedule background cache refresh without blocking the chat reply. */
   waitUntil?: WaitUntil;
+  /** D1 memory scope from resolveMemoryIdentity (user:/owner/ip:). */
+  memoryScope?: string;
 };
 
 const STARTER_IDS = new Set(["weather", "stocks", "crypto", "near-earth", "lunar"]);
@@ -199,6 +207,59 @@ export const TOOL_DEFINITIONS = [
     parameters: {
       type: "object",
       properties: {},
+      additionalProperties: false,
+    },
+  },
+  {
+    type: "function" as const,
+    name: "remember_fact",
+    description:
+      "Store a lasting preference or fact for this user (units, location, favorite_series, name, …). Keys are snake_case. Use when the user asks you to remember something.",
+    parameters: {
+      type: "object",
+      properties: {
+        key: {
+          type: "string",
+          description: "snake_case key, e.g. units, location, favorite_series.",
+        },
+        value: {
+          type: "string",
+          description: "Short value to store (max ~200 chars).",
+        },
+      },
+      required: ["key", "value"],
+      additionalProperties: false,
+    },
+  },
+  {
+    type: "function" as const,
+    name: "recall_memory",
+    description: "List stored preferences/facts for this user, or one key if provided.",
+    parameters: {
+      type: "object",
+      properties: {
+        key: {
+          type: "string",
+          description: "Optional single key to look up.",
+        },
+      },
+      additionalProperties: false,
+    },
+  },
+  {
+    type: "function" as const,
+    name: "forget_memory",
+    description:
+      "Delete one stored fact by key, or clear all memory when clear_all is true.",
+    parameters: {
+      type: "object",
+      properties: {
+        key: { type: "string", description: "Key to forget." },
+        clear_all: {
+          type: "boolean",
+          description: "If true, wipe all facts for this user.",
+        },
+      },
       additionalProperties: false,
     },
   },
@@ -840,6 +901,77 @@ async function runListSeries(ctx: ToolContext): Promise<ToolResult["data"]> {
   };
 }
 
+function requireMemoryDb(ctx: ToolContext): { db: D1Like; scope: string } {
+  if (!ctx.db) throw new Error("Memory store unavailable.");
+  const scope = typeof ctx.memoryScope === "string" ? ctx.memoryScope.trim() : "";
+  if (!scope) throw new Error("Memory scope unavailable.");
+  return { db: ctx.db, scope };
+}
+
+async function runRememberFact(ctx: ToolContext, args: Record<string, unknown>): Promise<ToolResult["data"]> {
+  const { db, scope } = requireMemoryDb(ctx);
+  const key = stringArg(args, "key");
+  const value = stringArg(args, "value");
+  const result = await upsertMemory(db, scope, key, value);
+  if (!result.ok) {
+    return { ok: false, error: result.error, text: result.error };
+  }
+  return {
+    ok: true,
+    fact: result.fact,
+    text: `Remembered ${result.fact.key}: ${result.fact.value}.`,
+  };
+}
+
+async function runRecallMemory(ctx: ToolContext, args: Record<string, unknown>): Promise<ToolResult["data"]> {
+  const { db, scope } = requireMemoryDb(ctx);
+  const facts = await listMemory(db, scope);
+  const key = stringArg(args, "key");
+  if (key) {
+    const normalized = key.trim().toLowerCase().replace(/[\s-]+/g, "_");
+    const match = facts.find((fact) => fact.key === normalized);
+    if (!match) {
+      return { ok: true, facts: [], text: `No memory stored for ${normalized}.` };
+    }
+    return {
+      ok: true,
+      facts: [match],
+      text: `${match.key}: ${match.value}`,
+    };
+  }
+  if (!facts.length) {
+    return { ok: true, facts: [], text: "No stored preferences yet." };
+  }
+  return {
+    ok: true,
+    facts,
+    text: facts.map((fact) => `${fact.key}: ${fact.value}`).join("; "),
+  };
+}
+
+async function runForgetMemory(ctx: ToolContext, args: Record<string, unknown>): Promise<ToolResult["data"]> {
+  const { db, scope } = requireMemoryDb(ctx);
+  const clearAll = args.clear_all === true;
+  if (clearAll) {
+    const deleted = await clearMemory(db, scope);
+    return {
+      ok: true,
+      cleared: deleted,
+      text: deleted ? `Cleared ${deleted} memor${deleted === 1 ? "y" : "ies"}.` : "Nothing to clear.",
+    };
+  }
+  const key = stringArg(args, "key");
+  if (!key) {
+    return { ok: false, error: "Provide key or clear_all.", text: "Provide a key to forget, or clear_all." };
+  }
+  const removed = await deleteMemoryKey(db, scope, key);
+  return {
+    ok: removed,
+    key,
+    text: removed ? `Forgot ${key}.` : `No memory stored for ${key}.`,
+  };
+}
+
 function defaultTimeoutForTool(toolName: AgentToolName, override?: number): number {
   if (toolName === "forecast" || toolName === "get_evaluation_metrics") {
     if (typeof override === "number" && Number.isFinite(override)) {
@@ -887,6 +1019,12 @@ export async function dispatchTool(
         return runExplain(keyed, args);
       case "list_user_series":
         return runListSeries(keyed);
+      case "remember_fact":
+        return runRememberFact(keyed, args);
+      case "recall_memory":
+        return runRecallMemory(keyed, args);
+      case "forget_memory":
+        return runForgetMemory(keyed, args);
       default: {
         const unexpected: never = toolName;
         throw new Error(`Unhandled tool: ${String(unexpected)}`);

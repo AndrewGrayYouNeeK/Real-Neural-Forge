@@ -433,6 +433,30 @@
             </details>
           </section>
 
+          <section class="tool-view" id="view-memory" data-tool-view="memory" hidden>
+            <header class="tool-view-head">
+              <h2>Memory</h2>
+              <button type="button" class="btn secondary back-to-chat" data-view="chat">Back to chat</button>
+            </header>
+            <p class="hint">
+              Facts and preferences the chat keeps for you (units, location, favorite series).
+              Ask in chat to remember something, or clear them here. Owner and signed-in
+              accounts keep a stable bucket; visitors are keyed by network.
+            </p>
+            <p id="memory-scope-note" class="hint" aria-live="polite"></p>
+            <ul id="memory-list" class="side-list"></ul>
+            <p id="memory-empty" class="hint" hidden>No saved preferences yet.</p>
+            <div class="chip-row">
+              <button class="btn secondary btn-small" type="button" id="memory-refresh">
+                Refresh
+              </button>
+              <button class="btn secondary btn-small" type="button" id="memory-clear">
+                Clear all memory
+              </button>
+            </div>
+            <p class="hint">Saved scenarios (named forecast replays) ship in a follow-up.</p>
+          </section>
+
           <section class="tool-view" id="view-coming-soon" data-tool-view="coming-soon" hidden>
             <header class="tool-view-head">
               <h2 id="coming-soon-title">Coming soon</h2>
