@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
+  AGENT_TOOL_CACHE_VERSION,
   EVAL_CACHE_TTL_SECONDS,
   FORECAST_CACHE_TTL_SECONDS,
   cacheGetJson,
@@ -33,8 +34,14 @@ describe("agent tool cache", () => {
   });
 
   it("keys forecast and eval by series/model and horizon", () => {
-    expect(forecastCacheKey("weather", 3)).toBe("forecast:v1:weather:h3:p120");
-    expect(evalCacheKey("weather", 1)).toBe("eval:v1:weather:h1");
+    // v2 invalidates pre-#105 °C / unconverted-MAE payloads still in Cache API.
+    expect(AGENT_TOOL_CACHE_VERSION).toBe(2);
+    expect(forecastCacheKey("weather", 3)).toBe(
+      `forecast:v${AGENT_TOOL_CACHE_VERSION}:weather:h3:p120`,
+    );
+    expect(evalCacheKey("weather", 1)).toBe(`eval:v${AGENT_TOOL_CACHE_VERSION}:weather:h1`);
+    expect(forecastCacheKey("weather", 3)).toBe("forecast:v2:weather:h3:p120");
+    expect(evalCacheKey("weather", 1)).toBe("eval:v2:weather:h1");
     expect(FORECAST_CACHE_TTL_SECONDS).toBeGreaterThanOrEqual(3_600);
     expect(EVAL_CACHE_TTL_SECONDS).toBeGreaterThanOrEqual(3_600);
   });
