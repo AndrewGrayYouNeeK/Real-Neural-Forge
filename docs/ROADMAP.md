@@ -19,8 +19,9 @@ and never deploy the frontend Worker `real-neural-forge`.
 2. **Persistent context** — D1 `chat_threads` / `chat_messages` (migration
    `0007_*`); sidebar Chats list loads saved threads; reopening restores
    messages and continues `/agent/chat` with `thread_id` context.
-3. **Saved scenarios** — named forecast/question (series, horizon, settings);
-   re-run from the sidebar.
+3. **Saved scenarios** — D1 `saved_scenarios` (migration `0008_*`); save/list/run
+   via agent tools and the Memory panel; re-run opens chat with the stored
+   question/series.
 4. **Manage your own series** — list / rename / delete uploaded CSV series and
    retrain (on top of Train on my CSV).
 

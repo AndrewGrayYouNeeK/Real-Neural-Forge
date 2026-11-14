@@ -2297,6 +2297,78 @@ function showToolView(viewId, toolMeta) {
   syncHasChatClass();
 }
 
+async function loadScenarioPanel() {
+  const list = document.getElementById("scenario-list");
+  const empty = document.getElementById("scenario-empty");
+  const note = document.getElementById("scenario-note");
+  if (!list) return;
+  list.replaceChildren();
+  try {
+    const data = await fetchJson("/agent/scenarios");
+    const scenarios = Array.isArray(data.scenarios) ? data.scenarios : [];
+    if (!scenarios.length) {
+      if (empty) empty.hidden = false;
+      return;
+    }
+    if (empty) empty.hidden = true;
+    for (const scenario of scenarios) {
+      const row = document.createElement("li");
+      const label = document.createElement("span");
+      const seriesBit = scenario.series
+        ? ` · ${scenario.series}${scenario.horizon ? ` h${scenario.horizon}` : ""}`
+        : "";
+      label.textContent = `${scenario.name}${seriesBit}`;
+      const run = document.createElement("button");
+      run.type = "button";
+      run.className = "btn secondary btn-small";
+      run.textContent = "Run";
+      run.addEventListener("click", () => {
+        void runSavedScenario(scenario.id);
+      });
+      const remove = document.createElement("button");
+      remove.type = "button";
+      remove.className = "btn secondary btn-small";
+      remove.textContent = "Delete";
+      remove.addEventListener("click", async () => {
+        try {
+          await fetchJson(`/agent/scenarios/${encodeURIComponent(scenario.id)}`, {
+            method: "DELETE",
+          });
+          await loadScenarioPanel();
+        } catch (error) {
+          if (note) note.textContent = error.message || "Could not delete scenario.";
+        }
+      });
+      row.append(label, run, remove);
+      list.append(row);
+    }
+  } catch (error) {
+    if (empty) empty.hidden = true;
+    if (note) note.textContent = error.message || "Could not load scenarios.";
+  }
+}
+
+async function runSavedScenario(scenarioId) {
+  const note = document.getElementById("scenario-note");
+  try {
+    const data = await fetchJson(`/agent/scenarios/${encodeURIComponent(scenarioId)}`);
+    const question =
+      (data && typeof data.rerun_question === "string" && data.rerun_question.trim()) ||
+      (data && data.scenario && typeof data.scenario.question === "string" && data.scenario.question.trim()) ||
+      "";
+    if (!question) {
+      if (note) note.textContent = "Scenario has no question to run.";
+      return;
+    }
+    showToolView("chat");
+    rememberChatTurn(question);
+    await handleQuestion(question);
+    syncHasChatClass();
+  } catch (error) {
+    if (note) note.textContent = error.message || "Could not run scenario.";
+  }
+}
+
 async function loadMemoryPanel() {
   const list = document.getElementById("memory-list");
   const empty = document.getElementById("memory-empty");
@@ -2312,32 +2384,33 @@ async function loadMemoryPanel() {
     }
     if (!facts.length) {
       if (empty) empty.hidden = false;
-      return;
-    }
-    if (empty) empty.hidden = true;
-    for (const fact of facts) {
-      const row = document.createElement("li");
-      const label = document.createElement("span");
-      label.textContent = `${fact.key}: ${fact.value}`;
-      const forget = document.createElement("button");
-      forget.type = "button";
-      forget.className = "btn secondary btn-small";
-      forget.textContent = "Forget";
-      forget.addEventListener("click", async () => {
-        try {
-          await fetchJson(`/agent/memory/${encodeURIComponent(fact.key)}`, { method: "DELETE" });
-          await loadMemoryPanel();
-        } catch (error) {
-          if (note) note.textContent = error.message || "Could not forget that fact.";
-        }
-      });
-      row.append(label, forget);
-      list.append(row);
+    } else {
+      if (empty) empty.hidden = true;
+      for (const fact of facts) {
+        const row = document.createElement("li");
+        const label = document.createElement("span");
+        label.textContent = `${fact.key}: ${fact.value}`;
+        const forget = document.createElement("button");
+        forget.type = "button";
+        forget.className = "btn secondary btn-small";
+        forget.textContent = "Forget";
+        forget.addEventListener("click", async () => {
+          try {
+            await fetchJson(`/agent/memory/${encodeURIComponent(fact.key)}`, { method: "DELETE" });
+            await loadMemoryPanel();
+          } catch (error) {
+            if (note) note.textContent = error.message || "Could not forget that fact.";
+          }
+        });
+        row.append(label, forget);
+        list.append(row);
+      }
     }
   } catch (error) {
     if (empty) empty.hidden = true;
     if (note) note.textContent = error.message || "Could not load memory.";
   }
+  await loadScenarioPanel();
 }
 
 async function clearAllMemory() {
@@ -2370,6 +2443,29 @@ function activateTool(tool) {
   showToolView(tool.view || "chat", tool);
   if (tool.id === "memory") {
     void loadMemoryPanel();
+  }
+}
+
+async function saveScenarioFromForm(event) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const note = document.getElementById("scenario-note");
+  const name = form.name.value.trim();
+  const question = form.question.value.trim();
+  const series = form.series.value.trim();
+  try {
+    const body = { name, question };
+    if (series) body.series = series;
+    await fetchJson("/agent/scenarios", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    form.reset();
+    if (note) note.textContent = "Scenario saved.";
+    await loadScenarioPanel();
+  } catch (error) {
+    if (note) note.textContent = error.message || "Could not save scenario.";
   }
 }
 
@@ -2602,6 +2698,8 @@ const memoryRefresh = document.getElementById("memory-refresh");
 if (memoryRefresh) memoryRefresh.addEventListener("click", () => void loadMemoryPanel());
 const memoryClear = document.getElementById("memory-clear");
 if (memoryClear) memoryClear.addEventListener("click", () => void clearAllMemory());
+const scenarioForm = document.getElementById("scenario-save-form");
+if (scenarioForm) scenarioForm.addEventListener("submit", (event) => void saveScenarioFromForm(event));
 
 document.getElementById("unhinged-toggle").addEventListener("click", () => {
   setChatMode(chatMode() === "unhinged" ? "normal" : "unhinged");

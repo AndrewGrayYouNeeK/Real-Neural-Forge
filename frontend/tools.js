@@ -72,7 +72,7 @@
       id: "memory",
       name: "Memory & saved scenarios",
       icon: "◈",
-      description: "Preferences the chat remembers (units, location, favorites). Saved scenarios come next.",
+      description: "Preferences the chat remembers, plus named forecast scenarios you can re-run.",
       status: "live",
       view: "memory",
     },

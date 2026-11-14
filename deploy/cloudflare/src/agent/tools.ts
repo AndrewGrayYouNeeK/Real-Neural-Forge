@@ -16,6 +16,12 @@ import {
 } from "./memory";
 import { AGENT_TOOL_NAMES, type AgentToolName } from "./protocol";
 import {
+  createScenario,
+  getScenarioOwned,
+  listScenarios,
+  scenarioRerunQuestion,
+} from "./scenarios";
+import {
   EVAL_CACHE_TTL_SECONDS,
   FORECAST_CACHE_TTL_SECONDS,
   cacheGetOrLoad,
@@ -259,6 +265,56 @@ export const TOOL_DEFINITIONS = [
           type: "boolean",
           description: "If true, wipe all facts for this user.",
         },
+      },
+      additionalProperties: false,
+    },
+  },
+  {
+    type: "function" as const,
+    name: "save_scenario",
+    description:
+      "Save a named forecast/question scenario (name, question, optional series + horizon) for later re-run.",
+    parameters: {
+      type: "object",
+      properties: {
+        name: { type: "string", description: "Short scenario name." },
+        question: {
+          type: "string",
+          description: "The question or prompt to replay.",
+        },
+        series: {
+          type: "string",
+          description: "Optional starter/series id (weather, stocks, …).",
+        },
+        horizon: {
+          type: "integer",
+          description: "Optional forecast horizon 1-24.",
+        },
+      },
+      required: ["name", "question"],
+      additionalProperties: false,
+    },
+  },
+  {
+    type: "function" as const,
+    name: "list_scenarios",
+    description: "List this user's saved forecast scenarios.",
+    parameters: {
+      type: "object",
+      properties: {},
+      additionalProperties: false,
+    },
+  },
+  {
+    type: "function" as const,
+    name: "run_scenario",
+    description:
+      "Load a saved scenario by id or name and return the question/series/horizon to execute (then call forecast if series is set).",
+    parameters: {
+      type: "object",
+      properties: {
+        id: { type: "string", description: "Scenario id." },
+        name: { type: "string", description: "Scenario name if id unknown." },
       },
       additionalProperties: false,
     },
@@ -972,6 +1028,72 @@ async function runForgetMemory(ctx: ToolContext, args: Record<string, unknown>):
   };
 }
 
+async function runSaveScenario(ctx: ToolContext, args: Record<string, unknown>): Promise<ToolResult["data"]> {
+  const { db, scope } = requireMemoryDb(ctx);
+  const name = stringArg(args, "name");
+  const question = stringArg(args, "question") || ctx.question;
+  const series = stringArg(args, "series") || null;
+  const horizonRaw = args.horizon;
+  const horizon =
+    typeof horizonRaw === "number" && Number.isFinite(horizonRaw)
+      ? Math.min(24, Math.max(1, Math.floor(horizonRaw)))
+      : null;
+  const result = await createScenario(db, scope, { name, question, series, horizon });
+  if (!result.ok) return { ok: false, error: result.error, text: result.error };
+  return {
+    ok: true,
+    scenario: result.scenario,
+    text: `Saved scenario “${result.scenario.name}”.`,
+  };
+}
+
+async function runListScenarios(ctx: ToolContext): Promise<ToolResult["data"]> {
+  const { db, scope } = requireMemoryDb(ctx);
+  const scenarios = await listScenarios(db, scope);
+  if (!scenarios.length) {
+    return { ok: true, scenarios: [], text: "No saved scenarios yet." };
+  }
+  return {
+    ok: true,
+    scenarios,
+    text: scenarios.map((row) => `${row.name} (${row.id})`).join("; "),
+  };
+}
+
+async function runRunScenario(ctx: ToolContext, args: Record<string, unknown>): Promise<ToolResult["data"]> {
+  const { db, scope } = requireMemoryDb(ctx);
+  const id = stringArg(args, "id");
+  const name = stringArg(args, "name").toLowerCase();
+  let scenario = id ? await getScenarioOwned(db, scope, id) : null;
+  if (!scenario && name) {
+    const all = await listScenarios(db, scope);
+    scenario = all.find((row) => row.name.toLowerCase() === name) || null;
+  }
+  if (!scenario) {
+    return { ok: false, error: "Scenario not found.", text: "Scenario not found." };
+  }
+  const question = scenarioRerunQuestion(scenario);
+  if (scenario.series) {
+    const forecast = await runForecast(ctx, {
+      series: scenario.series,
+      horizon: scenario.horizon || 1,
+    });
+    return {
+      ok: true,
+      scenario,
+      question,
+      forecast,
+      text: `Re-ran “${scenario.name}” for ${scenario.series}.`,
+    };
+  }
+  return {
+    ok: true,
+    scenario,
+    question,
+    text: `Loaded scenario “${scenario.name}”: ${question}`,
+  };
+}
+
 function defaultTimeoutForTool(toolName: AgentToolName, override?: number): number {
   if (toolName === "forecast" || toolName === "get_evaluation_metrics") {
     if (typeof override === "number" && Number.isFinite(override)) {
@@ -1025,6 +1147,12 @@ export async function dispatchTool(
         return runRecallMemory(keyed, args);
       case "forget_memory":
         return runForgetMemory(keyed, args);
+      case "save_scenario":
+        return runSaveScenario(keyed, args);
+      case "list_scenarios":
+        return runListScenarios(keyed);
+      case "run_scenario":
+        return runRunScenario(keyed, args);
       default: {
         const unexpected: never = toolName;
         throw new Error(`Unhandled tool: ${String(unexpected)}`);
