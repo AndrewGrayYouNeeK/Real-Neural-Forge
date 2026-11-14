@@ -46,14 +46,6 @@
       view: "evaluation",
     },
     {
-      id: "pca",
-      name: "Column analysis (PCA)",
-      icon: "▦",
-      description: "Which CSV columns matter and move together.",
-      status: "live",
-      view: "pca",
-    },
-    {
       id: "live",
       name: "Live data",
       icon: "◉",
@@ -129,8 +121,7 @@
       id: "why",
       name: "Why this forecast",
       icon: "?",
-      description:
-        "Plain-language drivers behind a prediction (Phase 3; PCA column analysis is live).",
+      description: "Plain-language drivers behind a prediction.",
       status: "coming-soon",
       view: "coming-soon",
     },
@@ -154,8 +145,7 @@
       id: "synthetic",
       name: "Synthetic data",
       icon: "∿",
-      description:
-        "Generate training series with known patterns (Phase 4; diffusion forecaster experiment planned).",
+      description: "Generate training series with known patterns.",
       status: "coming-soon",
       view: "coming-soon",
     },
@@ -171,8 +161,7 @@
       id: "simulator",
       name: "Simulator",
       icon: "⟳",
-      description:
-        "Roll forward multi-step scenarios (Phase 5; JEPA pretrain experiment planned).",
+      description: "Roll forward multi-step scenarios interactively.",
       status: "coming-soon",
       view: "coming-soon",
     },

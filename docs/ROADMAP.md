@@ -30,10 +30,10 @@ Flip matching “coming soon” tool-registry entries to live as each piece ship
 
 ## Phase 3 — Explainability & trust
 
-- **PCA column analysis (shipped in this track)** — eigenvectors of the
+- **PCA column analysis (in progress in this track)** — eigenvectors of the
   covariance matrix for multi-column CSV uploads; explained variance and
   co-moving groups; optional `data.pca_reduce` / `data.pca_components` before
-  training; API + `analyze_pca` agent tool; live “Column analysis (PCA)” tool.
+  training; API + `analyze_pca` agent tool; landing registry stays **In progress**.
   Feeds the later **Why this forecast** narratives.
 - Why-this-forecast narratives grounded in model/features (still coming soon)
 - Shareable accuracy / forecast reports
