@@ -324,9 +324,17 @@ def _evaluation_indices(n: int, data_cfg: dict[str, Any]) -> tuple[list[int], st
 
 
 def recent_series(
-    cfg: dict[str, Any], predictor: Any, *, points: int
+    cfg: dict[str, Any],
+    predictor: Any,
+    *,
+    points: int,
+    include_history_predictions: bool = True,
 ) -> dict[str, Any]:
-    """Return recent target history, one-step backtest, forecast, and baselines."""
+    """Return recent target history, one-step backtest, forecast, and baselines.
+
+    When ``include_history_predictions`` is false, skip the CPU-heavy replay of
+    every recent window (agent / lite path). The forward forecast is unchanged.
+    """
     points = max(1, min(int(points), 400))
     data_cfg = _section(cfg, "data")
     model_cfg = _section(cfg, "model")
@@ -373,7 +381,7 @@ def recent_series(
 
     length = int(actual.shape[0])
     predicted_by_pos: dict[int, float] = {}
-    if length > seq_len:
+    if include_history_predictions and length > seq_len:
         windows: list[np.ndarray] = []
         positions: list[int] = []
         for position in range(seq_len, length):

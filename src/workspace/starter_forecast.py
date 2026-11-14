@@ -33,14 +33,18 @@ STARTER_UNITS = {
 }
 
 _predictors: dict[tuple[str, int], Predictor] = {}
+# Deterministic lite payloads keyed by (starter_id, points, model mtime).
+_lite_payloads: dict[tuple[str, int, int], dict[str, Any]] = {}
 
 
 def clear_forecast_cache() -> None:
     """Drop cached starter predictors. Tests call this after swapping files."""
     _predictors.clear()
+    _lite_payloads.clear()
 
 
-def _predictor(starter: Starter, cfg: dict[str, Any]) -> Predictor:
+def predictor_for_starter(starter: Starter, cfg: dict[str, Any]) -> Predictor:
+    """Return a memoized Predictor for a starter checkpoint (shared with backtests)."""
     if not starter.model_path.is_file():
         raise WorkspaceError(503, "The sample model is not available right now.")
     stamp = starter.model_path.stat().st_mtime_ns
@@ -57,6 +61,10 @@ def _predictor(starter: Starter, cfg: dict[str, Any]) -> Predictor:
         ) from exc
     _predictors[key] = predictor
     return predictor
+
+
+def _predictor(starter: Starter, cfg: dict[str, Any]) -> Predictor:
+    return predictor_for_starter(starter, cfg)
 
 
 def _highlights(starter: Starter) -> list[dict[str, Any]]:
@@ -110,13 +118,26 @@ def _attach_horizon(
     payload["horizon"] = spec.horizon
 
 
-def starter_forecast(starter_id: str, *, points: int = 120) -> dict[str, Any]:
-    """Forecast the next step of a shipped starter series. No account required."""
+def starter_forecast(
+    starter_id: str, *, points: int = 120, lite: bool = False
+) -> dict[str, Any]:
+    """Forecast the next step of a shipped starter series. No account required.
+
+    ``lite=True`` skips history-window replay and outcome tracking so agent and
+    cache-refresh calls stay cheap on a single CPU worker.
+    """
     starter = starter_by_id(starter_id)
     if starter is None:
         raise WorkspaceError(404, "Starter not found.")
     if not starter.dataset_path.is_file():
         raise WorkspaceError(503, "The sample dataset is not available right now.")
+    if not starter.model_path.is_file():
+        raise WorkspaceError(503, "The sample model is not available right now.")
+    stamp = starter.model_path.stat().st_mtime_ns
+    if lite:
+        cached = _lite_payloads.get((starter.id, points, stamp))
+        if cached is not None:
+            return cached
     try:
         cfg = starter.config()
     except (OSError, ValueError) as exc:
@@ -130,7 +151,12 @@ def starter_forecast(starter_id: str, *, points: int = 120) -> dict[str, Any]:
     data_cfg["name"] = starter.name
     predictor = _predictor(starter, cfg)
     try:
-        payload = recent_series(cfg, predictor, points=points)
+        payload = recent_series(
+            cfg,
+            predictor,
+            points=points,
+            include_history_predictions=not lite,
+        )
     except (FileNotFoundError, ValueError, OSError, TypeError, RuntimeError) as exc:
         raise WorkspaceError(
             503, "The sample forecast could not be built right now."
@@ -146,8 +172,12 @@ def starter_forecast(starter_id: str, *, points: int = 120) -> dict[str, Any]:
     if highlights:
         payload["highlights"] = highlights
     payload["checkpoint_loaded"] = True
+    payload["lite"] = lite
     _attach_uncertainty(starter.id, payload)
-    _track_starter(starter.id, payload)
+    if not lite:
+        _track_starter(starter.id, payload)
+    if lite:
+        _lite_payloads[(starter.id, points, stamp)] = payload
     return payload
 
 

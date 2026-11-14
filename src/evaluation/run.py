@@ -13,8 +13,8 @@ import torch
 from src.evaluation.backtest import rolling_origin_backtest
 from src.evaluation.tracking import default_tracker
 from src.inference.predictor import Predictor
-from src.models.registry import build_model
 from src.utils.paths import REPO_ROOT
+from src.workspace.starter_forecast import predictor_for_starter
 from src.workspace.starters import Starter, starter_by_id
 from src.workspace.store import sql_statements, utc_now
 
@@ -71,8 +71,8 @@ def backtest_starter(
     data_cfg = raw_data if isinstance(raw_data, dict) else {}
     seq_len = int(data_cfg.get("seq_len", 16) or 16)
     values = read_series_csv(starter.dataset_path)
-    built = build_model(cfg, ensemble=False)
-    predictor = Predictor.from_checkpoint(built, starter.model_path, device="cpu")
+    # Reuse the same in-process Predictor memo as starter forecasts.
+    predictor = predictor_for_starter(starter, cfg)
     report = rolling_origin_backtest(
         values,
         _predictor_fn(predictor, seq_len),

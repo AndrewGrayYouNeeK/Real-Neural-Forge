@@ -174,6 +174,7 @@ async function answerAgentChat(
   question: string,
   mode: ChatMode,
   history: HistoryMessage[],
+  waitUntil?: (promise: Promise<unknown>) => void,
 ): Promise<Response> {
   const clean = question.replace(/\s+/g, " ").trim();
   if (!clean) {
@@ -202,6 +203,8 @@ async function answerAgentChat(
         visitor: visitorFromRequest(request),
         fetchContainer: makeContainerFetcher(env, request),
         authHeaders: authHeadersFromRequest(request),
+        db: env.WORKSPACES_DB,
+        waitUntil,
       },
     });
     return json({
@@ -221,7 +224,11 @@ async function answerAgentChat(
   }
 }
 
-export async function handleAgent(request: Request, env: AgentEnv): Promise<Response> {
+export async function handleAgent(
+  request: Request,
+  env: AgentEnv,
+  ctx?: { waitUntil?: (promise: Promise<unknown>) => void },
+): Promise<Response> {
   const url = new URL(request.url);
   const path = url.pathname.replace(/\/+$/, "") || "/";
   if (request.method === "OPTIONS") {
@@ -248,6 +255,7 @@ export async function handleAgent(request: Request, env: AgentEnv): Promise<Resp
       questionFrom(url, body),
       modeFrom(url, body),
       historyFrom(body),
+      ctx?.waitUntil?.bind(ctx),
     );
   }
   return json({ error: "Not found." }, 404);
