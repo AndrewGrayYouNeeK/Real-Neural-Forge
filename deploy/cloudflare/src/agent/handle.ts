@@ -130,16 +130,14 @@ function clientIp(request: Request): string | null {
 }
 
 function makeContainerFetcher(env: AgentEnv, request: Request): ContainerFetcher {
-  let started: Awaited<ReturnType<typeof getContainer>> | null = null;
+  // Match the dashboard warmup path: wake the same "primary" container on every
+  // call via startAndWaitForPorts so sleepAfter cannot leave agent tools hanging.
   return async (path, init = {}) => {
-    if (!started) {
-      const container = getContainer(env.NEURAL_FORGE, "primary");
-      await container.startAndWaitForPorts({
-        ports: 8000,
-        startOptions: { envVars: containerEnv(env) },
-      });
-      started = container;
-    }
+    const container = getContainer(env.NEURAL_FORGE, "primary");
+    await container.startAndWaitForPorts({
+      ports: 8000,
+      startOptions: { envVars: containerEnv(env) },
+    });
     const headers = new Headers(init.headers || {});
     if (!headers.has("Accept")) headers.set("Accept", "application/json");
     const auth = authHeadersFromRequest(request);
@@ -149,11 +147,12 @@ function makeContainerFetcher(env: AgentEnv, request: Request): ContainerFetcher
     headers.set("X-Forwarded-Proto", new URL(request.url).protocol.replace(/:$/, ""));
     headers.set("X-Forwarded-Host", new URL(request.url).host);
     headers.delete("X-Neural-Forge-Watch");
-    const response = await started.fetch(
+    const response = await container.fetch(
       new Request(`http://container${path.startsWith("/") ? path : `/${path}`}`, {
         method: init.method || "GET",
         headers,
         body: init.body,
+        signal: init.signal,
       }),
     );
     const text = await response.text();

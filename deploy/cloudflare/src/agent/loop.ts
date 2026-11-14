@@ -189,10 +189,16 @@ export function buildAgentInputs(options: {
 }
 
 function toolNote(call: ParsedToolCall, result: ToolResult): string {
+  // Never forward internal exception strings to the model — it echoes them.
+  let safeData = result.data;
+  if (safeData && typeof safeData === "object" && !Array.isArray(safeData)) {
+    const { error: _internal, ...rest } = safeData as Record<string, unknown>;
+    safeData = rest;
+  }
   const payload = result.ok
-    ? { tool: call.name, ok: true, result: result.data }
-    : { tool: call.name, ok: false, error: result.error || "failed" };
-  return `Tool result for ${call.name}:\n${JSON.stringify(payload).slice(0, 3500)}\nUsing only these facts, answer the user directly. Lead with the key number or condition. Do not call another tool unless you still lack a required fact. Do not invent values.`;
+    ? { tool: call.name, ok: true, result: safeData }
+    : { tool: call.name, ok: false, error: friendlyToolFailure(call.name) };
+  return `Tool result for ${call.name}:\n${JSON.stringify(payload).slice(0, 3500)}\nUsing only these facts, answer the user directly. Lead with the key number or condition. Do not call another tool unless you still lack a required fact. Do not invent values. Never mention tool names or raw errors.`;
 }
 
 async function reserveOrFail(
@@ -328,18 +334,26 @@ async function runModelWithFallback(
   }
 }
 
+/** User-facing copy for failed tools — never leak tool names or raw errors. */
+export function friendlyToolFailure(name: string): string {
+  switch (name) {
+    case "forecast":
+      return "The forecast service is warming up or temporarily unavailable. Please try that forecast again in a moment.";
+    case "get_evaluation_metrics":
+      return "Model accuracy metrics are temporarily unavailable. Please try again in a moment.";
+    case "fetch_live_data":
+      return "I could not load that live data right now. Please try again in a moment.";
+    default:
+      return "I could not finish that with the available data. Please try again in a moment.";
+  }
+}
+
 /** Build a direct user-facing answer from tool results (no model). */
 export function factualFallback(results: ToolResult[]): string {
   const lines: string[] = [];
   for (const result of results) {
     if (!result.ok) {
-      if (result.name === "forecast") {
-        lines.push(
-          "The forecast service is warming up or temporarily unavailable. Please try that forecast again in a moment.",
-        );
-      } else {
-        lines.push(`${result.name} failed: ${result.error || "unavailable"}`);
-      }
+      lines.push(friendlyToolFailure(result.name));
       continue;
     }
     if (result.data && typeof result.data === "object" && "text" in (result.data as object)) {
@@ -393,7 +407,7 @@ export function factualFallback(results: ToolResult[]): string {
         continue;
       }
     }
-    lines.push(`${result.name}: ${JSON.stringify(result.data).slice(0, 500)}`);
+    lines.push(friendlyToolFailure(result.name));
   }
   return lines.join("\n\n");
 }

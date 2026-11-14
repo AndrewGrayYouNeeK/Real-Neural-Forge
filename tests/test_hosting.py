@@ -94,7 +94,7 @@ def test_container_worker_is_not_a_dashboard_worker():
     assert schema == migration
     assert "localhost/health" in worker
     assert "defaultPort = 8000" in worker
-    assert 'sleepAfter = "10m"' in worker
+    assert 'sleepAfter = "30m"' in worker
     assert "renewActivityTimeout" in worker
     assert 'TRAINING_WATCH_CALLBACK = "watchTraining"' in worker
     assert "TRAINING_POLL_SECONDS = 3 * 60" in worker

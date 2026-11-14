@@ -91,7 +91,9 @@ type ContainerStatus = State["status"];
 
 export class NeuralForgeContainer extends Container<Env> {
   defaultPort = 8000;
-  sleepAfter = "10m";
+  // Keep warm across verification / chat bursts; agent tools wake via
+  // startAndWaitForPorts but re-sleep mid-session caused intermittent timeouts.
+  sleepAfter = "30m";
   enableInternet = true;
   // The image serves FastAPI. Readiness is GET /health, not the class default.
   pingEndpoint = "localhost/health";
