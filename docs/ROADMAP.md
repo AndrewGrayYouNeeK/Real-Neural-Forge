@@ -55,3 +55,4 @@ Flip matching “coming soon” tool-registry entries to live as each piece ship
   embeddings of future (or masked) windows rather than raw values; evaluate
   transfer into the existing supervised forecast fine-tune path before any
   production swap
+
