@@ -24,6 +24,7 @@ from src.data.lunar import lunar_now, lunar_on
 from src.evaluation.routes import router as evaluation_router
 from src.evaluation.tracking import record_payload, uncertainty_for
 from src.experiments.diffusion_demo import starter_diffusion_futures
+from src.experiments.jepa_demo import starter_jepa_compare
 from src.forecasting.spec import MAX_HORIZON, forecast_spec_from_config
 from src.inference.predictor import ForecastBatch, Predictor
 from src.models.registry import ModelRegistry, build_model
@@ -575,6 +576,15 @@ def public_starter_diffusion(
     """Sample diffusion futures (p10/p50/p90) for a shipped starter. No account."""
     try:
         return starter_diffusion_futures(starter_id, horizon=horizon, n_paths=n_paths)
+    except WorkspaceError as exc:
+        raise _workspace_http(exc) from exc
+
+
+@app.get("/starters/{starter_id}/jepa-compare", tags=["starters"])
+def public_starter_jepa_compare(starter_id: str) -> dict[str, Any]:
+    """Short JEPA vs transformer MAE compare on a shipped starter. No account."""
+    try:
+        return starter_jepa_compare(starter_id)
     except WorkspaceError as exc:
         raise _workspace_http(exc) from exc
 

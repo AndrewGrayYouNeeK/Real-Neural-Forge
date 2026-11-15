@@ -501,6 +501,39 @@
             <div id="diffusion-chart" class="chart-host" hidden></div>
           </section>
 
+          <section class="tool-view" id="view-jepa" data-tool-view="jepa" hidden>
+            <header class="tool-view-head">
+              <h2>JEPA pretraining</h2>
+              <button type="button" class="btn secondary back-to-chat" data-view="chat">Back to chat</button>
+            </header>
+            <p class="hint">
+              Mask spans, predict embeddings, then fine-tune a forecast head.
+              Compare holdout MAE against a small default transformer on the
+              shipped weather sample — no account required.
+            </p>
+            <div class="chip-row">
+              <button id="jepa-run-btn" class="btn primary" type="button">
+                Train &amp; compare (weather sample)
+              </button>
+            </div>
+            <p id="jepa-status" class="hint" hidden></p>
+            <p id="jepa-summary" class="pca-summary" hidden></p>
+            <div id="jepa-report" hidden>
+              <div class="table-wrap table-scroll">
+                <table>
+                  <caption class="visually-hidden">JEPA vs transformer MAE</caption>
+                  <thead>
+                    <tr>
+                      <th scope="col">Model</th>
+                      <th scope="col">Holdout MAE</th>
+                    </tr>
+                  </thead>
+                  <tbody id="jepa-compare-body"></tbody>
+                </table>
+              </div>
+            </div>
+          </section>
+
           <section class="tool-view" id="view-regimes" data-tool-view="regimes" hidden>
             <header class="tool-view-head">
               <h2>Regimes / patterns</h2>

@@ -18,6 +18,7 @@ const state = {
   lastPca: null,
   lastRegimes: null,
   lastDiffusion: null,
+  lastJepa: null,
 };
 
 const VOICE_RESTING_MESSAGE = "Voice is resting for today, text still works.";
@@ -2563,6 +2564,55 @@ async function runDiffusionDemo() {
   }
 }
 
+function renderJepaReport(payload) {
+  const summary = document.getElementById("jepa-summary");
+  const report = document.getElementById("jepa-report");
+  const body = document.getElementById("jepa-compare-body");
+  const status = document.getElementById("jepa-status");
+  if (!summary || !report || !body) return;
+  if (!payload || !Array.isArray(payload.models)) {
+    summary.hidden = true;
+    report.hidden = true;
+    return;
+  }
+  if (status) status.hidden = true;
+  summary.hidden = false;
+  summary.textContent = payload.summary || "JEPA compare ready.";
+  report.hidden = false;
+  body.replaceChildren();
+  payload.models.forEach((row) => {
+    const tr = document.createElement("tr");
+    const name = document.createElement("td");
+    name.textContent = row.label || row.name || "model";
+    const maeCell = document.createElement("td");
+    maeCell.textContent = Number(row.mae).toFixed(4);
+    tr.append(name, maeCell);
+    body.appendChild(tr);
+  });
+}
+
+async function runJepaDemo() {
+  const status = document.getElementById("jepa-status");
+  const button = document.getElementById("jepa-run-btn");
+  if (status) {
+    status.hidden = false;
+    status.textContent = "Pretraining JEPA and comparing on the weather sample…";
+  }
+  if (button) button.disabled = true;
+  try {
+    const payload = await fetchJson("/starters/weather/jepa-compare");
+    state.lastJepa = payload;
+    renderJepaReport(payload);
+  } catch (error) {
+    if (status) {
+      status.hidden = false;
+      status.textContent = error.message || "Could not run the JEPA compare.";
+    }
+  } finally {
+    if (button) button.disabled = false;
+  }
+}
+
 function showToolView(viewId, toolMeta) {
   const stage = document.getElementById("main-stage");
   if (!stage) return;
@@ -2589,6 +2639,9 @@ function showToolView(viewId, toolMeta) {
   }
   if (next === "diffusion") {
     renderDiffusionReport(state.lastDiffusion);
+  }
+  if (next === "jepa") {
+    renderJepaReport(state.lastJepa);
   }
   document.querySelectorAll(".tool-nav-btn").forEach((button) => {
     const current = button.dataset.toolId === (toolMeta && toolMeta.id);
@@ -3123,6 +3176,13 @@ const diffusionRunBtn = document.getElementById("diffusion-run-btn");
 if (diffusionRunBtn) {
   diffusionRunBtn.addEventListener("click", () => {
     void runDiffusionDemo();
+  });
+}
+
+const jepaRunBtn = document.getElementById("jepa-run-btn");
+if (jepaRunBtn) {
+  jepaRunBtn.addEventListener("click", () => {
+    void runJepaDemo();
   });
 }
 

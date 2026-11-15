@@ -107,7 +107,7 @@
       icon: "⬡",
       description: "Smarter learned representations for series.",
       status: "live",
-      view: "coming-soon",
+      view: "jepa",
     },
     {
       id: "what-if",
