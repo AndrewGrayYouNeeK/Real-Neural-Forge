@@ -782,6 +782,15 @@ function convertUncertainty(uncertainty: unknown): unknown {
   if (!uncertainty || typeof uncertainty !== "object") return uncertainty;
   const src = uncertainty as Record<string, unknown>;
   const next: Record<string, unknown> = { ...src };
+  const interval = src.interval_80;
+  if (interval && typeof interval === "object" && !Array.isArray(interval)) {
+    const band = interval as Record<string, unknown>;
+    next.interval_80 = {
+      ...band,
+      lower: convertNumberList(band.lower, celsiusToFahrenheit),
+      upper: convertNumberList(band.upper, celsiusToFahrenheit),
+    };
+  }
   for (const key of ["p10", "p50", "p90", "low", "high"]) {
     const value = src[key];
     if (Array.isArray(value)) {
@@ -1251,6 +1260,64 @@ async function runCompareHorizons(ctx: ToolContext, args: Record<string, unknown
   return { model_id: modelId, horizons: rows };
 }
 
+type ExplainStep = { step: number; p50: number; p10: number | null; p90: number | null };
+
+function fmtNum(value: number): string {
+  return Number.isInteger(value) ? String(value) : value.toFixed(1);
+}
+
+/** Pull the week-ahead path (already in display units) from a forecast tool payload. */
+export function explainSteps(forecast: unknown): ExplainStep[] {
+  if (!forecast || typeof forecast !== "object") return [];
+  const rows = (forecast as { forecast?: unknown }).forecast;
+  if (!Array.isArray(rows)) return [];
+  const steps: ExplainStep[] = [];
+  rows.forEach((row, index) => {
+    if (!row || typeof row !== "object") return;
+    const record = row as Record<string, unknown>;
+    const point = Number(record.p50 ?? record.value);
+    if (!Number.isFinite(point)) return;
+    const p10 = Number(record.p10);
+    const p90 = Number(record.p90);
+    steps.push({
+      step: Number.isFinite(Number(record.step)) ? Number(record.step) : index + 1,
+      p50: roundDisplay(point),
+      p10: Number.isFinite(p10) ? roundDisplay(p10) : null,
+      p90: Number.isFinite(p90) ? roundDisplay(p90) : null,
+    });
+  });
+  return steps;
+}
+
+/** One deterministic, user-ready paragraph for explain_prediction. */
+export function explainText(
+  label: string,
+  explanation: string,
+  steps: ExplainStep[],
+  unit: string,
+  lastObserved: number | null,
+): string {
+  const parts: string[] = [];
+  if (steps.length) {
+    const values = steps.map((row) => row.p50);
+    const lo = Math.min(...values);
+    const hi = Math.max(...values);
+    const span = steps.length > 1 ? `the next ${steps.length} steps` : "the next step";
+    const range = lo === hi ? `${fmtNum(lo)}${unit}` : `${fmtNum(lo)}–${fmtNum(hi)}${unit}`;
+    parts.push(`${label} forecast for ${span}: ${range}.`);
+    const lows = steps.map((row) => row.p10).filter((v): v is number => v != null);
+    const highs = steps.map((row) => row.p90).filter((v): v is number => v != null);
+    if (lows.length && highs.length) {
+      parts.push(`The 80% band runs about ${fmtNum(Math.min(...lows))}–${fmtNum(Math.max(...highs))}${unit}.`);
+    }
+  }
+  if (lastObserved != null) {
+    parts.push(`The latest observed value was ${fmtNum(roundDisplay(lastObserved))}${unit}.`);
+  }
+  if (explanation.trim()) parts.push(`Why: ${explanation.trim()}`);
+  return parts.join(" ");
+}
+
 async function runExplain(ctx: ToolContext, args: Record<string, unknown>): Promise<ToolResult["data"]> {
   const series = stringArg(args, "series", "weather") || "weather";
   // Use the full starter horizon so week-ahead paths are available; values are °F for weather.
@@ -1258,70 +1325,81 @@ async function runExplain(ctx: ToolContext, args: Record<string, unknown>): Prom
     series,
     horizon: isWeatherSeries(series) ? 7 : 1,
   });
-  const why =
-    forecast && typeof forecast === "object" && "why" in forecast
-      ? (forecast as Record<string, unknown>).why
-      : undefined;
+  const record = forecast && typeof forecast === "object" ? (forecast as Record<string, unknown>) : {};
+  const why = record.why;
+  let whyPayload: unknown = why;
   let explanation =
     why && typeof why === "object" && typeof (why as { explanation?: unknown }).explanation === "string"
       ? String((why as { explanation: string }).explanation)
       : "";
-  const weatherNote =
-    "Weather explanation_facts are already in °F (unit and storage_unit mark this). Quote those numbers as °F; never convert °C→°F again.";
-  const baseNote =
-    "Lead with the why explanation; then mention the point, interval, and accuracy using only these facts.";
-  const note = isWeatherSeries(series) ? `${baseNote} ${weatherNote}` : baseNote;
+  const weather = isWeatherSeries(series);
+  const alreadyF = record.unit === "°F" && record.storage_unit === "°C";
+  const historyRows = Array.isArray(record.history) ? (record.history as Array<Record<string, unknown>>) : [];
+  const historyDisplay = historyRows
+    .map((row) => Number(row.actual ?? row.value))
+    .filter((value) => Number.isFinite(value));
+  const steps = explainSteps(forecast);
   if (!explanation) {
     // Degrade gracefully: rebuild from history when the container omitted why.
-    // Forecast tool output may already be °F — convert back to °C for the why API
-    // so trend math matches storage scale, then keep explanation_facts in °F.
-    const alreadyF =
-      forecast &&
-      typeof forecast === "object" &&
-      (forecast as { unit?: unknown }).unit === "°F" &&
-      (forecast as { storage_unit?: unknown }).storage_unit === "°C";
-    const historyRows = Array.isArray((forecast as { history?: unknown }).history)
-      ? ((forecast as { history: Array<Record<string, unknown>> }).history)
-      : [];
-    const history = historyRows
-      .map((row) => Number(row.actual ?? row.value))
-      .filter((value) => Number.isFinite(value))
-      .map((value) => (alreadyF ? (value - 32) * (5 / 9) : value));
-    const steps = Array.isArray((forecast as { forecast?: unknown }).forecast)
-      ? ((forecast as { forecast: Array<Record<string, unknown>> }).forecast)
-      : [];
-    const next = steps[0];
-    let point = next ? Number(next.p50 ?? next.value) : undefined;
-    if (alreadyF && typeof point === "number" && Number.isFinite(point)) {
-      point = (point - 32) * (5 / 9);
-    }
+    // Tool output is °F for weather — convert back to °C for the why API so
+    // trend math matches storage scale. Only the text comes back.
+    const toStorage = (value: number) => (alreadyF ? (value - 32) * (5 / 9) : value);
+    const point = steps[0]?.p50;
     const rebuilt = await ctx.fetchContainer("/analysis/why", {
       method: "POST",
       headers: { ...ctx.authHeaders, "Content-Type": "application/json" },
       body: JSON.stringify({
-        history,
-        forecast: Number.isFinite(point) ? point : null,
-        unit: alreadyF ? "°C" : ((forecast as { unit?: string }).unit ?? null),
+        history: historyDisplay.map(toStorage),
+        forecast: typeof point === "number" ? toStorage(point) : null,
+        unit: alreadyF ? "°C" : (typeof record.unit === "string" ? record.unit : null),
       }),
     });
     if (rebuilt.status < 400 && rebuilt.json && typeof rebuilt.json === "object") {
-      const payload = rebuilt.json as { explanation?: string; drivers?: unknown };
+      const payload = rebuilt.json as { explanation?: string };
+      whyPayload = payload;
       explanation = typeof payload.explanation === "string" ? payload.explanation : "";
-      return {
-        series,
-        why: payload,
-        explanation,
-        explanation_facts: forecast,
-        note,
-      };
     }
   }
+  const unit = typeof record.unit === "string" ? record.unit : "";
+  const label = typeof record.name === "string" && record.name ? String(record.name) : series;
+  const lastObserved = historyDisplay.length ? historyDisplay[historyDisplay.length - 1] : null;
+  const text = explainText(label, explanation, steps, unit, lastObserved);
+  const drivers =
+    whyPayload && typeof whyPayload === "object" && Array.isArray((whyPayload as { drivers?: unknown }).drivers)
+      ? (whyPayload as { drivers: unknown[] }).drivers
+      : [];
+  const weatherNote =
+    "All numbers here are already in °F. Quote them exactly as °F; never convert again. Week-ahead values must stay inside the 80% band.";
+  const baseNote =
+    "Lead with the why explanation; then mention the point, interval, and accuracy using only these facts. Keep it to 2–4 short sentences.";
+  const accuracy =
+    record.recent_accuracy && typeof record.recent_accuracy === "object"
+      ? (record.recent_accuracy as Record<string, unknown>)
+      : null;
+  // Compact payload so the tool note never gets cut mid-JSON.
   return {
     series,
-    why,
+    unit,
+    storage_unit: record.storage_unit,
     explanation,
-    explanation_facts: forecast,
-    note,
+    drivers,
+    text,
+    week_ahead: steps,
+    last_observed: lastObserved != null ? roundDisplay(lastObserved) : null,
+    recent_accuracy: accuracy
+      ? {
+          comparison: accuracy.comparison,
+          metrics: accuracy.metrics,
+          unit: accuracy.unit,
+          improvement_pct: accuracy.improvement_pct,
+        }
+      : null,
+    explanation_facts: {
+      unit,
+      storage_unit: record.storage_unit,
+      forecast: Array.isArray(record.forecast) ? record.forecast : [],
+    },
+    note: weather ? `${baseNote} ${weatherNote}` : baseNote,
   };
 }
 
