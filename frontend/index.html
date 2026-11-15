@@ -406,6 +406,38 @@
             </div>
           </section>
 
+          <section class="tool-view" id="view-why" data-tool-view="why" hidden>
+            <header class="tool-view-head">
+              <h2>Why this forecast</h2>
+              <button type="button" class="btn secondary back-to-chat" data-view="chat">Back to chat</button>
+            </header>
+            <p class="hint">
+              Every prediction now includes a short plain-English why: recent trend,
+              seasonality when it shows up, and PCA drivers or K-Means regimes when
+              those analyses are available.
+            </p>
+            <div id="why-empty" class="hint">
+              Run a sample forecast or ask chat “why this forecast” to see the
+              explanation under the prediction.
+            </div>
+            <div class="chip-row">
+              <button
+                class="chip"
+                type="button"
+                data-question="Why does the Central Park sample forecast look like that?"
+              >
+                Explain the weather sample
+              </button>
+              <button
+                class="chip"
+                type="button"
+                data-question="Explain the latest forecast for my series"
+              >
+                Explain my series
+              </button>
+            </div>
+          </section>
+
           <section class="tool-view" id="view-pca" data-tool-view="pca" hidden>
             <header class="tool-view-head">
               <h2>Column analysis (PCA)</h2>

@@ -30,6 +30,7 @@ from src.accounts.limits import Limits, load_limits
 from src.accounts.passwords import hash_password, validate_password, verify_password
 from src.analysis.kmeans import cluster_csv_bytes
 from src.analysis.pca import analyze_csv_bytes
+from src.analysis.why import build_why_explanation
 from src.evaluation.backtest import rolling_origin_backtest
 from src.evaluation.run import _predictor_fn, save_backtest, stored_backtest
 from src.evaluation.tracking import default_tracker, record_payload, uncertainty_for
@@ -1247,6 +1248,29 @@ def predict_latest_model(
     )
     result["target_column"] = target
     result["dataset_id"] = dataset["id"]
+    history = [float(step[0]) for step in sequence if step]
+    point = result.get("prediction")
+    forecast_value: float | None = None
+    if isinstance(point, list) and point and isinstance(point[0], int | float):
+        forecast_value = float(point[0])
+    elif isinstance(point, int | float):
+        forecast_value = float(point)
+    pca_payload: dict[str, Any] | None = None
+    regimes_payload: dict[str, Any] | None = None
+    try:
+        pca_payload = analyze_csv_bytes(blob).as_dict()
+    except ValueError:
+        pca_payload = None
+    try:
+        regimes_payload = cluster_csv_bytes(blob).as_dict()
+    except ValueError:
+        regimes_payload = None
+    result["why"] = build_why_explanation(
+        history=history,
+        forecast=forecast_value,
+        pca=pca_payload,
+        regimes=regimes_payload,
+    )
     return result
 
 

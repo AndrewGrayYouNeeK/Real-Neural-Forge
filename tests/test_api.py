@@ -922,7 +922,14 @@ class TestForecastDashboard:
         assert 'id: "ml-tools"' in tools_js
         ml_tools = tools_js.split('id: "ml-tools"', 1)[1][:280]
         assert 'status: "live"' in ml_tools
+        assert 'id: "why"' in tools_js
+        why_tool = tools_js.split('id: "why"', 1)[1][:180]
+        assert 'status: "live"' in why_tool
+        assert 'view: "why"' in why_tool
+        phase3 = tools_js.split('id: "phase-3"', 1)[1][:220]
+        assert 'status: "in-progress"' in phase3
         assert "lottery" not in tools_js.lower()
+        assert 'id="view-why"' in html
         assert 'id="view-memory"' in html
         assert 'id="memory-list"' in html
         assert 'id="memory-clear"' in html
@@ -942,6 +949,7 @@ class TestForecastDashboard:
         assert "renameWorkspaceDataset" in app_js
         assert "deleteWorkspaceDataset" in app_js
         assert "retrainWorkspaceDataset" in app_js
+        assert "whyExplanationText" in app_js
         assert 'method: "PATCH"' in app_js
         assert "celsiusToFahrenheit" in app_js
         assert "return `${formatMetric(celsiusToFahrenheit(number))}°F`" in app_js
