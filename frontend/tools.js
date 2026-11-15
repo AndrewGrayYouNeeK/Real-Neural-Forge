@@ -138,8 +138,8 @@
       name: "Alerts",
       icon: "⚠",
       description: "Notify when a series crosses a threshold.",
-      status: "coming-soon",
-      view: "coming-soon",
+      status: "live",
+      view: "alerts",
     },
     {
       id: "synthetic",

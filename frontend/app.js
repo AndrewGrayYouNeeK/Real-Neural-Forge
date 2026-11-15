@@ -2879,6 +2879,121 @@ function activateTool(tool) {
   if (tool.id === "reports") {
     void loadReportsPanel();
   }
+  if (tool.id === "alerts") {
+    void loadAlertsPanel();
+  }
+}
+
+async function loadAlertsPanel() {
+  const ruleList = document.getElementById("alert-rule-list");
+  const eventList = document.getElementById("alert-event-list");
+  const note = document.getElementById("alert-note");
+  if (!ruleList || !eventList) return;
+  ruleList.replaceChildren();
+  eventList.replaceChildren();
+  try {
+    const data = await fetchJson("/agent/alerts");
+    const rules = Array.isArray(data.rules) ? data.rules : [];
+    const events = Array.isArray(data.events) ? data.events : [];
+    if (!rules.length) {
+      appendTextItem(ruleList, "No alert rules yet.");
+    }
+    for (const rule of rules) {
+      const row = document.createElement("li");
+      const label = document.createElement("span");
+      label.textContent = `${rule.name} · ${rule.kind} · ${rule.series}`;
+      const remove = document.createElement("button");
+      remove.type = "button";
+      remove.className = "btn secondary btn-small";
+      remove.textContent = "Delete";
+      remove.addEventListener("click", async () => {
+        try {
+          await fetchJson(`/agent/alerts/${encodeURIComponent(rule.id)}`, {
+            method: "DELETE",
+          });
+          await loadAlertsPanel();
+        } catch (error) {
+          if (note) note.textContent = error.message || "Could not delete alert.";
+        }
+      });
+      row.append(label, remove);
+      ruleList.append(row);
+    }
+    if (!events.length) {
+      appendTextItem(eventList, "No fired alerts yet.");
+    }
+    for (const event of events) {
+      const message =
+        event.payload && typeof event.payload.message === "string"
+          ? event.payload.message
+          : JSON.stringify(event.payload || {});
+      appendTextItem(
+        eventList,
+        `${event.acknowledged ? "✓ " : ""}${message}`
+      );
+    }
+  } catch (error) {
+    if (note) note.textContent = error.message || "Could not load alerts.";
+  }
+}
+
+async function submitAlertForm(event) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const note = document.getElementById("alert-note");
+  const kind = form.kind.value === "anomaly" ? "anomaly" : "threshold";
+  const body = {
+    name: form.name.value.trim(),
+    series: form.series.value,
+    kind,
+    config:
+      kind === "threshold"
+        ? { op: form.op.value, value: Number(form.value.value) }
+        : {},
+  };
+  try {
+    await fetchJson("/agent/alerts", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    form.name.value = "";
+    if (note) note.textContent = "Alert saved.";
+    await loadAlertsPanel();
+  } catch (error) {
+    if (note) note.textContent = error.message || "Could not save alert.";
+  }
+}
+
+async function checkAlertsNow() {
+  const note = document.getElementById("alert-note");
+  try {
+    const data = await fetchJson("/agent/alerts/check", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: "{}",
+    });
+    const fired = Array.isArray(data.fired) ? data.fired : [];
+    if (note) {
+      note.textContent = fired.length
+        ? `Fired ${fired.length} alert(s).`
+        : "No alerts fired.";
+    }
+    if (fired.length) {
+      const lines = fired.map((row) => {
+        const message =
+          row.result && typeof row.result.message === "string"
+            ? row.result.message
+            : "Alert fired.";
+        const name = row.rule && row.rule.name ? row.rule.name : "alert";
+        return `${name}: ${message}`;
+      });
+      addReply(lines.join("\n\n"));
+    }
+    await loadAlertsPanel();
+  } catch (error) {
+    if (note) note.textContent = error.message || "Check failed.";
+  }
 }
 
 async function createShareableReport(series) {
@@ -3296,6 +3411,12 @@ const whatIfForm = document.getElementById("what-if-form");
 if (whatIfForm) whatIfForm.addEventListener("submit", (event) => void submitWhatIfForm(event));
 const reportForm = document.getElementById("report-create-form");
 if (reportForm) reportForm.addEventListener("submit", (event) => void submitReportForm(event));
+const alertForm = document.getElementById("alert-create-form");
+if (alertForm) alertForm.addEventListener("submit", (event) => void submitAlertForm(event));
+const alertCheck = document.getElementById("alert-check");
+if (alertCheck) alertCheck.addEventListener("click", () => void checkAlertsNow());
+const alertRefresh = document.getElementById("alert-refresh");
+if (alertRefresh) alertRefresh.addEventListener("click", () => void loadAlertsPanel());
 
 document.getElementById("unhinged-toggle").addEventListener("click", () => {
   setChatMode(chatMode() === "unhinged" ? "normal" : "unhinged");

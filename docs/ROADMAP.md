@@ -41,7 +41,8 @@ and never deploy the frontend Worker `real-neural-forge`.
 3. **Reports** — one-click shareable summary (forecast, accuracy, regimes)
    via `POST /analysis/report` + D1 `public_reports` (`/agent/reports/{id}`).
    Landing tool **Live**.
-4. **Alerts** — threshold or unusual-point alerts from K-Means flags (in-app).
+4. **Alerts** — threshold or unusual-point alerts from K-Means flags (in-app
+   only; D1 `alert_rules` / `alert_events`, `/agent/alerts`). Landing **Live**.
 5. **Synthetic data** — generate realistic sample series (diffusion can help).
 
 ## Phase 4 — Multimodal

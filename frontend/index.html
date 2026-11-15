@@ -406,6 +406,54 @@
             </div>
           </section>
 
+          <section class="tool-view" id="view-alerts" data-tool-view="alerts" hidden>
+            <header class="tool-view-head">
+              <h2>Alerts</h2>
+              <button type="button" class="btn secondary back-to-chat" data-view="chat">Back to chat</button>
+            </header>
+            <p class="hint">
+              In-app only — set a threshold or watch for unusual K-Means points.
+              No email or SMS.
+            </p>
+            <form id="alert-create-form" class="side-panel-body">
+              <label for="alert-name">Name</label>
+              <input id="alert-name" name="name" type="text" required maxlength="80" placeholder="Hot day watch" />
+              <label for="alert-series">Series</label>
+              <select id="alert-series" name="series">
+                <option value="weather">weather</option>
+                <option value="stocks">stocks</option>
+                <option value="crypto">crypto</option>
+                <option value="lunar">lunar</option>
+                <option value="near-earth">near-earth</option>
+              </select>
+              <label for="alert-kind">Kind</label>
+              <select id="alert-kind" name="kind">
+                <option value="threshold">Threshold</option>
+                <option value="anomaly">Unusual point (K-Means)</option>
+              </select>
+              <label for="alert-op">Threshold op</label>
+              <select id="alert-op" name="op">
+                <option value=">">&gt;</option>
+                <option value="<">&lt;</option>
+                <option value=">=">&gt;=</option>
+                <option value="<=">&lt;=</option>
+                <option value="abs>">abs&gt;</option>
+              </select>
+              <label for="alert-value">Threshold value</label>
+              <input id="alert-value" name="value" type="number" value="30" step="any" />
+              <button class="btn primary btn-small" type="submit">Save alert</button>
+            </form>
+            <div class="message-actions">
+              <button id="alert-check" class="btn secondary btn-small" type="button">Check now</button>
+              <button id="alert-refresh" class="btn secondary btn-small" type="button">Refresh</button>
+            </div>
+            <p id="alert-note" class="hint"></p>
+            <h3>Rules</h3>
+            <ul id="alert-rule-list" class="side-list"></ul>
+            <h3>Fired</h3>
+            <ul id="alert-event-list" class="side-list"></ul>
+          </section>
+
           <section class="tool-view" id="view-reports" data-tool-view="reports" hidden>
             <header class="tool-view-head">
               <h2>Reports</h2>

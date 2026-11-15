@@ -8,6 +8,7 @@ import numpy as np
 from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 
+from src.analysis.alerts import evaluate_alert
 from src.analysis.kmeans import cluster_csv_bytes, cluster_matrix
 from src.analysis.pca import analyze_csv_bytes, analyze_matrix
 from src.analysis.report import build_starter_report
@@ -60,6 +61,14 @@ class ReportRequest(BaseModel):
 
     series: str = Field(min_length=1)
     points: int = Field(default=120, ge=8, le=400)
+
+
+class AlertCheckRequest(BaseModel):
+    """Evaluate one alert rule against a starter series."""
+
+    series: str = Field(min_length=1)
+    kind: Literal["threshold", "anomaly"]
+    config: dict[str, Any] = Field(default_factory=dict)
 
 
 @router.post("/analysis/pca")
@@ -189,5 +198,14 @@ def build_series_report(body: ReportRequest) -> dict[str, Any]:
     """Assemble forecast + accuracy + regimes into a shareable snapshot."""
     try:
         return build_starter_report(body.series, points=body.points)
+    except WorkspaceError as exc:
+        raise HTTPException(status_code=exc.status, detail=exc.detail) from exc
+
+
+@router.post("/analysis/alert-check")
+def run_alert_check(body: AlertCheckRequest) -> dict[str, Any]:
+    """Check a threshold or K-Means anomaly alert against a sample series."""
+    try:
+        return evaluate_alert(body.series, body.kind, body.config)
     except WorkspaceError as exc:
         raise HTTPException(status_code=exc.status, detail=exc.detail) from exc

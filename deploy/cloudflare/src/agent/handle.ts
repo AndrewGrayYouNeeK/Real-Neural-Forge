@@ -29,6 +29,15 @@ import {
   resolveMemoryIdentity,
   upsertMemory,
 } from "./memory";
+import {
+  acknowledgeAlertEvent,
+  createAlertRule,
+  deleteAlertRule,
+  insertAlertEvent,
+  listAlertEvents,
+  listAlertRules,
+  type AlertKind,
+} from "./alerts";
 import { createReport, getReport, listReports } from "./reports";
 import {
   createScenario,
@@ -480,6 +489,101 @@ async function handleReports(
   return json({ error: "Method not allowed." }, 405);
 }
 
+async function handleAlerts(
+  request: Request,
+  env: AgentEnv,
+  path: string,
+  body: Record<string, unknown> | null,
+): Promise<Response> {
+  if (!env.WORKSPACES_DB) {
+    return json({ error: "Alert store is not configured." }, 503);
+  }
+  const identity = await identityFor(request, env);
+  const db = env.WORKSPACES_DB;
+  const rest = path.replace(/^\/agent\/alerts\/?/, "");
+
+  if (request.method === "GET" && !rest) {
+    const [rules, events] = await Promise.all([
+      listAlertRules(db, identity.scope),
+      listAlertEvents(db, identity.scope),
+    ]);
+    return json({
+      scope: identity.signedIn ? (identity.owner ? "owner" : "user") : "visitor",
+      rules,
+      events,
+    });
+  }
+
+  if (request.method === "POST" && !rest) {
+    const name = typeof body?.name === "string" ? body.name : "";
+    const series = typeof body?.series === "string" ? body.series : "weather";
+    const kindRaw = typeof body?.kind === "string" ? body.kind : "threshold";
+    const kind: AlertKind = kindRaw === "anomaly" ? "anomaly" : "threshold";
+    const config =
+      body?.config && typeof body.config === "object" && !Array.isArray(body.config)
+        ? (body.config as Record<string, unknown>)
+        : {};
+    const result = await createAlertRule(db, identity.scope, { name, series, kind, config });
+    if (!result.ok) return json({ error: result.error }, 400);
+    return json({ rule: result.rule });
+  }
+
+  if (request.method === "POST" && rest === "check") {
+    const rules = await listAlertRules(db, identity.scope);
+    const seriesFilter =
+      typeof body?.series === "string" && body.series.trim() ? body.series.trim() : null;
+    const fetchContainer = makeContainerFetcher(env, request);
+    const fired: Array<Record<string, unknown>> = [];
+    for (const rule of rules) {
+      if (!rule.enabled) continue;
+      if (seriesFilter && rule.series !== seriesFilter) continue;
+      const checked = await fetchContainer("/analysis/alert-check", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          series: rule.series,
+          kind: rule.kind,
+          config: rule.config,
+        }),
+      });
+      if (checked.status >= 400 || !checked.json || typeof checked.json !== "object") {
+        continue;
+      }
+      const payload = checked.json as Record<string, unknown>;
+      if (payload.fired !== true) continue;
+      const event = await insertAlertEvent(db, identity.scope, rule.id, {
+        ...payload,
+        rule_name: rule.name,
+      });
+      fired.push({ rule, event, result: payload });
+    }
+    return json({ checked: rules.length, fired });
+  }
+
+  if (!rest) return json({ error: "Method not allowed." }, 405);
+  const parts = rest.split("/");
+  const first = decodeURIComponent(parts[0] || "");
+  if (!first) return json({ error: "Not found." }, 404);
+
+  if (request.method === "DELETE" && parts.length === 1) {
+    await deleteAlertRule(db, identity.scope, first);
+    return json({ deleted: first });
+  }
+
+  if (
+    request.method === "POST" &&
+    parts.length === 3 &&
+    parts[0] === "events" &&
+    parts[2] === "ack"
+  ) {
+    const eventId = decodeURIComponent(parts[1] || "");
+    await acknowledgeAlertEvent(db, identity.scope, eventId);
+    return json({ acknowledged: eventId });
+  }
+
+  return json({ error: "Method not allowed." }, 405);
+}
+
 export async function handleAgent(
   request: Request,
   env: AgentEnv,
@@ -512,6 +616,9 @@ export async function handleAgent(
   }
   if (path === "/agent/reports" || path.startsWith("/agent/reports/")) {
     return handleReports(request, env, path, body);
+  }
+  if (path === "/agent/alerts" || path.startsWith("/agent/alerts/")) {
+    return handleAlerts(request, env, path, body);
   }
   if (path === "/agent/chats" || path.startsWith("/agent/chats/")) {
     return handleChats(request, env, path, body);

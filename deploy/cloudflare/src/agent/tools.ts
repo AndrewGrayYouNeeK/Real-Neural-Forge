@@ -15,6 +15,13 @@ import {
   upsertMemory,
 } from "./memory";
 import { AGENT_TOOL_NAMES, type AgentToolName } from "./protocol";
+import {
+  createAlertRule,
+  insertAlertEvent,
+  listAlertEvents,
+  listAlertRules,
+  type AlertKind,
+} from "./alerts";
 import { createReport } from "./reports";
 import {
   createScenario,
@@ -454,6 +461,60 @@ export const TOOL_DEFINITIONS = [
         },
       },
       required: ["series"],
+      additionalProperties: false,
+    },
+  },
+  {
+    type: "function" as const,
+    name: "create_alert",
+    description:
+      "Create an in-app alert rule: threshold on the latest value, or unusual-point (K-Means anomaly) for a series. No email/SMS.",
+    parameters: {
+      type: "object",
+      properties: {
+        name: { type: "string", description: "Short alert name." },
+        series: { type: "string", description: "Starter series id." },
+        kind: {
+          type: "string",
+          enum: ["threshold", "anomaly"],
+          description: "threshold or anomaly.",
+        },
+        op: {
+          type: "string",
+          description: "For threshold: >, <, >=, <=, or abs>. Default >.",
+        },
+        value: {
+          type: "number",
+          description: "For threshold: numeric threshold.",
+        },
+      },
+      required: ["name", "series", "kind"],
+      additionalProperties: false,
+    },
+  },
+  {
+    type: "function" as const,
+    name: "list_alerts",
+    description: "List in-app alert rules and recent fired events for this visitor/account.",
+    parameters: {
+      type: "object",
+      properties: {},
+      additionalProperties: false,
+    },
+  },
+  {
+    type: "function" as const,
+    name: "check_alerts",
+    description:
+      "Run enabled alert rules now (threshold / K-Means anomalies) and return any newly fired in-app events.",
+    parameters: {
+      type: "object",
+      properties: {
+        series: {
+          type: "string",
+          description: "Optional series filter.",
+        },
+      },
       additionalProperties: false,
     },
   },
@@ -1409,6 +1470,90 @@ async function runWhatIf(ctx: ToolContext, args: Record<string, unknown>): Promi
   };
 }
 
+async function runCreateAlert(
+  ctx: ToolContext,
+  args: Record<string, unknown>,
+): Promise<ToolResult["data"]> {
+  const { db, scope } = requireMemoryDb(ctx);
+  const name = stringArg(args, "name");
+  const series = stringArg(args, "series", "weather") || "weather";
+  const kindRaw = stringArg(args, "kind", "threshold") || "threshold";
+  const kind: AlertKind = kindRaw === "anomaly" ? "anomaly" : "threshold";
+  const config: Record<string, unknown> = {};
+  if (kind === "threshold") {
+    config.op = stringArg(args, "op", ">") || ">";
+    const valueRaw = args.value;
+    config.value =
+      typeof valueRaw === "number" && Number.isFinite(valueRaw) ? valueRaw : 0;
+  }
+  const result = await createAlertRule(db, scope, { name, series, kind, config });
+  if (!result.ok) return { ok: false, text: result.error };
+  return {
+    ok: true,
+    rule: result.rule,
+    text: `Created ${kind} alert “${result.rule.name}” on ${series}.`,
+  };
+}
+
+async function runListAlerts(ctx: ToolContext): Promise<ToolResult["data"]> {
+  const { db, scope } = requireMemoryDb(ctx);
+  const [rules, events] = await Promise.all([
+    listAlertRules(db, scope),
+    listAlertEvents(db, scope),
+  ]);
+  return {
+    ok: true,
+    rules,
+    events,
+    text: rules.length
+      ? `${rules.length} rule(s), ${events.length} recent event(s).`
+      : "No alert rules yet.",
+  };
+}
+
+async function runCheckAlerts(
+  ctx: ToolContext,
+  args: Record<string, unknown>,
+): Promise<ToolResult["data"]> {
+  const { db, scope } = requireMemoryDb(ctx);
+  const seriesFilter = stringArg(args, "series") || null;
+  const rules = await listAlertRules(db, scope);
+  const fired: Array<Record<string, unknown>> = [];
+  for (const rule of rules) {
+    if (!rule.enabled) continue;
+    if (seriesFilter && rule.series !== seriesFilter) continue;
+    const checked = await ctx.fetchContainer(
+      "/analysis/alert-check",
+      containerInit(ctx, {
+        method: "POST",
+        headers: { ...ctx.authHeaders, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          series: rule.series,
+          kind: rule.kind,
+          config: rule.config,
+        }),
+      }),
+    );
+    if (checked.status >= 400 || !checked.json || typeof checked.json !== "object") {
+      continue;
+    }
+    const payload = checked.json as Record<string, unknown>;
+    if (payload.fired !== true) continue;
+    const event = await insertAlertEvent(db, scope, rule.id, {
+      ...payload,
+      rule_name: rule.name,
+    });
+    fired.push({ rule, event, result: payload });
+  }
+  return {
+    ok: true,
+    fired,
+    text: fired.length
+      ? `Fired ${fired.length} alert(s).`
+      : "No alerts fired on this check.",
+  };
+}
+
 async function runCreateReport(
   ctx: ToolContext,
   args: Record<string, unknown>,
@@ -1619,6 +1764,12 @@ export async function dispatchTool(
         return runWhatIf(keyed, args);
       case "create_report":
         return runCreateReport(keyed, args);
+      case "create_alert":
+        return runCreateAlert(keyed, args);
+      case "list_alerts":
+        return runListAlerts(keyed);
+      case "check_alerts":
+        return runCheckAlerts(keyed, args);
       default: {
         const unexpected: never = toolName;
         throw new Error(`Unhandled tool: ${String(unexpected)}`);
