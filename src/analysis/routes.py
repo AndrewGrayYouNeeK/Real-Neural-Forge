@@ -1,8 +1,8 @@
-"""HTTP routes for lightweight analysis helpers (PCA, K-Means)."""
+"""HTTP routes for lightweight analysis helpers (PCA, K-Means, what-if)."""
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 import numpy as np
 from fastapi import APIRouter, HTTPException, Query, Request
@@ -11,6 +11,8 @@ from pydantic import BaseModel, Field
 from src.analysis.kmeans import cluster_csv_bytes, cluster_matrix
 from src.analysis.pca import analyze_csv_bytes, analyze_matrix
 from src.analysis.why import build_why_explanation
+from src.workspace.errors import WorkspaceError
+from src.workspace.starter_forecast import starter_what_if
 
 router = APIRouter(tags=["analysis"])
 
@@ -40,6 +42,16 @@ class WhyRequest(BaseModel):
     unit: str | None = None
     pca: dict[str, Any] | None = None
     regimes: dict[str, Any] | None = None
+
+
+class WhatIfRequest(BaseModel):
+    """Shock the last input on a starter series and compare forecasts."""
+
+    starter_id: str = Field(min_length=1)
+    mode: Literal["pct", "abs"] = "pct"
+    value: float = -10.0
+    horizon: int | None = Field(default=None, ge=1, le=64)
+    feature_index: int = Field(default=0, ge=0)
 
 
 @router.post("/analysis/pca")
@@ -147,3 +159,18 @@ def explain_why_forecast(body: WhyRequest) -> dict[str, Any]:
         pca=body.pca,
         regimes=body.regimes,
     )
+
+
+@router.post("/analysis/what-if")
+def run_what_if(body: WhatIfRequest) -> dict[str, Any]:
+    """Compare baseline vs shocked last-input forecast for a sample starter."""
+    try:
+        return starter_what_if(
+            body.starter_id,
+            mode=body.mode,
+            value=body.value,
+            horizon=body.horizon,
+            feature_index=body.feature_index,
+        )
+    except WorkspaceError as exc:
+        raise HTTPException(status_code=exc.status, detail=exc.detail) from exc

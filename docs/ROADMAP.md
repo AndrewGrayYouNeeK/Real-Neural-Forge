@@ -35,7 +35,9 @@ and never deploy the frontend Worker `real-neural-forge`.
    from recent trend / seasonality, plus PCA drivers and K-Means regimes when
    available (`POST /analysis/why`, `why` on starter / predict-latest payloads,
    `explain_prediction` agent tool). Landing tool **Live**.
-2. **What-if** — tweak a saved scenario input and see the forecast change.
+2. **What-if** — shock the last input on a starter or saved-scenario series
+   (`POST /analysis/what-if`, workspace `…/what-if`, agent `what_if`); compare
+   baseline vs shocked path. Landing tool **Live**.
 3. **Reports** — one-click shareable summary (forecast, accuracy, regimes).
 4. **Alerts** — threshold or unusual-point alerts from K-Means flags (in-app).
 5. **Synthetic data** — generate realistic sample series (diffusion can help).

@@ -406,6 +406,39 @@ export const TOOL_DEFINITIONS = [
       additionalProperties: false,
     },
   },
+  {
+    type: "function" as const,
+    name: "what_if",
+    description:
+      "Shock the last input on a series (or a saved scenario's series) and compare the baseline forecast to the shocked path. Use for counterfactuals like 'what if the last value dropped 10%'.",
+    parameters: {
+      type: "object",
+      properties: {
+        series: {
+          type: "string",
+          description: "Starter id or workspace model id. Optional when scenario_id is set.",
+        },
+        scenario_id: {
+          type: "string",
+          description: "Saved scenario id; uses its series/horizon when set.",
+        },
+        mode: {
+          type: "string",
+          enum: ["pct", "abs"],
+          description: "pct = percent change on last input; abs = add value. Default pct.",
+        },
+        value: {
+          type: "number",
+          description: "Shock size. Default -10 for a 10% drop.",
+        },
+        horizon: {
+          type: "integer",
+          description: "Forecast horizon steps. Default from scenario or 1.",
+        },
+      },
+      additionalProperties: false,
+    },
+  },
 ];
 
 export function toolsForResponsesApi(): Array<Record<string, unknown>> {
@@ -1293,6 +1326,71 @@ async function runRunScenario(ctx: ToolContext, args: Record<string, unknown>): 
   };
 }
 
+async function runWhatIf(ctx: ToolContext, args: Record<string, unknown>): Promise<ToolResult["data"]> {
+  let series = stringArg(args, "series").toLowerCase();
+  let horizon = intArg(args, "horizon", 1, 1, 24);
+  const scenarioId = stringArg(args, "scenario_id");
+  if (scenarioId) {
+    const { db, scope } = requireMemoryDb(ctx);
+    const scenario = await getScenarioOwned(db, scope, scenarioId);
+    if (!scenario) {
+      return { ok: false, text: "Scenario not found." };
+    }
+    if (!series && scenario.series) series = String(scenario.series).toLowerCase();
+    if (scenario.horizon && (!args.horizon || typeof args.horizon !== "number")) {
+      horizon = Math.min(24, Math.max(1, Math.floor(scenario.horizon)));
+    }
+  }
+  if (!series) series = "weather";
+  const modeRaw = stringArg(args, "mode", "pct").toLowerCase() || "pct";
+  const mode = modeRaw === "abs" ? "abs" : "pct";
+  const valueRaw = args.value;
+  const value =
+    typeof valueRaw === "number" && Number.isFinite(valueRaw) ? valueRaw : -10;
+  const body = { mode, value, horizon, feature_index: 0 };
+  if (STARTER_IDS.has(series)) {
+    const result = await ctx.fetchContainer(
+      "/analysis/what-if",
+      containerInit(ctx, {
+        method: "POST",
+        headers: { ...ctx.authHeaders, "Content-Type": "application/json" },
+        body: JSON.stringify({ starter_id: series, ...body }),
+      }),
+    );
+    throwIfContainerStatusError(result.status, "What-if");
+    const payload = result.json as Record<string, unknown>;
+    return {
+      ok: true,
+      ...payload,
+      text:
+        typeof payload.summary === "string"
+          ? payload.summary
+          : `What-if on ${series} complete.`,
+    };
+  }
+  const result = await ctx.fetchContainer(
+    `/workspace/models/${encodeURIComponent(series)}/what-if`,
+    containerInit(ctx, {
+      method: "POST",
+      headers: { ...ctx.authHeaders, "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    }),
+  );
+  if (result.status === 401 || result.status === 403) {
+    return { signed_in: false, text: "Sign in to run what-if on a private model." };
+  }
+  throwIfContainerStatusError(result.status, "What-if");
+  const payload = result.json as Record<string, unknown>;
+  return {
+    ok: true,
+    ...payload,
+    text:
+      typeof payload.summary === "string"
+        ? payload.summary
+        : `What-if on ${series} complete.`,
+  };
+}
+
 async function runAnalyzePca(ctx: ToolContext, args: Record<string, unknown>): Promise<ToolResult["data"]> {
   const datasetId = stringArg(args, "dataset_id", "");
   if (!datasetId) {
@@ -1450,6 +1548,8 @@ export async function dispatchTool(
         return runAnalyzePca(keyed, args);
       case "analyze_regimes":
         return runAnalyzeRegimes(keyed, args);
+      case "what_if":
+        return runWhatIf(keyed, args);
       default: {
         const unexpected: never = toolName;
         throw new Error(`Unhandled tool: ${String(unexpected)}`);

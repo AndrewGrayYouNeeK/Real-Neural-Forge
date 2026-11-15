@@ -14,6 +14,7 @@ from typing import Any
 
 import torch
 
+from src.analysis.whatif import compare_window_forecasts
 from src.analysis.why import attach_why
 from src.dashboard_data import recent_series
 from src.evaluation.tracking import default_tracker, steps_from_payload, uncertainty_for
@@ -42,6 +43,48 @@ def clear_forecast_cache() -> None:
     """Drop cached starter predictors. Tests call this after swapping files."""
     _predictors.clear()
     _lite_payloads.clear()
+
+
+def starter_what_if(
+    starter_id: str,
+    *,
+    mode: str = "pct",
+    value: float = -10.0,
+    horizon: int | None = None,
+    feature_index: int = 0,
+    points: int = 120,
+) -> dict[str, Any]:
+    """Baseline vs shocked last-input forecast for a shipped starter."""
+    starter = starter_by_id(starter_id)
+    if starter is None:
+        raise WorkspaceError(404, "Starter not found.")
+    payload = starter_forecast(starter_id, points=points, lite=True)
+    window = payload.get("predict_window")
+    if not isinstance(window, list) or not window:
+        raise WorkspaceError(422, "This sample has no predict window yet.")
+    try:
+        cfg = starter.config()
+    except (OSError, ValueError) as exc:
+        raise WorkspaceError(503, "The sample template is unreadable.") from exc
+    predictor = _predictor(starter, cfg)
+    spec = forecast_spec_from_config(cfg)
+    steps = int(horizon) if horizon is not None else max(1, int(spec.horizon))
+    try:
+        result = compare_window_forecasts(
+            predictor,
+            window,
+            horizon=steps,
+            mode=mode,
+            value=value,
+            feature_index=feature_index,
+        )
+    except ValueError as exc:
+        raise WorkspaceError(422, str(exc)) from exc
+    result["starter_id"] = starter.id
+    result["name"] = starter.name
+    result["unit"] = starter.unit or STARTER_UNITS.get(starter.id)
+    result["series"] = starter.id
+    return result
 
 
 def predictor_for_starter(starter: Starter, cfg: dict[str, Any]) -> Predictor:

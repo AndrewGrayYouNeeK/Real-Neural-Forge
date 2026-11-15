@@ -114,8 +114,8 @@
       name: "What-if",
       icon: "↝",
       description: "Counterfactual shocks on a forecast path.",
-      status: "coming-soon",
-      view: "coming-soon",
+      status: "live",
+      view: "what-if",
     },
     {
       id: "why",

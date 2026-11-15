@@ -2543,6 +2543,16 @@ async function loadScenarioPanel() {
       run.addEventListener("click", () => {
         void runSavedScenario(scenario.id);
       });
+      const whatIf = document.createElement("button");
+      whatIf.type = "button";
+      whatIf.className = "btn secondary btn-small";
+      whatIf.textContent = "What-if −10%";
+      whatIf.disabled = !scenario.series;
+      whatIf.addEventListener("click", () => {
+        void runScenarioWhatIf(scenario).catch((error) => {
+          if (note) note.textContent = error.message || "What-if failed.";
+        });
+      });
       const remove = document.createElement("button");
       remove.type = "button";
       remove.className = "btn secondary btn-small";
@@ -2557,7 +2567,7 @@ async function loadScenarioPanel() {
           if (note) note.textContent = error.message || "Could not delete scenario.";
         }
       });
-      row.append(label, run, remove);
+      row.append(label, run, whatIf, remove);
       list.append(row);
     }
   } catch (error) {
@@ -2584,6 +2594,69 @@ async function runSavedScenario(scenarioId) {
     syncHasChatClass();
   } catch (error) {
     if (note) note.textContent = error.message || "Could not run scenario.";
+  }
+}
+
+async function runScenarioWhatIf(scenario) {
+  const series = scenario && scenario.series ? String(scenario.series) : "";
+  if (!series) throw new Error("Save a series on the scenario first.");
+  const starters = new Set(["weather", "stocks", "crypto", "lunar", "near-earth"]);
+  const body = {
+    mode: "pct",
+    value: -10,
+    horizon: scenario.horizon || 1,
+  };
+  let result;
+  if (starters.has(series.toLowerCase())) {
+    result = await fetchJson("/analysis/what-if", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ starter_id: series.toLowerCase(), ...body }),
+    });
+  } else {
+    result = await fetchJson(`/workspace/models/${encodeURIComponent(series)}/what-if`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+  }
+  const text =
+    (result && typeof result.summary === "string" && result.summary) ||
+    `What-if on ${series} finished.`;
+  showToolView("chat");
+  addReply(`What-if on “${scenario.name || series}” (−10% last input):\n\n${text}`);
+}
+
+async function submitWhatIfForm(event) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const output = document.getElementById("what-if-output");
+  const series = form.series.value;
+  const value = Number(form.value.value);
+  try {
+    const result = await fetchJson("/analysis/what-if", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        starter_id: series,
+        mode: "pct",
+        value: Number.isFinite(value) ? value : -10,
+      }),
+    });
+    if (output) {
+      output.hidden = false;
+      output.textContent = JSON.stringify(result, null, 2);
+    }
+    const summary =
+      (result && typeof result.summary === "string" && result.summary) ||
+      "What-if finished.";
+    showToolView("chat");
+    addReply(summary);
+  } catch (error) {
+    if (output) {
+      output.hidden = false;
+      output.textContent = error.message || "What-if failed.";
+    }
   }
 }
 
@@ -2984,6 +3057,8 @@ const memoryClear = document.getElementById("memory-clear");
 if (memoryClear) memoryClear.addEventListener("click", () => void clearAllMemory());
 const scenarioForm = document.getElementById("scenario-save-form");
 if (scenarioForm) scenarioForm.addEventListener("submit", (event) => void saveScenarioFromForm(event));
+const whatIfForm = document.getElementById("what-if-form");
+if (whatIfForm) whatIfForm.addEventListener("submit", (event) => void submitWhatIfForm(event));
 
 document.getElementById("unhinged-toggle").addEventListener("click", () => {
   setChatMode(chatMode() === "unhinged" ? "normal" : "unhinged");
