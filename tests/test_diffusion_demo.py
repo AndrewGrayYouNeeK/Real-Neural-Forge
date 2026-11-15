@@ -73,3 +73,44 @@ def test_diffusion_tool_view_is_wired() -> None:
     assert 'view: "diffusion"' in tools
     app_js = client.get("/assets/app.js").text
     assert "/starters/weather/diffusion" in app_js
+
+
+def test_starter_diffusion_weather_band_is_about_seven_fahrenheit() -> None:
+    """Weather p10/p90 must sit within about ±7°F (≈3.9°C) of p50 and inside history."""
+    clear_diffusion_demo_cache()
+    client = TestClient(app)
+    response = client.get(
+        "/starters/weather/diffusion", params={"horizon": 7, "n_paths": 24}
+    )
+    assert response.status_code == 200
+    payload = response.json()
+    data_min = float(payload["data_min"])
+    data_max = float(payload["data_max"])
+    # ±7.5°F expressed in °C deltas (API stays °C).
+    max_half_c = 7.5 * 5.0 / 9.0
+    for step in payload["forecast"]:
+        p10, p50, p90 = float(step["p10"]), float(step["p50"]), float(step["p90"])
+        assert p10 <= p50 <= p90
+        assert p50 - p10 <= max_half_c, (step, max_half_c)
+        assert p90 - p50 <= max_half_c, (step, max_half_c)
+        # Still a real band, not collapsed to the point.
+        assert p90 - p10 >= 1.0
+        for value in (p10, p50, p90):
+            assert data_min - 1e-3 <= value <= data_max + 1e-3
+
+
+def test_calibrated_half_widths_follow_historical_changes() -> None:
+    import torch
+
+    from src.experiments.diffusion_demo import calibrated_half_widths
+
+    # Alternating ±2 changes → MAD 2 → σ≈2.1 → 80% half-width ≈ 2.69.
+    # One far point widens the historical range so the 10% cap does not bind.
+    series = torch.tensor([10.0, 12.0] * 50 + [60.0])
+    widths = calibrated_half_widths(series, 7)
+    assert widths.shape == (7,)
+    assert 2.0 <= float(widths[0]) <= 3.0
+    assert float(widths[-1]) <= float(widths[0]) * 1.1 + 1e-6
+    # Capped at 10% of the historical range for very noisy series.
+    noisy = torch.tensor([0.0, 100.0] * 50)
+    assert float(calibrated_half_widths(noisy, 3).max()) <= 10.0 + 1e-6

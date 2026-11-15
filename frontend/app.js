@@ -2564,6 +2564,34 @@ async function runDiffusionDemo() {
   }
 }
 
+function isWeatherPayload(payload) {
+  return Boolean(payload) && (payload.starter_id === "weather" || payload.unit === "°C");
+}
+
+/** JEPA MAE is a °C delta for weather: scale to °F (no +32 offset). */
+function jepaMaeText(payload, mae) {
+  const number = asNumber(mae);
+  if (number == null) return "—";
+  if (isWeatherPayload(payload)) return `${formatWeatherMaeFahrenheit(number)}°F`;
+  return number.toFixed(4);
+}
+
+function jepaSummaryText(payload) {
+  if (!isWeatherPayload(payload) || !Array.isArray(payload.models)) {
+    return payload.summary || "JEPA compare ready.";
+  }
+  const parts = payload.models
+    .map((row) => {
+      const mae = jepaMaeText(payload, row.mae);
+      return mae === "—" ? null : `${row.label || row.name || "model"} MAE ${mae}`;
+    })
+    .filter(Boolean);
+  const name = payload.name ? `the “${payload.name}” sample` : "the weather sample";
+  return parts.length
+    ? `On ${name} holdout: ${parts.join(", ")}.`
+    : payload.summary || "JEPA compare ready.";
+}
+
 function renderJepaReport(payload) {
   const summary = document.getElementById("jepa-summary");
   const report = document.getElementById("jepa-report");
@@ -2577,7 +2605,7 @@ function renderJepaReport(payload) {
   }
   if (status) status.hidden = true;
   summary.hidden = false;
-  summary.textContent = payload.summary || "JEPA compare ready.";
+  summary.textContent = jepaSummaryText(payload);
   report.hidden = false;
   body.replaceChildren();
   payload.models.forEach((row) => {
@@ -2585,7 +2613,7 @@ function renderJepaReport(payload) {
     const name = document.createElement("td");
     name.textContent = row.label || row.name || "model";
     const maeCell = document.createElement("td");
-    maeCell.textContent = Number(row.mae).toFixed(4);
+    maeCell.textContent = jepaMaeText(payload, row.mae);
     tr.append(name, maeCell);
     body.appendChild(tr);
   });

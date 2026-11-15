@@ -136,6 +136,15 @@ export function agentSystemPrompt(
   );
 }
 
+/** Budget for the tool-picking / small-talk step. */
+export const AGENT_STEP_MAX_TOKENS = 220;
+/**
+ * Budget once tool results are in. GPT-OSS counts hidden reasoning against
+ * this cap, so 220 cut explain answers mid-word ("…tug-"). Reasoning stays
+ * hidden; the prompt still asks for a short answer.
+ */
+export const AGENT_ANSWER_MAX_TOKENS = 700;
+
 function usesResponsesApi(model: string): boolean {
   return model.includes("gpt-oss");
 }
@@ -166,6 +175,7 @@ export function buildAgentInputs(options: {
 }): Record<string, unknown> {
   const { model, system, question, history, toolNotes, mode, allowTools } = options;
   const prior = historyForModel(history);
+  const maxTokens = toolNotes.length ? AGENT_ANSWER_MAX_TOKENS : AGENT_STEP_MAX_TOKENS;
   if (usesResponsesApi(model)) {
     const input: Array<Record<string, unknown>> = [{ role: "system", content: system }];
     for (const item of prior) {
@@ -180,7 +190,7 @@ export function buildAgentInputs(options: {
     return {
       input,
       reasoning: { effort: "low" },
-      max_output_tokens: 220,
+      max_output_tokens: maxTokens,
     };
   }
   const messages: Array<Record<string, unknown>> = [{ role: "system", content: system }];
@@ -193,7 +203,7 @@ export function buildAgentInputs(options: {
   }
   const inputs: Record<string, unknown> = {
     messages,
-    max_tokens: 220,
+    max_tokens: maxTokens,
   };
   if (allowTools) inputs.tools = toolsForChatCompletions();
   if (mode === "unhinged") inputs.temperature = 0.9;
@@ -481,6 +491,94 @@ function leadWithToolFacts(modelAnswer: string | null, results: ToolResult[]): s
   return modelAnswer;
 }
 
+/** True when the model stopped because it hit the output-token cap. */
+export function hitTokenCap(raw: unknown): boolean {
+  if (!raw || typeof raw !== "object") return false;
+  const record = raw as Record<string, unknown>;
+  if (record.status === "incomplete") return true;
+  const details = record.incomplete_details;
+  if (details && typeof details === "object" && /max_output_tokens|length/i.test(String((details as { reason?: unknown }).reason ?? ""))) {
+    return true;
+  }
+  const choices = record.choices;
+  if (Array.isArray(choices) && choices.some((choice) => choice && typeof choice === "object" && (choice as { finish_reason?: unknown }).finish_reason === "length")) {
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Drop a dangling, cut-off tail ("…the pressure tug-") so replies end on a
+ * complete sentence. Leaves answers alone that already end cleanly or that
+ * have no earlier sentence boundary to fall back to.
+ */
+export function trimDanglingFragment(answer: string, truncated = false): string {
+  const text = answer.trimEnd();
+  if (!text) return text;
+  const endsCleanly = /[.!?…)"'”’\]*_`]$|\p{Extended_Pictographic}$/u.test(text);
+  const dangling = /[-–—,;:(]$/.test(text);
+  if (endsCleanly && !dangling) return text;
+  if (!truncated && !dangling) return text;
+  const boundary = Math.max(
+    text.lastIndexOf(". "),
+    text.lastIndexOf("! "),
+    text.lastIndexOf("? "),
+    text.lastIndexOf(".\n"),
+    text.lastIndexOf("!\n"),
+    text.lastIndexOf("?\n"),
+  );
+  if (boundary < Math.min(40, text.length / 3)) return text;
+  return text.slice(0, boundary + 1).trimEnd();
+}
+
+/** Temperatures (°F / "60s") in a reply, ignoring percents and small deltas. */
+function quotedTemperatures(answer: string): number[] {
+  const found: number[] = [];
+  const pattern = /(?<![\d.])(-?\d{1,3}(?:\.\d+)?)\s*(?:°|º|deg(?:rees)?\b|s\b|F\b)/gi;
+  for (const match of answer.matchAll(pattern)) {
+    const value = Number(match[1]);
+    if (Number.isFinite(value)) found.push(value);
+  }
+  return found;
+}
+
+/**
+ * explain_prediction safety net: if the model quotes weather temperatures far
+ * outside the forecast band (e.g. double-converted "high-150s °F"), use the
+ * deterministic explain text instead.
+ */
+export function guardExplainAnswer(answer: string | null, results: ToolResult[]): string | null {
+  if (!answer) return answer;
+  const explain = [...results]
+    .reverse()
+    .find((item) => item.ok && item.name === "explain_prediction" && item.data && typeof item.data === "object");
+  if (!explain) return answer;
+  const data = explain.data as {
+    unit?: unknown;
+    text?: unknown;
+    week_ahead?: Array<{ p10?: number | null; p50?: number; p90?: number | null }>;
+    last_observed?: unknown;
+  };
+  const fallback = typeof data.text === "string" && data.text.trim() ? data.text.trim() : null;
+  if (!fallback || data.unit !== "°F" || !Array.isArray(data.week_ahead) || !data.week_ahead.length) {
+    return answer;
+  }
+  const values: number[] = [];
+  for (const row of data.week_ahead) {
+    for (const key of ["p10", "p50", "p90"] as const) {
+      const value = row[key];
+      if (typeof value === "number" && Number.isFinite(value)) values.push(value);
+    }
+  }
+  if (typeof data.last_observed === "number") values.push(data.last_observed);
+  if (!values.length) return answer;
+  const lo = Math.min(...values) - 8;
+  const hi = Math.max(...values) + 8;
+  // Small numbers are deltas / MAE (e.g. "MAE about 6°F"), not levels.
+  const bad = quotedTemperatures(answer).some((value) => Math.abs(value) > 15 && (value < lo || value > hi));
+  return bad ? fallback : answer;
+}
+
 function logAgentTurn(payload: Record<string, unknown>): void {
   // Workers Observability indexes structured JSON when console.log gets a
   // JSON string with a top-level `message` field (query: message:"agent.turn").
@@ -519,6 +617,7 @@ export async function runAgentTurn(
   let voiceResting = false;
   let strictRetryUsed = false;
   let intentRouted = false;
+  let lastStepTruncated = false;
 
   const firstReserve = await reserveOrFail(deps, caps);
   if (!firstReserve.ok) {
@@ -581,6 +680,7 @@ export async function runAgentTurn(
     );
     totalNeurons += step.neurons;
     modelId = step.modelId;
+    lastStepTruncated = hitTokenCap(step.raw);
     await settleExtraNeurons(deps, caps, step.neurons);
 
     if (!allowTools) {
@@ -707,7 +807,9 @@ export async function runAgentTurn(
     answer = leadWithToolFacts(answer, toolResults) || answer;
   }
 
+  answer = guardExplainAnswer(answer, toolResults);
   answer = sanitizeAgentAnswer(answer);
+  if (answer) answer = trimDanglingFragment(answer, lastStepTruncated);
   if (isDegenerateAnswer(answer)) {
     const fromTools = factualFallback(toolResults);
     answer = fromTools || "I could not produce an answer right now.";

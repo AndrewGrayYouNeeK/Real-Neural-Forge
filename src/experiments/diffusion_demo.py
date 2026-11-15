@@ -33,7 +33,23 @@ _DIFFUSION_STEPS = 12
 _SAMPLE_STEPS = 6
 _HISTORY_POINTS = 48
 # Band must stay within this multiple of the historical range beyond min/max.
-_RANGE_PAD = 0.35
+# Kept at 0 so sample paths are clipped to the observed historical min/max.
+_RANGE_PAD = 0.0
+# z-score of the 90th percentile of a normal: p10/p90 sit ±1.2816σ from p50.
+_Z80 = 1.2816
+# Robust σ from the median absolute deviation.
+_MAD_TO_SIGMA = 1.4826
+# Allow the band to widen slightly with horizon, capped so it stays tight.
+_STEP_GROWTH = 0.05
+_MAX_GROWTH = 1.1
+# Never let the 80% half-width exceed this share of the historical range.
+_MAX_HALF_WIDTH_SHARE = 0.1
+
+
+def _target_series(targets: torch.Tensor) -> torch.Tensor:
+    """Rebuild the 1-D target history from sliding windows (first step of each)."""
+    first: torch.Tensor = targets[:, 0, 0] if targets.dim() == 3 else targets[:, 0]
+    return first.reshape(-1)
 
 
 def clear_diffusion_demo_cache() -> None:
@@ -52,6 +68,36 @@ def _plausible_bounds(series: torch.Tensor) -> tuple[float, float, float, float]
     span = max(data_max - data_min, 1e-3)
     pad = _RANGE_PAD * span
     return data_min, data_max, data_min - pad, data_max + pad
+
+
+def calibrated_half_widths(series: torch.Tensor, horizon: int) -> torch.Tensor:
+    """80% band half-width per step, calibrated on historical one-step residuals.
+
+    A persistence-style forecaster's residual σ is roughly the robust σ of the
+    day-to-day change divided by √2 (half of the change is noise the model
+    absorbs). The p10/p90 half-width is ``1.2816 σ``, growing at most 10% over
+    the horizon and never more than 10% of the historical range.
+    """
+    flat = series.detach().float().reshape(-1)
+    flat = flat[torch.isfinite(flat)]
+    span = float((flat.max() - flat.min()).item()) if flat.numel() else 1.0
+    span = max(span, 1e-3)
+    if flat.numel() >= 3:
+        changes = flat.diff().abs()
+        mad = float(changes.median().item())
+        if mad <= 1e-9:
+            mad = float(changes.mean().item())
+    else:
+        mad = 0.0
+    sigma = _MAD_TO_SIGMA * mad / (2.0**0.5)
+    base = max(_Z80 * sigma, 1e-3 * span)
+    cap = _MAX_HALF_WIDTH_SHARE * span
+    growth = torch.tensor(
+        [min(1.0 + _STEP_GROWTH * step, _MAX_GROWTH) for step in range(horizon)],
+        dtype=torch.float32,
+    )
+    widths: torch.Tensor = (growth * base).clamp(max=cap)
+    return widths
 
 
 def starter_diffusion_futures(
@@ -156,25 +202,26 @@ def starter_diffusion_futures(
     except (WorkspaceError, OSError, RuntimeError, ValueError, TypeError, KeyError):
         center = torch.full((horizon,), last_value, dtype=torch.float32)
 
-    history_series = context[0, :, 0].detach().cpu().float()
-    if history_series.numel() >= 2:
-        step_vol = float(history_series.diff().std(unbiased=False).item())
-    else:
-        step_vol = 1.0
-    step_vol = max(step_vol, 0.5)
+    # Calibrate the band on the full historical series (not the denoiser's
+    # raw spread, which is far too wide after a few CPU training steps).
+    half_widths = calibrated_half_widths(_target_series(targets), horizon)
 
     model.eval()
     with torch.no_grad():
         paths = model.sample_paths(context_scaled, n_paths=n_paths, steps=_SAMPLE_STEPS)
         # paths: (1, P, H, 1) in z-space → original units.
         flat = scaler.inverse_targets(paths[0, :, :, 0])
-        # Residuals around the path median, shrunk to recent day-to-day vol,
-        # then added to the champion / persistence center.
+        # Residuals around the per-step path median keep the diffusion shape;
+        # rescale each step so the p10–p90 spread matches the calibrated band,
+        # then add them to the champion / persistence center.
         median_path = flat.median(dim=0).values
         residuals = flat - median_path.unsqueeze(0)
-        typical = float(residuals.abs().mean().clamp(min=1e-3).item())
-        shrink = min(1.0, (1.75 * step_vol) / typical)
-        flat = center.unsqueeze(0) + residuals * shrink
+        r10 = torch.quantile(residuals, 0.1, dim=0)
+        r90 = torch.quantile(residuals, 0.9, dim=0)
+        spread = ((r90 - r10) / 2.0).clamp(min=1e-6)
+        # Keep the per-step median at zero so p50 equals the champion center.
+        residuals = residuals * (half_widths / spread).unsqueeze(0)
+        flat = center.unsqueeze(0) + residuals
         flat = flat.clamp(min=clip_low, max=clip_high)
         p10 = torch.quantile(flat, 0.1, dim=0)
         p50 = torch.quantile(flat, 0.5, dim=0)

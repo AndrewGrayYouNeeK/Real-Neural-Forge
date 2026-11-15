@@ -10,11 +10,15 @@ import {
 } from "../src/live/ai";
 import { routeClearIntent } from "../src/agent/intent";
 import {
+  AGENT_ANSWER_MAX_TOKENS,
   agentSystemPrompt,
   buildAgentInputs,
   factualFallback,
+  guardExplainAnswer,
+  hitTokenCap,
   isSmallTalk,
   runAgentTurn,
+  trimDanglingFragment,
 } from "../src/agent/loop";
 import {
   collectToolCalls,
@@ -513,6 +517,127 @@ describe("agent tool dispatch", () => {
     // 15.15°C → 59.27°F once (not double-converted into the 130–150s).
     expect(data.explanation_facts?.forecast?.[0]?.value).toBe(59.27);
     expect(data.note).toMatch(/already in °F/i);
+  });
+
+  it("keeps explain_prediction week-ahead values inside the °F forecast range", async () => {
+    const forecastC = [15.15, 15.52, 15.61, 15.59, 15.54, 15.42, 15.24];
+    const fetchContainer = vi.fn(async (path: string) => {
+      if (path.includes("/starters/weather/forecast")) {
+        return {
+          status: 200,
+          json: {
+            starter_id: "weather",
+            name: "Central Park temperature",
+            unit: "°C",
+            forecast: forecastC.map((value, index) => ({
+              step: index + 1,
+              value,
+              p10: value - 4,
+              p50: value,
+              p90: value + 4,
+            })),
+            uncertainty: {
+              p10: forecastC.map((v) => v - 4),
+              p50: forecastC,
+              p90: forecastC.map((v) => v + 4),
+              interval_80: { lower: forecastC.map((v) => v - 4), upper: forecastC.map((v) => v + 4) },
+            },
+            history: [{ index: 729, time: "2026-10-31", actual: 14.4 }],
+            why: { explanation: "Recent values have been trending lower.", drivers: [] },
+          },
+        };
+      }
+      if (path.includes("/evaluation/")) {
+        return { status: 200, json: { backtest: { comparison: "ok", metrics: { mae: 3.31 } } } };
+      }
+      return { status: 404, json: {} };
+    });
+    const result = await dispatchTool(
+      "explain_prediction",
+      { series: "weather" },
+      toolContext({ fetchContainer }),
+      2000,
+      { coldStartWaitMs: 0 },
+    );
+    expect(result.ok).toBe(true);
+    const data = result.data as {
+      unit?: string;
+      text?: string;
+      week_ahead?: Array<{ p10: number | null; p50: number; p90: number | null }>;
+      last_observed?: number;
+    };
+    expect(data.unit).toBe("°F");
+    const forecastF = forecastC.map((c) => c * 1.8 + 32);
+    const lo = Math.min(...forecastF);
+    const hi = Math.max(...forecastF);
+    expect(data.week_ahead).toHaveLength(7);
+    for (const row of data.week_ahead ?? []) {
+      // Sanity: every explain value matches the forecast scale (≈59–60°F, not 130s–160s).
+      expect(row.p50).toBeGreaterThanOrEqual(lo - 0.01);
+      expect(row.p50).toBeLessThanOrEqual(hi + 0.01);
+      expect(row.p10 ?? 0).toBeGreaterThan(40);
+      expect(row.p90 ?? 0).toBeLessThan(80);
+    }
+    expect(data.last_observed).toBeCloseTo(57.92, 1);
+    expect(data.text).toMatch(/59\.3–60\.1°F/);
+    expect(data.text).not.toMatch(/1[3-6]\d/);
+    // Payload stays compact so the tool note is never cut mid-JSON.
+    expect(JSON.stringify({ tool: "explain_prediction", ok: true, result: data }).length).toBeLessThan(3500);
+    // A double-converted model reply is replaced with the deterministic facts.
+    const guarded = guardExplainAnswer(
+      "Expect highs in the high-150s to low-160s °F over the week.",
+      [result],
+    );
+    expect(guarded).toBe(data.text);
+    const fine = "Highs stay near 59–60°F all week, MAE about 6°F.";
+    expect(guardExplainAnswer(fine, [result])).toBe(fine);
+  });
+
+  it("converts nested weather interval_80 bands to °F", async () => {
+    const fetchContainer = vi.fn(async (path: string) => {
+      if (path.includes("/starters/weather/forecast")) {
+        return {
+          status: 200,
+          json: {
+            starter_id: "weather",
+            unit: "°C",
+            forecast: [{ step: 1, value: 15, p10: 11, p50: 15, p90: 19 }],
+            uncertainty: { p50: [15], interval_80: { lower: [11], upper: [19] } },
+          },
+        };
+      }
+      return { status: 404, json: {} };
+    });
+    const result = await dispatchTool("forecast", { series: "weather", horizon: 1 }, toolContext({ fetchContainer }), 2000, {
+      coldStartWaitMs: 0,
+    });
+    const band = (result.data as { uncertainty?: { interval_80?: { lower?: number[]; upper?: number[] } } }).uncertainty
+      ?.interval_80;
+    expect(band?.lower?.[0]).toBe(51.8);
+    expect(band?.upper?.[0]).toBe(66.2);
+  });
+
+  it("trims replies cut off at the token cap and raises the answer budget", () => {
+    const cut =
+      "The model sees a cooling trend after a warm spell. Highs sit near 59–60°F. A weak front could tug-";
+    expect(trimDanglingFragment(cut)).toBe("The model sees a cooling trend after a warm spell. Highs sit near 59–60°F.");
+    expect(trimDanglingFragment("Highs near 60°F. Clear skies all week", true)).toBe("Highs near 60°F.");
+    expect(trimDanglingFragment("Highs near 60°F. Clear skies all week")).toBe("Highs near 60°F. Clear skies all week");
+    expect(trimDanglingFragment("Hey — what do you want to forge?")).toBe("Hey — what do you want to forge?");
+    expect(hitTokenCap({ status: "incomplete", incomplete_details: { reason: "max_output_tokens" } })).toBe(true);
+    expect(hitTokenCap({ choices: [{ finish_reason: "length" }] })).toBe(true);
+    expect(hitTokenCap({ status: "completed" })).toBe(false);
+    const withTools = buildAgentInputs({
+      model: PRIMARY_MODEL,
+      system: agentSystemPrompt("normal", true),
+      question: "Explain the weather forecast",
+      history: [],
+      toolNotes: ["Tool result for explain_prediction: {}"],
+      mode: "normal",
+      allowTools: true,
+    });
+    expect(withTools.max_output_tokens).toBe(AGENT_ANSWER_MAX_TOKENS);
+    expect(withTools.reasoning).toEqual({ effort: "low" });
   });
 
   it("treats high/low place forecasts as weather and never leaks tool errors", async () => {
