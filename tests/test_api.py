@@ -934,6 +934,10 @@ class TestForecastDashboard:
         reports_tool = tools_js.split('id: "reports"', 1)[1][:180]
         assert 'status: "live"' in reports_tool
         assert 'view: "reports"' in reports_tool
+        assert 'id: "alerts"' in tools_js
+        alerts_tool = tools_js.split('id: "alerts"', 1)[1][:180]
+        assert 'status: "live"' in alerts_tool
+        assert 'view: "alerts"' in alerts_tool
         phase3 = tools_js.split('id: "phase-3"', 1)[1][:220]
         assert 'status: "in-progress"' in phase3
         assert "lottery" not in tools_js.lower()
@@ -942,6 +946,8 @@ class TestForecastDashboard:
         assert 'id="what-if-form"' in html
         assert 'id="view-reports"' in html
         assert 'id="report-create-form"' in html
+        assert 'id="view-alerts"' in html
+        assert 'id="alert-create-form"' in html
         assert 'id="view-memory"' in html
         assert 'id="memory-list"' in html
         assert 'id="memory-clear"' in html
@@ -967,6 +973,9 @@ class TestForecastDashboard:
         assert "createShareableReport" in app_js
         assert "loadReportsPanel" in app_js
         assert "/agent/reports" in app_js
+        assert "loadAlertsPanel" in app_js
+        assert "checkAlertsNow" in app_js
+        assert "/agent/alerts" in app_js
         assert 'method: "PATCH"' in app_js
         assert "celsiusToFahrenheit" in app_js
         assert "return `${formatMetric(celsiusToFahrenheit(number))}°F`" in app_js
