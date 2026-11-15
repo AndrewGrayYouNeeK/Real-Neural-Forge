@@ -99,7 +99,7 @@
       icon: "≋",
       description: "A range of possible futures, not one path.",
       status: "live",
-      view: "coming-soon",
+      view: "diffusion",
     },
     {
       id: "jepa",

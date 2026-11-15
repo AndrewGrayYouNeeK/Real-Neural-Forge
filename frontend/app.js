@@ -17,6 +17,7 @@ const state = {
   toldVoiceResting: false,
   lastPca: null,
   lastRegimes: null,
+  lastDiffusion: null,
 };
 
 const VOICE_RESTING_MESSAGE = "Voice is resting for today, text still works.";
@@ -2457,6 +2458,90 @@ function renderPcaReport(report) {
   });
 }
 
+function diffusionChart(payload) {
+  const starterId = payload.starter_id || "weather";
+  const history = Array.isArray(payload.history) ? payload.history : [];
+  const steps = Array.isArray(payload.forecast) ? payload.forecast : [];
+  const labels = history.map((point) => String(point.index));
+  const actual = history.map((point) => chartValue(starterId, point.actual));
+  const median = new Array(history.length).fill(null);
+  const low = new Array(history.length).fill(null);
+  const high = new Array(history.length).fill(null);
+  const lastActual = actual.length ? actual[actual.length - 1] : null;
+  if (lastActual != null) median[history.length - 1] = lastActual;
+  steps.forEach((step, index) => {
+    labels.push(`+${step.step || index + 1}`);
+    actual.push(null);
+    median.push(chartValue(starterId, step.p50));
+    low.push(chartValue(starterId, step.p10));
+    high.push(chartValue(starterId, step.p90));
+  });
+  const series = [
+    { name: "Recent", color: "#e8eaed", values: actual },
+    { name: "Median (p50)", color: "#7cffd6", markers: true, values: median },
+  ];
+  const paths = Array.isArray(payload.sample_paths) ? payload.sample_paths : [];
+  paths.slice(0, 3).forEach((path, pathIndex) => {
+    const values = new Array(history.length).fill(null);
+    if (lastActual != null) values[history.length - 1] = lastActual;
+    path.forEach((value) => values.push(chartValue(starterId, value)));
+    series.push({
+      name: pathIndex === 0 ? "Sample paths" : `Path ${pathIndex + 1}`,
+      color: "#5a6578",
+      dashed: true,
+      values,
+    });
+  });
+  return {
+    ariaLabel: "Diffusion futures with p10 to p90 band",
+    labels,
+    series,
+    bands: steps.length
+      ? [{ name: "p10–p90", color: "#7cffd6", low, high }]
+      : [],
+    empty: "Run the demo to draw a range of futures.",
+  };
+}
+
+function renderDiffusionReport(payload) {
+  const summary = document.getElementById("diffusion-summary");
+  const host = document.getElementById("diffusion-chart");
+  const status = document.getElementById("diffusion-status");
+  if (!summary || !host) return;
+  if (!payload || !Array.isArray(payload.forecast)) {
+    summary.hidden = true;
+    host.hidden = true;
+    return;
+  }
+  if (status) status.hidden = true;
+  summary.hidden = false;
+  summary.textContent = payload.summary || "Diffusion futures ready.";
+  host.hidden = false;
+  charts.renderLineChart(host, diffusionChart(payload));
+}
+
+async function runDiffusionDemo() {
+  const status = document.getElementById("diffusion-status");
+  const button = document.getElementById("diffusion-run-btn");
+  if (status) {
+    status.hidden = false;
+    status.textContent = "Drawing futures on the weather sample…";
+  }
+  if (button) button.disabled = true;
+  try {
+    const payload = await fetchJson("/starters/weather/diffusion?horizon=7&n_paths=12");
+    state.lastDiffusion = payload;
+    renderDiffusionReport(payload);
+  } catch (error) {
+    if (status) {
+      status.hidden = false;
+      status.textContent = error.message || "Could not run the diffusion demo.";
+    }
+  } finally {
+    if (button) button.disabled = false;
+  }
+}
+
 function showToolView(viewId, toolMeta) {
   const stage = document.getElementById("main-stage");
   if (!stage) return;
@@ -2480,6 +2565,9 @@ function showToolView(viewId, toolMeta) {
   }
   if (next === "regimes") {
     renderRegimesReport(state.lastRegimes);
+  }
+  if (next === "diffusion") {
+    renderDiffusionReport(state.lastDiffusion);
   }
   document.querySelectorAll(".tool-nav-btn").forEach((button) => {
     const current = button.dataset.toolId === (toolMeta && toolMeta.id);
@@ -3009,6 +3097,13 @@ document.querySelectorAll(".tool-view .chip[data-question]").forEach((chip) => {
 document.querySelectorAll(".back-to-chat").forEach((button) => {
   button.addEventListener("click", () => showToolView("chat"));
 });
+
+const diffusionRunBtn = document.getElementById("diffusion-run-btn");
+if (diffusionRunBtn) {
+  diffusionRunBtn.addEventListener("click", () => {
+    void runDiffusionDemo();
+  });
+}
 
 const newChatBtn = document.getElementById("new-chat-btn");
 if (newChatBtn) newChatBtn.addEventListener("click", startNewChat);

@@ -449,6 +449,26 @@
             </div>
           </section>
 
+          <section class="tool-view" id="view-diffusion" data-tool-view="diffusion" hidden>
+            <header class="tool-view-head">
+              <h2>Diffusion forecaster</h2>
+              <button type="button" class="btn secondary back-to-chat" data-view="chat">Back to chat</button>
+            </header>
+            <p class="hint">
+              A small conditional diffusion model draws many futures, then shows the
+              p10–p90 band around the median path. Signed-out visitors use the
+              shipped weather sample — no account required.
+            </p>
+            <div class="chip-row">
+              <button id="diffusion-run-btn" class="btn primary" type="button">
+                Show futures (weather sample)
+              </button>
+            </div>
+            <p id="diffusion-status" class="hint" hidden></p>
+            <p id="diffusion-summary" class="pca-summary" hidden></p>
+            <div id="diffusion-chart" class="chart-host" hidden></div>
+          </section>
+
           <section class="tool-view" id="view-regimes" data-tool-view="regimes" hidden>
             <header class="tool-view-head">
               <h2>Regimes / patterns</h2>
