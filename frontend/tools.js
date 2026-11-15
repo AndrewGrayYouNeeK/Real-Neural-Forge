@@ -130,8 +130,8 @@
       name: "Reports",
       icon: "▥",
       description: "Shareable accuracy and forecast summaries.",
-      status: "coming-soon",
-      view: "coming-soon",
+      status: "live",
+      view: "reports",
     },
     {
       id: "alerts",

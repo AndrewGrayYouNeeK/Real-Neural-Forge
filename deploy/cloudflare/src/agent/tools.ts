@@ -15,6 +15,7 @@ import {
   upsertMemory,
 } from "./memory";
 import { AGENT_TOOL_NAMES, type AgentToolName } from "./protocol";
+import { createReport } from "./reports";
 import {
   createScenario,
   getScenarioOwned,
@@ -436,6 +437,23 @@ export const TOOL_DEFINITIONS = [
           description: "Forecast horizon steps. Default from scenario or 1.",
         },
       },
+      additionalProperties: false,
+    },
+  },
+  {
+    type: "function" as const,
+    name: "create_report",
+    description:
+      "Build a shareable one-click summary for a series (forecast, accuracy, regimes) and return a public report id/path.",
+    parameters: {
+      type: "object",
+      properties: {
+        series: {
+          type: "string",
+          description: "Starter series id (weather, stocks, crypto, lunar, near-earth).",
+        },
+      },
+      required: ["series"],
       additionalProperties: false,
     },
   },
@@ -1391,6 +1409,55 @@ async function runWhatIf(ctx: ToolContext, args: Record<string, unknown>): Promi
   };
 }
 
+async function runCreateReport(
+  ctx: ToolContext,
+  args: Record<string, unknown>,
+): Promise<ToolResult["data"]> {
+  const series = stringArg(args, "series", "weather").toLowerCase() || "weather";
+  const built = await ctx.fetchContainer(
+    "/analysis/report",
+    containerInit(ctx, {
+      method: "POST",
+      headers: { ...ctx.authHeaders, "Content-Type": "application/json" },
+      body: JSON.stringify({ series }),
+    }),
+  );
+  throwIfContainerStatusError(built.status, "Report build");
+  const snapshot = built.json as Record<string, unknown>;
+  if (!ctx.db) {
+    return {
+      ok: true,
+      series,
+      snapshot,
+      text: "Report snapshot ready (share store unavailable in this environment).",
+    };
+  }
+  const scope =
+    typeof ctx.memoryScope === "string" && ctx.memoryScope.trim()
+      ? ctx.memoryScope.trim()
+      : "visitor";
+  const title =
+    typeof snapshot.title === "string" && snapshot.title.trim()
+      ? snapshot.title
+      : `${series} report`;
+  const stored = await createReport(ctx.db, scope, {
+    series,
+    title,
+    snapshot,
+  });
+  if (!stored.ok) return { ok: false, text: stored.error };
+  return {
+    ok: true,
+    report: {
+      id: stored.report.id,
+      series: stored.report.series,
+      title: stored.report.title,
+      share_path: `/agent/reports/${stored.report.id}`,
+    },
+    text: `Shareable report ready: /agent/reports/${stored.report.id}`,
+  };
+}
+
 async function runAnalyzePca(ctx: ToolContext, args: Record<string, unknown>): Promise<ToolResult["data"]> {
   const datasetId = stringArg(args, "dataset_id", "");
   if (!datasetId) {
@@ -1550,6 +1617,8 @@ export async function dispatchTool(
         return runAnalyzeRegimes(keyed, args);
       case "what_if":
         return runWhatIf(keyed, args);
+      case "create_report":
+        return runCreateReport(keyed, args);
       default: {
         const unexpected: never = toolName;
         throw new Error(`Unhandled tool: ${String(unexpected)}`);

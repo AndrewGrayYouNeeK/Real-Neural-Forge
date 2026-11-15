@@ -29,6 +29,7 @@ export const AGENT_TOOL_NAMES = [
   "analyze_pca",
   "analyze_regimes",
   "what_if",
+  "create_report",
 ] as const;
 
 export type AgentToolName = (typeof AGENT_TOOL_NAMES)[number];
@@ -41,7 +42,7 @@ export type ParsedToolCall = {
 
 const TOOL_NAME_SET = new Set<string>(AGENT_TOOL_NAMES);
 const TOOL_NAME_HINT =
-  /\b(forecast|fetch_live_data|get_evaluation_metrics|compare_horizons|explain_prediction|list_user_series|remember_fact|recall_memory|forget_memory|save_scenario|list_scenarios|run_scenario|rename_user_series|delete_user_series|retrain_user_series|analyze_pca|analyze_regimes|what_if)\b/;
+  /\b(forecast|fetch_live_data|get_evaluation_metrics|compare_horizons|explain_prediction|list_user_series|remember_fact|recall_memory|forget_memory|save_scenario|list_scenarios|run_scenario|rename_user_series|delete_user_series|retrain_user_series|analyze_pca|analyze_regimes|what_if|create_report)\b/;
 
 function asToolName(value: unknown): AgentToolName | null {
   if (typeof value !== "string") return null;

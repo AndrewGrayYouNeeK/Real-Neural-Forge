@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field
 
 from src.analysis.kmeans import cluster_csv_bytes, cluster_matrix
 from src.analysis.pca import analyze_csv_bytes, analyze_matrix
+from src.analysis.report import build_starter_report
 from src.analysis.why import build_why_explanation
 from src.workspace.errors import WorkspaceError
 from src.workspace.starter_forecast import starter_what_if
@@ -52,6 +53,13 @@ class WhatIfRequest(BaseModel):
     value: float = -10.0
     horizon: int | None = Field(default=None, ge=1, le=64)
     feature_index: int = Field(default=0, ge=0)
+
+
+class ReportRequest(BaseModel):
+    """Build a shareable series summary snapshot."""
+
+    series: str = Field(min_length=1)
+    points: int = Field(default=120, ge=8, le=400)
 
 
 @router.post("/analysis/pca")
@@ -172,5 +180,14 @@ def run_what_if(body: WhatIfRequest) -> dict[str, Any]:
             horizon=body.horizon,
             feature_index=body.feature_index,
         )
+    except WorkspaceError as exc:
+        raise HTTPException(status_code=exc.status, detail=exc.detail) from exc
+
+
+@router.post("/analysis/report")
+def build_series_report(body: ReportRequest) -> dict[str, Any]:
+    """Assemble forecast + accuracy + regimes into a shareable snapshot."""
+    try:
+        return build_starter_report(body.series, points=body.points)
     except WorkspaceError as exc:
         raise HTTPException(status_code=exc.status, detail=exc.detail) from exc
