@@ -30,6 +30,7 @@ from src.accounts.limits import Limits, load_limits
 from src.accounts.passwords import hash_password, validate_password, verify_password
 from src.analysis.kmeans import cluster_csv_bytes
 from src.analysis.pca import analyze_csv_bytes
+from src.analysis.whatif import compare_window_forecasts
 from src.analysis.why import build_why_explanation
 from src.evaluation.backtest import rolling_origin_backtest
 from src.evaluation.run import _predictor_fn, save_backtest, stored_backtest
@@ -1271,6 +1272,66 @@ def predict_latest_model(
         pca=pca_payload,
         regimes=regimes_payload,
     )
+    return result
+
+
+def what_if_latest_model(
+    actor: Actor,
+    model_id: str,
+    *,
+    mode: str,
+    value: float,
+    horizon: int = 1,
+    feature_index: int = 0,
+    config: dict[str, Any] | None,
+) -> dict[str, Any]:
+    """Baseline vs shocked last-input forecast for a workspace model."""
+    store = require_store()
+    model = store.get_model(actor.user_id, model_id)
+    if model is None:
+        raise WorkspaceError(404, "Model not found.")
+    dataset = _dataset_for_model(store, actor, model)
+    if dataset is None:
+        raise WorkspaceError(422, "This model has no dataset to forecast from.")
+    blob = store.get_blob(str(dataset["object_key"]))
+    if blob is None:
+        raise WorkspaceError(404, "Dataset bytes are missing.")
+    try:
+        cfg = json.loads(str(model["config_json"]))
+    except json.JSONDecodeError as exc:
+        raise WorkspaceError(500, "Model config is unreadable.") from exc
+    data_cfg = cfg.get("data") if isinstance(cfg, dict) else None
+    if not isinstance(data_cfg, dict):
+        data_cfg = {}
+    target = str(data_cfg.get("target_column") or "value")
+    seq_len = int(data_cfg.get("seq_len", 16) or 16)
+    sequence = _window_from_dataset(blob, seq_len, target)
+    weights = store.get_blob(str(model["object_key"]))
+    if weights is None:
+        raise WorkspaceError(404, "Model weights are missing.")
+    with tempfile.TemporaryDirectory(prefix="nf-whatif-") as temporary:
+        path = Path(temporary) / "model.pt"
+        path.write_bytes(weights)
+        if not isinstance(cfg, dict):
+            raise WorkspaceError(500, "Model config is unreadable.")
+        built = build_model(cfg, ensemble=False)
+        predictor = Predictor.from_checkpoint(built, path, device="cpu")
+        try:
+            result = compare_window_forecasts(
+                predictor,
+                sequence,
+                horizon=max(1, int(horizon)),
+                mode=mode,
+                value=value,
+                feature_index=feature_index,
+            )
+        except ValueError as exc:
+            raise WorkspaceError(422, str(exc)) from exc
+    result["model_id"] = model_id
+    result["dataset_id"] = dataset["id"]
+    result["series"] = model_id
+    result["target_column"] = target
+    _ = config  # limits reserved for future caps
     return result
 
 

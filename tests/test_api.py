@@ -926,10 +926,16 @@ class TestForecastDashboard:
         why_tool = tools_js.split('id: "why"', 1)[1][:180]
         assert 'status: "live"' in why_tool
         assert 'view: "why"' in why_tool
+        assert 'id: "what-if"' in tools_js
+        what_if_tool = tools_js.split('id: "what-if"', 1)[1][:180]
+        assert 'status: "live"' in what_if_tool
+        assert 'view: "what-if"' in what_if_tool
         phase3 = tools_js.split('id: "phase-3"', 1)[1][:220]
         assert 'status: "in-progress"' in phase3
         assert "lottery" not in tools_js.lower()
         assert 'id="view-why"' in html
+        assert 'id="view-what-if"' in html
+        assert 'id="what-if-form"' in html
         assert 'id="view-memory"' in html
         assert 'id="memory-list"' in html
         assert 'id="memory-clear"' in html
@@ -950,6 +956,8 @@ class TestForecastDashboard:
         assert "deleteWorkspaceDataset" in app_js
         assert "retrainWorkspaceDataset" in app_js
         assert "whyExplanationText" in app_js
+        assert "runScenarioWhatIf" in app_js
+        assert "submitWhatIfForm" in app_js
         assert 'method: "PATCH"' in app_js
         assert "celsiusToFahrenheit" in app_js
         assert "return `${formatMetric(celsiusToFahrenheit(number))}°F`" in app_js

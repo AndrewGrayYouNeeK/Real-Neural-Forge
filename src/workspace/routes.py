@@ -43,6 +43,7 @@ from src.workspace.service import (
     signup,
     update_config,
     upload_dataset,
+    what_if_latest_model,
 )
 
 router = APIRouter()
@@ -81,6 +82,13 @@ class DatasetKMeansBody(BaseModel):
     k: int | None = Field(default=None, ge=2, le=8)
     max_k: int = Field(default=8, ge=2, le=8)
     window: int | None = Field(default=None, ge=2, le=256)
+
+
+class WhatIfBody(BaseModel):
+    mode: str = Field(default="pct", pattern="^(pct|abs)$")
+    value: float = -10.0
+    horizon: int = Field(default=1, ge=1, le=64)
+    feature_index: int = Field(default=0, ge=0)
 
 
 def _raise(exc: WorkspaceError) -> NoReturn:
@@ -426,6 +434,27 @@ def workspace_predict_latest(
 ) -> dict[str, Any]:
     actor = _actor(request, authorization)
     return _call(lambda: predict_latest_model(actor, model_id, _app_config()))
+
+
+@router.post("/workspace/models/{model_id}/what-if", tags=["workspace"])
+def workspace_model_what_if(
+    model_id: str,
+    body: WhatIfBody,
+    request: Request,
+    authorization: str | None = Header(default=None),
+) -> dict[str, Any]:
+    actor = _actor(request, authorization)
+    return _call(
+        lambda: what_if_latest_model(
+            actor,
+            model_id,
+            mode=body.mode,
+            value=body.value,
+            horizon=body.horizon,
+            feature_index=body.feature_index,
+            config=_app_config(),
+        )
+    )
 
 
 async def _read_upload(request: Request) -> bytes:

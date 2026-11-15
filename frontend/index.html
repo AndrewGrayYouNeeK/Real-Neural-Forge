@@ -406,6 +406,40 @@
             </div>
           </section>
 
+          <section class="tool-view" id="view-what-if" data-tool-view="what-if" hidden>
+            <header class="tool-view-head">
+              <h2>What-if</h2>
+              <button type="button" class="btn secondary back-to-chat" data-view="chat">Back to chat</button>
+            </header>
+            <p class="hint">
+              Shock the last input on a sample series (or a saved scenario’s series)
+              and compare the baseline forecast to the new path.
+            </p>
+            <form id="what-if-form" class="side-panel-body">
+              <label for="what-if-series">Series</label>
+              <select id="what-if-series" name="series">
+                <option value="weather">weather</option>
+                <option value="stocks">stocks</option>
+                <option value="crypto">crypto</option>
+                <option value="lunar">lunar</option>
+                <option value="near-earth">near-earth</option>
+              </select>
+              <label for="what-if-pct">Percent shock on last value</label>
+              <input id="what-if-pct" name="value" type="number" value="-10" step="1" />
+              <button class="btn primary btn-small" type="submit">Run what-if</button>
+            </form>
+            <pre id="what-if-output" class="output" hidden></pre>
+            <div class="chip-row">
+              <button
+                class="chip"
+                type="button"
+                data-question="What if the last Central Park high dropped 10%?"
+              >
+                Ask chat: −10% weather
+              </button>
+            </div>
+          </section>
+
           <section class="tool-view" id="view-why" data-tool-view="why" hidden>
             <header class="tool-view-head">
               <h2>Why this forecast</h2>
