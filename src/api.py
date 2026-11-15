@@ -23,6 +23,7 @@ from src.dashboard_data import recent_series, validation_predictions
 from src.data.lunar import lunar_now, lunar_on
 from src.evaluation.routes import router as evaluation_router
 from src.evaluation.tracking import record_payload, uncertainty_for
+from src.experiments.diffusion_demo import starter_diffusion_futures
 from src.forecasting.spec import MAX_HORIZON, forecast_spec_from_config
 from src.inference.predictor import ForecastBatch, Predictor
 from src.models.registry import ModelRegistry, build_model
@@ -561,6 +562,19 @@ def public_starter_forecast(
     """Next-step forecast for a shipped sample dataset. No account required."""
     try:
         return starter_forecast(starter_id, points=points, lite=lite)
+    except WorkspaceError as exc:
+        raise _workspace_http(exc) from exc
+
+
+@app.get("/starters/{starter_id}/diffusion", tags=["starters"])
+def public_starter_diffusion(
+    starter_id: str,
+    horizon: int = Query(7, ge=1, le=14),
+    n_paths: int = Query(12, ge=4, le=24),
+) -> dict[str, Any]:
+    """Sample diffusion futures (p10/p50/p90) for a shipped starter. No account."""
+    try:
+        return starter_diffusion_futures(starter_id, horizon=horizon, n_paths=n_paths)
     except WorkspaceError as exc:
         raise _workspace_http(exc) from exc
 
