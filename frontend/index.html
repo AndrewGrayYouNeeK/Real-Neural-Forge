@@ -406,6 +406,34 @@
             </div>
           </section>
 
+          <section class="tool-view" id="view-reports" data-tool-view="reports" hidden>
+            <header class="tool-view-head">
+              <h2>Reports</h2>
+              <button type="button" class="btn secondary back-to-chat" data-view="chat">Back to chat</button>
+            </header>
+            <p class="hint">
+              One-click shareable summary of a series: forecast, accuracy, and regimes.
+              Anyone with the link can open the frozen snapshot.
+            </p>
+            <form id="report-create-form" class="side-panel-body">
+              <label for="report-series">Series</label>
+              <select id="report-series" name="series">
+                <option value="weather">weather</option>
+                <option value="stocks">stocks</option>
+                <option value="crypto">crypto</option>
+                <option value="lunar">lunar</option>
+                <option value="near-earth">near-earth</option>
+              </select>
+              <button class="btn primary btn-small" type="submit">Create shareable report</button>
+            </form>
+            <p id="report-note" class="hint"></p>
+            <ul id="report-list" class="side-list"></ul>
+            <div id="report-view" hidden>
+              <h3 id="report-view-title"></h3>
+              <pre id="report-view-body" class="output"></pre>
+            </div>
+          </section>
+
           <section class="tool-view" id="view-what-if" data-tool-view="what-if" hidden>
             <header class="tool-view-head">
               <h2>What-if</h2>

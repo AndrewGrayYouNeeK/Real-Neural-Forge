@@ -2823,6 +2823,100 @@ function activateTool(tool) {
   if (tool.id === "memory") {
     void loadMemoryPanel();
   }
+  if (tool.id === "reports") {
+    void loadReportsPanel();
+  }
+}
+
+async function createShareableReport(series) {
+  const note = document.getElementById("report-note");
+  const data = await fetchJson("/agent/reports", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ series }),
+  });
+  const path =
+    (data && data.report && data.report.share_path) ||
+    (data && data.report && data.report.id
+      ? `/agent/reports/${data.report.id}`
+      : "");
+  if (!path) throw new Error("Report was created without a share path.");
+  const url = new URL(path, window.location.origin).href;
+  try {
+    await navigator.clipboard.writeText(url);
+    if (note) note.textContent = `Copied share link: ${url}`;
+  } catch {
+    if (note) note.textContent = `Share link: ${url}`;
+  }
+  addReply(`Shareable report for ${series}: ${url}`);
+  return data;
+}
+
+async function loadReportsPanel() {
+  const list = document.getElementById("report-list");
+  const note = document.getElementById("report-note");
+  if (!list) return;
+  list.replaceChildren();
+  try {
+    const data = await fetchJson("/agent/reports");
+    const reports = Array.isArray(data.reports) ? data.reports : [];
+    if (!reports.length) {
+      if (note && !note.textContent) note.textContent = "No reports yet — create one above.";
+      return;
+    }
+    for (const report of reports) {
+      const row = document.createElement("li");
+      const label = document.createElement("span");
+      label.textContent = `${report.title || report.series} · ${report.id}`;
+      const open = document.createElement("button");
+      open.type = "button";
+      open.className = "btn secondary btn-small";
+      open.textContent = "Open";
+      open.addEventListener("click", () => {
+        void openShareableReport(report.id);
+      });
+      row.append(label, open);
+      list.append(row);
+    }
+  } catch (error) {
+    if (note) note.textContent = error.message || "Could not load reports.";
+  }
+}
+
+async function openShareableReport(reportId) {
+  const title = document.getElementById("report-view-title");
+  const body = document.getElementById("report-view-body");
+  const panel = document.getElementById("report-view");
+  const data = await fetchJson(`/agent/reports/${encodeURIComponent(reportId)}`);
+  if (title) title.textContent = data.title || data.series || reportId;
+  if (body) {
+    const snap = data.snapshot || data;
+    const lines = [];
+    if (snap.forecast && snap.forecast.why && snap.forecast.why.explanation) {
+      lines.push(`Why: ${snap.forecast.why.explanation}`);
+    }
+    if (snap.accuracy && typeof snap.accuracy.comparison === "string") {
+      lines.push(snap.accuracy.comparison);
+    }
+    if (snap.regimes && typeof snap.regimes.summary === "string") {
+      lines.push(snap.regimes.summary);
+    }
+    body.textContent = lines.length ? lines.join("\n\n") : JSON.stringify(snap, null, 2);
+  }
+  if (panel) panel.hidden = false;
+}
+
+async function submitReportForm(event) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const series = form.series.value || "weather";
+  try {
+    await createShareableReport(series);
+    await loadReportsPanel();
+  } catch (error) {
+    const note = document.getElementById("report-note");
+    if (note) note.textContent = error.message || "Could not create report.";
+  }
 }
 
 async function saveScenarioFromForm(event) {
@@ -3147,6 +3241,8 @@ const scenarioForm = document.getElementById("scenario-save-form");
 if (scenarioForm) scenarioForm.addEventListener("submit", (event) => void saveScenarioFromForm(event));
 const whatIfForm = document.getElementById("what-if-form");
 if (whatIfForm) whatIfForm.addEventListener("submit", (event) => void submitWhatIfForm(event));
+const reportForm = document.getElementById("report-create-form");
+if (reportForm) reportForm.addEventListener("submit", (event) => void submitReportForm(event));
 
 document.getElementById("unhinged-toggle").addEventListener("click", () => {
   setChatMode(chatMode() === "unhinged" ? "normal" : "unhinged");
@@ -3252,6 +3348,17 @@ if (forecastActions) {
     });
     forecastActions.append(chip);
   }
+  const share = document.createElement("button");
+  share.type = "button";
+  share.className = "chip";
+  share.textContent = "Share weather report";
+  share.addEventListener("click", () => {
+    showToolView("reports");
+    void createShareableReport("weather")
+      .then(() => loadReportsPanel())
+      .catch((error) => reportError(error));
+  });
+  forecastActions.append(share);
 }
 
 document.getElementById("account-btn").addEventListener("click", openSignInModal);

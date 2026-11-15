@@ -29,6 +29,7 @@ import {
   resolveMemoryIdentity,
   upsertMemory,
 } from "./memory";
+import { createReport, getReport, listReports } from "./reports";
 import {
   createScenario,
   deleteScenario,
@@ -396,6 +397,89 @@ async function handleScenarios(
   return json({ error: "Method not allowed." }, 405);
 }
 
+async function handleReports(
+  request: Request,
+  env: AgentEnv,
+  path: string,
+  body: Record<string, unknown> | null,
+): Promise<Response> {
+  if (!env.WORKSPACES_DB) {
+    return json({ error: "Report store is not configured." }, 503);
+  }
+  const db = env.WORKSPACES_DB;
+  const rest = path.replace(/^\/agent\/reports\/?/, "");
+
+  // Public share link — no auth required.
+  if (request.method === "GET" && rest && !rest.includes("/")) {
+    const reportId = decodeURIComponent(rest);
+    const report = await getReport(db, reportId);
+    if (!report) return json({ error: "Not found." }, 404);
+    return json({
+      id: report.id,
+      series: report.series,
+      title: report.title,
+      created_at: report.created_at,
+      snapshot: report.snapshot,
+      share_path: `/agent/reports/${report.id}`,
+    });
+  }
+
+  const identity = await identityFor(request, env);
+
+  if (request.method === "GET" && !rest) {
+    const reports = await listReports(db, identity.scope);
+    return json({
+      scope: identity.signedIn ? (identity.owner ? "owner" : "user") : "visitor",
+      reports: reports.map((row) => ({
+        id: row.id,
+        series: row.series,
+        title: row.title,
+        created_at: row.created_at,
+        share_path: `/agent/reports/${row.id}`,
+      })),
+    });
+  }
+
+  if (request.method === "POST" && !rest) {
+    const series =
+      typeof body?.series === "string" && body.series.trim() ? body.series.trim() : "weather";
+    let snapshot =
+      body?.snapshot && typeof body.snapshot === "object" && !Array.isArray(body.snapshot)
+        ? (body.snapshot as Record<string, unknown>)
+        : null;
+    if (!snapshot) {
+      const fetchContainer = makeContainerFetcher(env, request);
+      const built = await fetchContainer("/analysis/report", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ series }),
+      });
+      if (built.status >= 400 || !built.json || typeof built.json !== "object") {
+        return json({ error: `Could not build report (${built.status}).` }, built.status >= 400 ? built.status : 502);
+      }
+      snapshot = built.json as Record<string, unknown>;
+    }
+    const title =
+      (typeof body?.title === "string" && body.title.trim()) ||
+      (typeof snapshot.title === "string" && snapshot.title) ||
+      `${series} report`;
+    const result = await createReport(db, identity.scope, { series, title, snapshot });
+    if (!result.ok) return json({ error: result.error }, 400);
+    return json({
+      report: {
+        id: result.report.id,
+        series: result.report.series,
+        title: result.report.title,
+        created_at: result.report.created_at,
+        share_path: `/agent/reports/${result.report.id}`,
+      },
+      snapshot: result.report.snapshot,
+    });
+  }
+
+  return json({ error: "Method not allowed." }, 405);
+}
+
 export async function handleAgent(
   request: Request,
   env: AgentEnv,
@@ -425,6 +509,9 @@ export async function handleAgent(
   }
   if (path === "/agent/scenarios" || path.startsWith("/agent/scenarios/")) {
     return handleScenarios(request, env, path, body);
+  }
+  if (path === "/agent/reports" || path.startsWith("/agent/reports/")) {
+    return handleReports(request, env, path, body);
   }
   if (path === "/agent/chats" || path.startsWith("/agent/chats/")) {
     return handleChats(request, env, path, body);
