@@ -18,8 +18,12 @@ def test_starter_jepa_compare_returns_mae_table() -> None:
     names = [row["name"] for row in payload["models"]]
     assert "jepa_forecaster" in names
     assert "time_series_transformer" in names
-    for row in payload["models"]:
-        assert row["mae"] >= 0
+    by_name = {row["name"]: row for row in payload["models"]}
+    # Shipped weather transformer holdout MAE is a few °C, not tens of °C.
+    assert 0 <= by_name["time_series_transformer"]["mae"] <= 8.0
+    assert by_name["jepa_forecaster"]["mae"] >= 0
+    # JEPA is a short demo; still report original-unit MAE (not z-scores).
+    assert by_name["jepa_forecaster"]["mae"] < 40.0
     assert payload["winner"] in {
         "jepa_forecaster",
         "time_series_transformer",
@@ -27,6 +31,7 @@ def test_starter_jepa_compare_returns_mae_table() -> None:
     }
     assert payload["n_train"] > 0
     assert payload["n_val"] > 0
+    assert "shipped" in by_name["time_series_transformer"]["label"].lower()
 
 
 def test_starter_jepa_compare_unknown_is_404() -> None:
