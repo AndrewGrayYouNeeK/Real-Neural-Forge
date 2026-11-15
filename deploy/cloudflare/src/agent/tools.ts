@@ -518,6 +518,35 @@ export const TOOL_DEFINITIONS = [
       additionalProperties: false,
     },
   },
+  {
+    type: "function" as const,
+    name: "generate_synthetic_series",
+    description:
+      "Generate a realistic sample series (sine/trend/seasonal/noise/walk, or a tiny diffusion-assisted path) for demos or Train-on-my-CSV.",
+    parameters: {
+      type: "object",
+      properties: {
+        pattern: {
+          type: "string",
+          enum: ["sine", "trend", "seasonal", "noise", "walk", "diffusion"],
+          description: "Generator pattern. Default sine.",
+        },
+        length: {
+          type: "integer",
+          description: "Number of points (32-2048). Default 256.",
+        },
+        noise: {
+          type: "number",
+          description: "Noise scale 0-1. Default 0.05.",
+        },
+        seed: {
+          type: "integer",
+          description: "RNG seed. Default 0.",
+        },
+      },
+      additionalProperties: false,
+    },
+  },
 ];
 
 export function toolsForResponsesApi(): Array<Record<string, unknown>> {
@@ -1470,6 +1499,46 @@ async function runWhatIf(ctx: ToolContext, args: Record<string, unknown>): Promi
   };
 }
 
+async function runGenerateSynthetic(
+  ctx: ToolContext,
+  args: Record<string, unknown>,
+): Promise<ToolResult["data"]> {
+  const pattern = stringArg(args, "pattern", "sine") || "sine";
+  const length = intArg(args, "length", 256, 32, 2048);
+  const noiseRaw = args.noise;
+  const noise =
+    typeof noiseRaw === "number" && Number.isFinite(noiseRaw)
+      ? Math.min(1, Math.max(0, noiseRaw))
+      : 0.05;
+  const seed = intArg(args, "seed", 0, 0, 1_000_000);
+  const result = await ctx.fetchContainer(
+    "/analysis/synthetic",
+    containerInit(ctx, {
+      method: "POST",
+      headers: { ...ctx.authHeaders, "Content-Type": "application/json" },
+      body: JSON.stringify({ pattern, length, noise, seed }),
+    }),
+  );
+  throwIfContainerStatusError(result.status, "Synthetic series");
+  const payload = result.json as Record<string, unknown>;
+  const series = Array.isArray(payload.series) ? payload.series.slice(0, 8) : [];
+  return {
+    ok: true,
+    pattern: payload.pattern,
+    method: payload.method,
+    length: payload.length,
+    noise: payload.noise,
+    seed: payload.seed,
+    summary: payload.summary,
+    preview: series,
+    has_csv: typeof payload.csv === "string",
+    text:
+      typeof payload.summary === "string"
+        ? payload.summary
+        : `Generated synthetic ${pattern} series.`,
+  };
+}
+
 async function runCreateAlert(
   ctx: ToolContext,
   args: Record<string, unknown>,
@@ -1770,6 +1839,8 @@ export async function dispatchTool(
         return runListAlerts(keyed);
       case "check_alerts":
         return runCheckAlerts(keyed, args);
+      case "generate_synthetic_series":
+        return runGenerateSynthetic(keyed, args);
       default: {
         const unexpected: never = toolName;
         throw new Error(`Unhandled tool: ${String(unexpected)}`);

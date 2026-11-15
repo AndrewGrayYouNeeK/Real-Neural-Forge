@@ -29,21 +29,15 @@ and never deploy the frontend Worker `real-neural-forge`.
 - **JEPA SSL experiment (shipped; selectable, not default)** —
   `config/jepa_experiment.yaml`.
 
-## Phase 3 — Generative Layer (in progress)
+## Phase 3 — Generative Layer (shipped)
 
-1. **Why-this-forecast** — short plain-English explanation under each prediction
-   from recent trend / seasonality, plus PCA drivers and K-Means regimes when
-   available (`POST /analysis/why`, `why` on starter / predict-latest payloads,
-   `explain_prediction` agent tool). Landing tool **Live**.
-2. **What-if** — shock the last input on a starter or saved-scenario series
-   (`POST /analysis/what-if`, workspace `…/what-if`, agent `what_if`); compare
-   baseline vs shocked path. Landing tool **Live**.
-3. **Reports** — one-click shareable summary (forecast, accuracy, regimes)
-   via `POST /analysis/report` + D1 `public_reports` (`/agent/reports/{id}`).
-   Landing tool **Live**.
-4. **Alerts** — threshold or unusual-point alerts from K-Means flags (in-app
-   only; D1 `alert_rules` / `alert_events`, `/agent/alerts`). Landing **Live**.
-5. **Synthetic data** — generate realistic sample series (diffusion can help).
+1. **Why-this-forecast** — plain-English explanations under predictions.
+2. **What-if** — shock last input; compare baseline vs shocked path.
+3. **Reports** — shareable forecast / accuracy / regimes snapshots.
+4. **Alerts** — in-app threshold and K-Means anomaly alerts (no email/SMS).
+5. **Synthetic data** — `POST /analysis/synthetic` (sine/trend/seasonal/noise/walk
+   + optional tiny diffusion); download CSV / Train-on-my-CSV; agent
+   `generate_synthetic_series`. Landing **Live**.
 
 ## Phase 4 — Multimodal
 
