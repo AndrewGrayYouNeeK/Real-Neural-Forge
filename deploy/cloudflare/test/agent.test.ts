@@ -422,6 +422,99 @@ describe("agent tool dispatch", () => {
     vi.unstubAllGlobals();
   });
 
+  it("converts weather what-if paths and deltas to °F", async () => {
+    const fetchContainer = vi.fn(async (path: string) => {
+      if (path.includes("/analysis/what-if")) {
+        return {
+          status: 200,
+          json: {
+            starter_id: "weather",
+            series: "weather",
+            unit: "°C",
+            shock: { mode: "pct", value: -10, before: 10, after: 9 },
+            baseline: { p50: [15.0], forecast: [15.0] },
+            shocked: { p50: [14.0], forecast: [14.0] },
+            delta: {
+              p50: [-1.0],
+              mean: -1.0,
+              text: "A -10.0% shock to the last input lowers the 1-step path by about 1 on average.",
+            },
+            summary: "A -10.0% shock to the last input lowers the 1-step path by about 1 on average.",
+          },
+        };
+      }
+      return { status: 404, json: {} };
+    });
+    const result = await dispatchTool(
+      "what_if",
+      { series: "weather", mode: "pct", value: -10, horizon: 1 },
+      toolContext({ fetchContainer }),
+      2000,
+      { coldStartWaitMs: 0 },
+    );
+    expect(result.ok).toBe(true);
+    const data = result.data as {
+      unit?: string;
+      shock?: { before?: number; after?: number };
+      baseline?: { p50?: number[] };
+      delta?: { mean?: number; text?: string };
+      summary?: string;
+    };
+    expect(data.unit).toBe("°F");
+    expect(data.shock?.before).toBe(50);
+    expect(data.shock?.after).toBe(48.2);
+    expect(data.baseline?.p50?.[0]).toBe(59);
+    expect(data.delta?.mean).toBe(-1.8);
+    expect(data.summary).toMatch(/°F/);
+    expect(data.summary).not.toMatch(/by about 1 on average/);
+  });
+
+  it("keeps explain_prediction weather facts in °F without double conversion", async () => {
+    const fetchContainer = vi.fn(async (path: string) => {
+      if (path.includes("/starters/weather/forecast")) {
+        return {
+          status: 200,
+          json: {
+            starter_id: "weather",
+            name: "Central Park",
+            unit: "°C",
+            forecast: [
+              { step: 1, value: 15.15, p10: 11.0, p50: 15.15, p90: 19.0 },
+              { step: 2, value: 15.5, p10: 11.0, p50: 15.5, p90: 19.5 },
+            ],
+            history: [{ index: 1, actual: 14.4 }],
+            why: { explanation: "Recent values have been roughly flat.", drivers: [] },
+          },
+        };
+      }
+      if (path.includes("/evaluation/")) {
+        return { status: 200, json: { backtest: { comparison: "ok", metrics: { mae: 1 } } } };
+      }
+      return { status: 404, json: {} };
+    });
+    const result = await dispatchTool(
+      "explain_prediction",
+      { series: "weather" },
+      toolContext({ fetchContainer }),
+      2000,
+      { coldStartWaitMs: 0 },
+    );
+    expect(result.ok).toBe(true);
+    const data = result.data as {
+      note?: string;
+      explanation_facts?: {
+        unit?: string;
+        storage_unit?: string;
+        forecast?: Array<{ p50?: number; value?: number }>;
+      };
+    };
+    expect(data.explanation_facts?.unit).toBe("°F");
+    expect(data.explanation_facts?.storage_unit).toBe("°C");
+    // 15.15°C → 59.27°F once (not double-converted into the 130–150s).
+    expect(data.explanation_facts?.forecast?.[0]?.value).toBe(59.27);
+    expect(data.note).toMatch(/already in °F/i);
+  });
+
   it("treats high/low place forecasts as weather and never leaks tool errors", async () => {
     const result = await dispatchTool(
       "fetch_live_data",

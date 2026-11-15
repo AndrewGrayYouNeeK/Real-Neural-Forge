@@ -200,7 +200,7 @@ export const TOOL_DEFINITIONS = [
     type: "function" as const,
     name: "explain_prediction",
     description:
-      "Explain why a forecast looks the way it does: recent trend, seasonality, optional PCA drivers / K-Means regime, plus the point and interval.",
+      "Explain why a forecast looks the way it does: recent trend, seasonality, optional PCA drivers / K-Means regime, plus the point and interval. Weather explanation_facts are already in °F — quote those numbers as °F and never convert again.",
     parameters: {
       type: "object",
       properties: {
@@ -418,7 +418,7 @@ export const TOOL_DEFINITIONS = [
     type: "function" as const,
     name: "what_if",
     description:
-      "Shock the last input on a series (or a saved scenario's series) and compare the baseline forecast to the shocked path. Use for counterfactuals like 'what if the last value dropped 10%'.",
+      "Shock the last input on a series (or a saved scenario's series) and compare the baseline forecast to the shocked path. Use for counterfactuals like 'what if the last value dropped 10%'. Weather paths, shocks, and deltas are already converted to °F — quote them as °F and never convert again.",
     parameters: {
       type: "object",
       properties: {
@@ -796,6 +796,10 @@ function convertUncertainty(uncertainty: unknown): unknown {
 }
 
 function convertWeatherForecastPayload(payload: Record<string, unknown>): Record<string, unknown> {
+  // Idempotent: never °C→°F twice (that produced absurd “high-150s °F” answers).
+  if (payload.storage_unit === "°C" && payload.unit === "°F") {
+    return payload;
+  }
   return {
     ...payload,
     unit: "°F",
@@ -804,6 +808,99 @@ function convertWeatherForecastPayload(payload: Record<string, unknown>): Record
     history: convertForecastRows(payload.history),
     uncertainty: convertUncertainty(payload.uncertainty),
   };
+}
+
+function convertNumberList(values: unknown, convert: (n: number) => number): unknown {
+  if (!Array.isArray(values)) return values;
+  return values.map((item) =>
+    typeof item === "number" && Number.isFinite(item) ? roundDisplay(convert(item)) : item,
+  );
+}
+
+/** Weather what-if payloads from the container are °C; expose °F like forecast. */
+function convertWeatherWhatIfPayload(payload: Record<string, unknown>): Record<string, unknown> {
+  if (payload.storage_unit === "°C" && payload.unit === "°F") {
+    return payload;
+  }
+  const shockRecord =
+    payload.shock && typeof payload.shock === "object"
+      ? ({ ...(payload.shock as Record<string, unknown>) } as Record<string, unknown>)
+      : null;
+  if (shockRecord) {
+    for (const key of ["before", "after"] as const) {
+      const value = shockRecord[key];
+      if (typeof value === "number" && Number.isFinite(value)) {
+        shockRecord[key] = roundDisplay(celsiusToFahrenheit(value));
+      }
+    }
+    if (shockRecord.mode === "abs" && typeof shockRecord.value === "number") {
+      shockRecord.value = roundDisplay(scaleCelsiusDeltaToF(Number(shockRecord.value)));
+    }
+  }
+  const convertPathBlock = (block: unknown): unknown => {
+    if (!block || typeof block !== "object") return block;
+    const src = block as Record<string, unknown>;
+    return {
+      ...src,
+      p50: convertNumberList(src.p50, celsiusToFahrenheit),
+      forecast: convertNumberList(src.forecast, celsiusToFahrenheit),
+    };
+  };
+  const deltaSrc =
+    payload.delta && typeof payload.delta === "object"
+      ? (payload.delta as Record<string, unknown>)
+      : null;
+  const meanDelta =
+    deltaSrc && typeof deltaSrc.mean === "number" && Number.isFinite(deltaSrc.mean)
+      ? roundDisplay(scaleCelsiusDeltaToF(deltaSrc.mean))
+      : deltaSrc?.mean;
+  const delta = deltaSrc
+    ? {
+        ...deltaSrc,
+        p50: convertNumberList(deltaSrc.p50, scaleCelsiusDeltaToF),
+        mean: meanDelta,
+        text:
+          typeof meanDelta === "number"
+            ? rewriteWhatIfDeltaText(String(deltaSrc.text ?? payload.summary ?? ""), meanDelta)
+            : deltaSrc.text,
+      }
+    : payload.delta;
+  const summary =
+    typeof meanDelta === "number"
+      ? rewriteWhatIfDeltaText(String(payload.summary ?? ""), meanDelta)
+      : payload.summary;
+  return {
+    ...payload,
+    unit: "°F",
+    storage_unit: "°C",
+    shock: shockRecord ?? payload.shock,
+    baseline: convertPathBlock(payload.baseline),
+    shocked: convertPathBlock(payload.shocked),
+    delta,
+    summary,
+    text: typeof summary === "string" ? summary : payload.text,
+  };
+}
+
+function rewriteWhatIfDeltaText(text: string, meanDeltaF: number): string {
+  const abs = Math.abs(meanDeltaF);
+  const approx = abs < 1e-9 ? "0" : abs.toPrecision(3);
+  if (/leaves the .+ forecast almost unchanged/i.test(text)) {
+    return text.replace(/\s*$/, "").replace(/\.$/, "") + " (°F).";
+  }
+  if (/lifts the /i.test(text)) {
+    return text.replace(
+      /lifts the (.+?) by about [-+0-9.eE]+(?:\s*\S+)? on average\.?/i,
+      `lifts the $1 by about ${approx}°F on average.`,
+    );
+  }
+  if (/lowers the /i.test(text)) {
+    return text.replace(
+      /lowers the (.+?) by about [-+0-9.eE]+(?:\s*\S+)? on average\.?/i,
+      `lowers the $1 by about ${approx}°F on average.`,
+    );
+  }
+  return `${text} (values in °F)`.trim();
 }
 
 function convertMetricBag(block: unknown): unknown {
@@ -1156,7 +1253,11 @@ async function runCompareHorizons(ctx: ToolContext, args: Record<string, unknown
 
 async function runExplain(ctx: ToolContext, args: Record<string, unknown>): Promise<ToolResult["data"]> {
   const series = stringArg(args, "series", "weather") || "weather";
-  const forecast = await runForecast(ctx, { series, horizon: 1 });
+  // Use the full starter horizon so week-ahead paths are available; values are °F for weather.
+  const forecast = await runForecast(ctx, {
+    series,
+    horizon: isWeatherSeries(series) ? 7 : 1,
+  });
   const why =
     forecast && typeof forecast === "object" && "why" in forecast
       ? (forecast as Record<string, unknown>).why
@@ -1165,26 +1266,42 @@ async function runExplain(ctx: ToolContext, args: Record<string, unknown>): Prom
     why && typeof why === "object" && typeof (why as { explanation?: unknown }).explanation === "string"
       ? String((why as { explanation: string }).explanation)
       : "";
+  const weatherNote =
+    "Weather explanation_facts are already in °F (unit and storage_unit mark this). Quote those numbers as °F; never convert °C→°F again.";
+  const baseNote =
+    "Lead with the why explanation; then mention the point, interval, and accuracy using only these facts.";
+  const note = isWeatherSeries(series) ? `${baseNote} ${weatherNote}` : baseNote;
   if (!explanation) {
     // Degrade gracefully: rebuild from history when the container omitted why.
+    // Forecast tool output may already be °F — convert back to °C for the why API
+    // so trend math matches storage scale, then keep explanation_facts in °F.
+    const alreadyF =
+      forecast &&
+      typeof forecast === "object" &&
+      (forecast as { unit?: unknown }).unit === "°F" &&
+      (forecast as { storage_unit?: unknown }).storage_unit === "°C";
     const historyRows = Array.isArray((forecast as { history?: unknown }).history)
       ? ((forecast as { history: Array<Record<string, unknown>> }).history)
       : [];
     const history = historyRows
       .map((row) => Number(row.actual ?? row.value))
-      .filter((value) => Number.isFinite(value));
+      .filter((value) => Number.isFinite(value))
+      .map((value) => (alreadyF ? (value - 32) * (5 / 9) : value));
     const steps = Array.isArray((forecast as { forecast?: unknown }).forecast)
       ? ((forecast as { forecast: Array<Record<string, unknown>> }).forecast)
       : [];
     const next = steps[0];
-    const point = next ? Number(next.p50 ?? next.value) : undefined;
+    let point = next ? Number(next.p50 ?? next.value) : undefined;
+    if (alreadyF && typeof point === "number" && Number.isFinite(point)) {
+      point = (point - 32) * (5 / 9);
+    }
     const rebuilt = await ctx.fetchContainer("/analysis/why", {
       method: "POST",
       headers: { ...ctx.authHeaders, "Content-Type": "application/json" },
       body: JSON.stringify({
         history,
         forecast: Number.isFinite(point) ? point : null,
-        unit: (forecast as { unit?: string }).unit ?? null,
+        unit: alreadyF ? "°C" : ((forecast as { unit?: string }).unit ?? null),
       }),
     });
     if (rebuilt.status < 400 && rebuilt.json && typeof rebuilt.json === "object") {
@@ -1195,7 +1312,7 @@ async function runExplain(ctx: ToolContext, args: Record<string, unknown>): Prom
         why: payload,
         explanation,
         explanation_facts: forecast,
-        note: "Lead with the why explanation; then mention the point, interval, and accuracy using only these facts.",
+        note,
       };
     }
   }
@@ -1204,7 +1321,7 @@ async function runExplain(ctx: ToolContext, args: Record<string, unknown>): Prom
     why,
     explanation,
     explanation_facts: forecast,
-    note: "Lead with the why explanation; then mention the point, interval, and accuracy using only these facts.",
+    note,
   };
 }
 
@@ -1466,14 +1583,19 @@ async function runWhatIf(ctx: ToolContext, args: Record<string, unknown>): Promi
       }),
     );
     throwIfContainerStatusError(result.status, "What-if");
-    const payload = result.json as Record<string, unknown>;
+    let payload = result.json as Record<string, unknown>;
+    if (isWeatherSeries(series) || isWeatherSeries(payload.starter_id) || isWeatherSeries(payload.series)) {
+      payload = convertWeatherWhatIfPayload(payload);
+    }
     return {
       ok: true,
       ...payload,
       text:
         typeof payload.summary === "string"
           ? payload.summary
-          : `What-if on ${series} complete.`,
+          : typeof payload.text === "string"
+            ? payload.text
+            : `What-if on ${series} complete.`,
     };
   }
   const result = await ctx.fetchContainer(

@@ -2551,7 +2551,7 @@ async function runDiffusionDemo() {
   }
   if (button) button.disabled = true;
   try {
-    const payload = await fetchJson("/starters/weather/diffusion?horizon=7&n_paths=12");
+    const payload = await fetchJson("/starters/weather/diffusion?horizon=7&n_paths=24");
     state.lastDiffusion = payload;
     renderDiffusionReport(payload);
   } catch (error) {
@@ -2738,6 +2738,78 @@ async function runSavedScenario(scenarioId) {
   }
 }
 
+function weatherWhatIfDisplay(result) {
+  if (!result || typeof result !== "object") return result;
+  const c2f = (c) =>
+    typeof c === "number" && Number.isFinite(c)
+      ? Math.round((c * (9 / 5) + 32) * 100) / 100
+      : c;
+  const d2f = (c) =>
+    typeof c === "number" && Number.isFinite(c)
+      ? Math.round(c * (9 / 5) * 100) / 100
+      : c;
+  const mapPath = (block) => {
+    if (!block || typeof block !== "object") return block;
+    return {
+      ...block,
+      p50: Array.isArray(block.p50) ? block.p50.map(c2f) : block.p50,
+      forecast: Array.isArray(block.forecast) ? block.forecast.map(c2f) : block.forecast,
+    };
+  };
+  return {
+    ...result,
+    unit: "°F",
+    storage_unit: "°C",
+    shock: result.shock
+      ? { ...result.shock, before: c2f(result.shock.before), after: c2f(result.shock.after) }
+      : result.shock,
+    baseline: mapPath(result.baseline),
+    shocked: mapPath(result.shocked),
+    delta: result.delta
+      ? {
+          ...result.delta,
+          mean: d2f(result.delta.mean),
+          p50: Array.isArray(result.delta.p50) ? result.delta.p50.map(d2f) : result.delta.p50,
+          text: formatWhatIfSummary(result, "weather"),
+        }
+      : result.delta,
+    summary: formatWhatIfSummary(result, "weather"),
+  };
+}
+
+function formatWhatIfSummary(result, series) {
+  const raw =
+    (result && typeof result.summary === "string" && result.summary) ||
+    `What-if on ${series || "series"} finished.`;
+  if (!result || String(series || result.starter_id || "").toLowerCase() !== "weather") {
+    return raw;
+  }
+  // API stores weather in °C; chat forecast replies use °F — match that here.
+  const meanC = result.delta && typeof result.delta.mean === "number" ? result.delta.mean : null;
+  if (meanC == null || !Number.isFinite(meanC)) {
+    return `${raw} (weather values shown in chat as °F)`;
+  }
+  const meanF = meanC * (9 / 5);
+  const abs = Math.abs(meanF);
+  const approx = abs < 1e-9 ? "0" : String(Math.round(abs * 1000) / 1000);
+  if (/leaves the .+ forecast almost unchanged/i.test(raw)) {
+    return raw.replace(/\.$/, "") + " (°F).";
+  }
+  if (/lifts the /i.test(raw)) {
+    return raw.replace(
+      /lifts the (.+?) by about [-+0-9.eE]+(?:\s*\S+)? on average\.?/i,
+      `lifts the $1 by about ${approx}°F on average.`
+    );
+  }
+  if (/lowers the /i.test(raw)) {
+    return raw.replace(
+      /lowers the (.+?) by about [-+0-9.eE]+(?:\s*\S+)? on average\.?/i,
+      `lowers the $1 by about ${approx}°F on average.`
+    );
+  }
+  return `${raw} (Δ ≈ ${approx}°F)`;
+}
+
 async function runScenarioWhatIf(scenario) {
   const series = scenario && scenario.series ? String(scenario.series) : "";
   if (!series) throw new Error("Save a series on the scenario first.");
@@ -2761,9 +2833,7 @@ async function runScenarioWhatIf(scenario) {
       body: JSON.stringify(body),
     });
   }
-  const text =
-    (result && typeof result.summary === "string" && result.summary) ||
-    `What-if on ${series} finished.`;
+  const text = formatWhatIfSummary(result, series);
   showToolView("chat");
   addReply(`What-if on “${scenario.name || series}” (−10% last input):\n\n${text}`);
 }
@@ -2786,11 +2856,13 @@ async function submitWhatIfForm(event) {
     });
     if (output) {
       output.hidden = false;
-      output.textContent = JSON.stringify(result, null, 2);
+      output.textContent = JSON.stringify(
+        series === "weather" ? weatherWhatIfDisplay(result) : result,
+        null,
+        2
+      );
     }
-    const summary =
-      (result && typeof result.summary === "string" && result.summary) ||
-      "What-if finished.";
+    const summary = formatWhatIfSummary(result, series);
     showToolView("chat");
     addReply(summary);
   } catch (error) {

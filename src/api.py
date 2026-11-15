@@ -571,7 +571,7 @@ def public_starter_forecast(
 def public_starter_diffusion(
     starter_id: str,
     horizon: int = Query(7, ge=1, le=14),
-    n_paths: int = Query(12, ge=4, le=24),
+    n_paths: int = Query(24, ge=4, le=32),
 ) -> dict[str, Any]:
     """Sample diffusion futures (p10/p50/p90) for a shipped starter. No account."""
     try:
