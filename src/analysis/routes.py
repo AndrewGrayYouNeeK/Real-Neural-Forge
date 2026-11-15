@@ -12,6 +12,7 @@ from src.analysis.alerts import evaluate_alert
 from src.analysis.kmeans import cluster_csv_bytes, cluster_matrix
 from src.analysis.pca import analyze_csv_bytes, analyze_matrix
 from src.analysis.report import build_starter_report
+from src.analysis.synthetic import generate_synthetic_series
 from src.analysis.why import build_why_explanation
 from src.workspace.errors import WorkspaceError
 from src.workspace.starter_forecast import starter_what_if
@@ -69,6 +70,15 @@ class AlertCheckRequest(BaseModel):
     series: str = Field(min_length=1)
     kind: Literal["threshold", "anomaly"]
     config: dict[str, Any] = Field(default_factory=dict)
+
+
+class SyntheticRequest(BaseModel):
+    """Generate a synthetic series for download / Train-on-my-CSV."""
+
+    pattern: Literal["sine", "trend", "seasonal", "noise", "walk", "diffusion"] = "sine"
+    length: int = Field(default=256, ge=32, le=2048)
+    noise: float = Field(default=0.05, ge=0.0, le=1.0)
+    seed: int = Field(default=0)
 
 
 @router.post("/analysis/pca")
@@ -209,3 +219,17 @@ def run_alert_check(body: AlertCheckRequest) -> dict[str, Any]:
         return evaluate_alert(body.series, body.kind, body.config)
     except WorkspaceError as exc:
         raise HTTPException(status_code=exc.status, detail=exc.detail) from exc
+
+
+@router.post("/analysis/synthetic")
+def run_synthetic(body: SyntheticRequest) -> dict[str, Any]:
+    """Generate a realistic sample series (classical patterns or tiny diffusion)."""
+    try:
+        return generate_synthetic_series(
+            pattern=body.pattern,
+            length=body.length,
+            noise=body.noise,
+            seed=body.seed,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc

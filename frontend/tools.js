@@ -146,8 +146,8 @@
       name: "Synthetic data",
       icon: "∿",
       description: "Generate training series with known patterns.",
-      status: "coming-soon",
-      view: "coming-soon",
+      status: "live",
+      view: "synthetic",
     },
     {
       id: "multimodal",
@@ -261,7 +261,7 @@
     {
       id: "phase-3",
       title: "Phase 3 — Generative Layer",
-      status: "in-progress",
+      status: "live",
       items: [
         {
           name: "Why this forecast",

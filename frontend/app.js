@@ -2884,6 +2884,68 @@ function activateTool(tool) {
   }
 }
 
+let lastSyntheticCsv = "";
+let lastSyntheticName = "synthetic.csv";
+
+async function submitSyntheticForm(event) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const note = document.getElementById("synthetic-note");
+  const preview = document.getElementById("synthetic-preview");
+  const download = document.getElementById("synthetic-download");
+  const train = document.getElementById("synthetic-train");
+  const pattern = form.pattern.value || "sine";
+  const length = Number(form.length.value) || 256;
+  const noise = Number(form.noise.value);
+  try {
+    const data = await fetchJson("/analysis/synthetic", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        pattern,
+        length,
+        noise: Number.isFinite(noise) ? noise : 0.05,
+        seed: 0,
+      }),
+    });
+    lastSyntheticCsv = typeof data.csv === "string" ? data.csv : "";
+    lastSyntheticName = `synthetic-${pattern}.csv`;
+    if (note) note.textContent = data.summary || "Series generated.";
+    if (preview) {
+      const rows = Array.isArray(data.series) ? data.series.slice(0, 8) : [];
+      preview.hidden = false;
+      preview.textContent = JSON.stringify({ pattern: data.pattern, preview: rows }, null, 2);
+    }
+    if (download) download.hidden = !lastSyntheticCsv;
+    if (train) train.hidden = !lastSyntheticCsv;
+  } catch (error) {
+    if (note) note.textContent = error.message || "Could not generate series.";
+  }
+}
+
+function downloadSyntheticCsv() {
+  if (!lastSyntheticCsv) return;
+  const blob = new Blob([lastSyntheticCsv], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = lastSyntheticName;
+  anchor.click();
+  URL.revokeObjectURL(url);
+}
+
+async function trainFromSyntheticCsv() {
+  if (!lastSyntheticCsv) return;
+  const note = document.getElementById("synthetic-note");
+  const file = new File([lastSyntheticCsv], lastSyntheticName, { type: "text/csv" });
+  try {
+    showToolView("chat");
+    await handleCsvTrainFile(file);
+  } catch (error) {
+    if (note) note.textContent = error.message || "Could not start train from synthetic CSV.";
+  }
+}
+
 async function loadAlertsPanel() {
   const ruleList = document.getElementById("alert-rule-list");
   const eventList = document.getElementById("alert-event-list");
@@ -3417,6 +3479,18 @@ const alertCheck = document.getElementById("alert-check");
 if (alertCheck) alertCheck.addEventListener("click", () => void checkAlertsNow());
 const alertRefresh = document.getElementById("alert-refresh");
 if (alertRefresh) alertRefresh.addEventListener("click", () => void loadAlertsPanel());
+const syntheticForm = document.getElementById("synthetic-form");
+if (syntheticForm) {
+  syntheticForm.addEventListener("submit", (event) => void submitSyntheticForm(event));
+}
+const syntheticDownload = document.getElementById("synthetic-download");
+if (syntheticDownload) {
+  syntheticDownload.addEventListener("click", () => downloadSyntheticCsv());
+}
+const syntheticTrain = document.getElementById("synthetic-train");
+if (syntheticTrain) {
+  syntheticTrain.addEventListener("click", () => void trainFromSyntheticCsv());
+}
 
 document.getElementById("unhinged-toggle").addEventListener("click", () => {
   setChatMode(chatMode() === "unhinged" ? "normal" : "unhinged");

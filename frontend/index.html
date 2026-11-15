@@ -406,6 +406,44 @@
             </div>
           </section>
 
+          <section class="tool-view" id="view-synthetic" data-tool-view="synthetic" hidden>
+            <header class="tool-view-head">
+              <h2>Synthetic data</h2>
+              <button type="button" class="btn secondary back-to-chat" data-view="chat">Back to chat</button>
+            </header>
+            <p class="hint">
+              Generate a realistic sample series with a known pattern. Download the
+              CSV or send it into Train on my CSV. The diffusion option uses a tiny
+              CPU demo model.
+            </p>
+            <form id="synthetic-form" class="side-panel-body">
+              <label for="synthetic-pattern">Pattern</label>
+              <select id="synthetic-pattern" name="pattern">
+                <option value="sine">sine</option>
+                <option value="trend">trend</option>
+                <option value="seasonal">seasonal</option>
+                <option value="noise">noise</option>
+                <option value="walk">random walk</option>
+                <option value="diffusion">diffusion-assisted</option>
+              </select>
+              <label for="synthetic-length">Length</label>
+              <input id="synthetic-length" name="length" type="number" value="256" min="32" max="2048" />
+              <label for="synthetic-noise">Noise</label>
+              <input id="synthetic-noise" name="noise" type="number" value="0.05" min="0" max="1" step="0.01" />
+              <button class="btn primary btn-small" type="submit">Generate</button>
+            </form>
+            <p id="synthetic-note" class="hint"></p>
+            <pre id="synthetic-preview" class="output" hidden></pre>
+            <div class="message-actions">
+              <button id="synthetic-download" class="btn secondary btn-small" type="button" hidden>
+                Download CSV
+              </button>
+              <button id="synthetic-train" class="btn secondary btn-small" type="button" hidden>
+                Use in Train on my CSV
+              </button>
+            </div>
+          </section>
+
           <section class="tool-view" id="view-alerts" data-tool-view="alerts" hidden>
             <header class="tool-view-head">
               <h2>Alerts</h2>

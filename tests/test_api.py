@@ -938,8 +938,12 @@ class TestForecastDashboard:
         alerts_tool = tools_js.split('id: "alerts"', 1)[1][:180]
         assert 'status: "live"' in alerts_tool
         assert 'view: "alerts"' in alerts_tool
+        assert 'id: "synthetic"' in tools_js
+        synthetic_tool = tools_js.split('id: "synthetic"', 1)[1][:180]
+        assert 'status: "live"' in synthetic_tool
+        assert 'view: "synthetic"' in synthetic_tool
         phase3 = tools_js.split('id: "phase-3"', 1)[1][:220]
-        assert 'status: "in-progress"' in phase3
+        assert 'status: "live"' in phase3
         assert "lottery" not in tools_js.lower()
         assert 'id="view-why"' in html
         assert 'id="view-what-if"' in html
@@ -948,6 +952,8 @@ class TestForecastDashboard:
         assert 'id="report-create-form"' in html
         assert 'id="view-alerts"' in html
         assert 'id="alert-create-form"' in html
+        assert 'id="view-synthetic"' in html
+        assert 'id="synthetic-form"' in html
         assert 'id="view-memory"' in html
         assert 'id="memory-list"' in html
         assert 'id="memory-clear"' in html
@@ -976,6 +982,8 @@ class TestForecastDashboard:
         assert "loadAlertsPanel" in app_js
         assert "checkAlertsNow" in app_js
         assert "/agent/alerts" in app_js
+        assert "submitSyntheticForm" in app_js
+        assert "/analysis/synthetic" in app_js
         assert 'method: "PATCH"' in app_js
         assert "celsiusToFahrenheit" in app_js
         assert "return `${formatMetric(celsiusToFahrenheit(number))}°F`" in app_js
