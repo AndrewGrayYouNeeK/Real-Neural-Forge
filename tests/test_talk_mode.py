@@ -83,3 +83,50 @@ def test_unhinged_mode_wiring_is_unchanged_by_talk_fixes() -> None:
     )
     assert "payload.facts = facts" in source
     assert 'mode === "unhinged"' in source
+
+def test_talk_mode_defaults_on_for_phones_and_stays_manual_on_desktop() -> None:
+    source = APP_JS.read_text(encoding="utf-8")
+    section = _talk_section(source)
+    html = (REPO_ROOT / "frontend" / "index.html").read_text(encoding="utf-8")
+    css = (REPO_ROOT / "frontend" / "styles.css").read_text(encoding="utf-8")
+    assert "function isPhoneSurface" in section
+    assert "function isAppWrapper" in section
+    assert "(pointer: coarse)" in section
+    assert "(max-width: 900px)" in section
+    assert "userAgent" in section
+    assert "window.Capacitor" in section
+    assert "neuralForgeTalkPref" in source
+    assert "function shouldAutoArmTalk" in section
+    assert "isPhoneSurface() && talkPreference() !== \"off\"" in section
+    assert "function armTalkForPhone" in section
+    assert "function startTalkFromGesture" in section
+    assert "function talkGestureRequired" in section
+    assert "function disarmTalk" in section
+    assert "armTalkForPhone();" in source
+    assert 'id="talk-start-overlay"' in html
+    assert "Tap to start talking" in html
+    assert 'id="talk-start-dismiss"' in html
+    assert "Not now" in html
+    assert 'id="talk-status"' in html
+    assert "Talk is on. Tap anywhere to start listening." in section
+    assert "pointerdown" in section
+    assert 'input.addEventListener("focus", onTalkAutoStartFocus)' in section
+    assert "data-state=\"armed\"" in css or ".mode-pill[data-state=\"armed\"]" in css
+    # Desktop keeps the manual Talk click path and does not auto-arm.
+    assert "function onTalkClick" in section
+    assert "Prime audio synchronously on the click path before any await." in section
+    assert "shouldAutoArmTalk" in section
+
+
+def test_talk_mode_remembers_phone_off_switch_and_keeps_unhinged_alone() -> None:
+    source = APP_JS.read_text(encoding="utf-8")
+    section = _talk_section(source)
+    assert "disarmTalk({ persist: true })" in section
+    assert 'setTalkPreference("off")' in section
+    assert 'setTalkPreference("on")' in section
+    assert "talk.armed && !talk.active" in section
+    # Voice / credit / model behavior stays in the existing Talk helpers.
+    assert "function speakTalkTurn" in section
+    assert "TALK_NO_CREDIT" in section
+    assert "TALK_SIGN_IN" in section
+    assert "lottery" not in source.lower()
