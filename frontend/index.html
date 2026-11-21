@@ -189,6 +189,7 @@
                   Talk
                 </button>
               </div>
+              <p id="talk-status" class="talk-status" hidden></p>
               <div class="composer-row">
                 <label class="visually-hidden" for="chat-input">Ask Neural Forge</label>
                 <textarea
@@ -919,6 +920,15 @@
       tabindex="-1"
       aria-hidden="true"
     />
+
+    <div id="talk-start-overlay" class="talk-start-overlay" hidden>
+      <div class="talk-start-card" role="dialog" aria-labelledby="talk-start-title" aria-modal="false">
+        <p id="talk-start-title">Talk is on</p>
+        <p class="talk-start-copy">Tap once to start hands-free talking in GQ voice.</p>
+        <button type="button" id="talk-start-button" class="btn primary">Tap to start talking</button>
+        <button type="button" id="talk-start-dismiss" class="btn">Not now</button>
+      </div>
+    </div>
 
     <script src="/assets/chart.js"></script>
     <script src="/assets/tools.js"></script>

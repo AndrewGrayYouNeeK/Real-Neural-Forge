@@ -2,6 +2,7 @@
 const charts = window.NeuralForgeCharts;
 const TOKEN_KEY = "neuralForgeApiToken";
 const MODE_KEY = "neuralForgeChatMode";
+const TALK_PREF_KEY = "neuralForgeTalkPref";
 const MAX_VOICE_CHARS = 2000;
 
 const state = {
@@ -1462,6 +1463,9 @@ const talk = {
   toldPlayback: false,
   restartTimer: 0,
   opening: false,
+  armed: false,
+  autoBound: false,
+  overlayBound: false,
 };
 
 function speechRecognitionCtor() {
@@ -1479,17 +1483,210 @@ function setTalkState(state) {
   if (!button) return;
   const labels = {
     idle: "Talk",
+    armed: "Talk on",
     listening: "Listening",
     thinking: "Thinking",
     speaking: "Speaking",
   };
   button.textContent = labels[state] || "Talk";
   button.dataset.state = state;
-  button.setAttribute("aria-pressed", talk.active ? "true" : "false");
+  const on = Boolean(talk.active || talk.armed);
+  button.setAttribute("aria-pressed", on ? "true" : "false");
   button.setAttribute(
     "aria-label",
-    talk.active ? `${button.textContent}. Tap to stop or interrupt.` : "Start Talk mode"
+    talk.active
+      ? `${button.textContent}. Tap to stop or interrupt.`
+      : talk.armed
+        ? "Talk mode is on. Tap to turn off."
+        : "Start Talk mode"
   );
+  document.body.classList.toggle("talk-armed", Boolean(talk.armed && !talk.active));
+  const status = document.getElementById("talk-status");
+  if (status) {
+    if (talk.armed && !talk.active) {
+      status.hidden = false;
+      status.textContent = "Talk is on. Tap anywhere to start listening.";
+    } else {
+      status.hidden = true;
+      status.textContent = "";
+    }
+  }
+}
+
+function isAppWrapper() {
+  try {
+    if (window.Capacitor || window.cordova) return true;
+    if (window.navigator && window.navigator.standalone === true) return true;
+    if (window.matchMedia && window.matchMedia("(display-mode: standalone)").matches) {
+      return true;
+    }
+  } catch {
+    // matchMedia can throw in odd test or older environments.
+  }
+  return false;
+}
+
+function isPhoneSurface() {
+  if (isAppWrapper()) return true;
+  try {
+    if (window.matchMedia && window.matchMedia("(pointer: coarse)").matches) return true;
+  } catch {
+    // Ignore unsupportive matchMedia implementations.
+  }
+  try {
+    if (window.matchMedia && window.matchMedia("(max-width: 900px)").matches) return true;
+  } catch {
+    // Ignore unsupportive matchMedia implementations.
+  }
+  const ua = String(
+    (window.navigator && (window.navigator.userAgent || window.navigator.vendor)) || ""
+  );
+  return /iPhone|iPod|iPad|Android.+Mobile|webOS|BlackBerry|IEMobile|Opera Mini/i.test(ua);
+}
+
+function talkPreference() {
+  try {
+    const raw = localStorage.getItem(TALK_PREF_KEY);
+    if (raw === "on" || raw === "off") return raw;
+  } catch {
+    // Storage can be blocked; fall through to the default.
+  }
+  return null;
+}
+
+function setTalkPreference(value) {
+  try {
+    localStorage.setItem(TALK_PREF_KEY, value === "on" ? "on" : "off");
+  } catch {
+    // The toggle still works for this page when storage is blocked.
+  }
+}
+
+function shouldAutoArmTalk() {
+  // Desktop stays manual. Phones default on unless the user turned Talk off.
+  return isPhoneSurface() && talkPreference() !== "off";
+}
+
+function talkGestureRequired() {
+  try {
+    if (navigator.userActivation) {
+      return !(navigator.userActivation.isActive || navigator.userActivation.hasBeenActive);
+    }
+  } catch {
+    // Assume a gesture is required when the API is missing or throws.
+  }
+  return true;
+}
+
+function isTalkOffControl(target) {
+  if (!target || typeof target.closest !== "function") return false;
+  return Boolean(
+    target.closest(
+      "#talk-toggle, #talk-start-dismiss, .modal-backdrop, #sidebar-toggle, #sidebar, .sidebar-backdrop"
+    )
+  );
+}
+
+function talkStartOverlay() {
+  return document.getElementById("talk-start-overlay");
+}
+
+function showTalkStartOverlay() {
+  const overlay = talkStartOverlay();
+  if (!overlay) return;
+  overlay.hidden = false;
+}
+
+function hideTalkStartOverlay() {
+  const overlay = talkStartOverlay();
+  if (!overlay) return;
+  overlay.hidden = true;
+}
+
+function startTalkFromGesture() {
+  if (talk.active || talk.opening) return;
+  talk.armed = false;
+  hideTalkStartOverlay();
+  unbindTalkAutoStart();
+  setTalkPreference("on");
+  unlockTalkAudio();
+  beginTalk().catch(() => {
+    if (talk.active) stopTalk();
+    addReply(TALK_MIC_BLOCKED);
+  });
+}
+
+function onTalkAutoStartPointer(event) {
+  if (!talk.armed || talk.active || talk.opening) return;
+  if (isTalkOffControl(event && event.target)) return;
+  startTalkFromGesture();
+}
+
+function onTalkAutoStartFocus() {
+  if (!talk.armed || talk.active || talk.opening) return;
+  startTalkFromGesture();
+}
+
+function bindTalkOverlayControls() {
+  if (talk.overlayBound) return;
+  talk.overlayBound = true;
+  const startButton = document.getElementById("talk-start-button");
+  if (startButton) {
+    startButton.addEventListener("click", (event) => {
+      event.preventDefault();
+      startTalkFromGesture();
+    });
+  }
+  const dismiss = document.getElementById("talk-start-dismiss");
+  if (dismiss) {
+    dismiss.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      disarmTalk({ persist: true });
+    });
+  }
+}
+
+function bindTalkAutoStart() {
+  bindTalkOverlayControls();
+  if (talk.autoBound) return;
+  talk.autoBound = true;
+  document.addEventListener("pointerdown", onTalkAutoStartPointer, true);
+  const input = document.getElementById("chat-input");
+  if (input) input.addEventListener("focus", onTalkAutoStartFocus);
+}
+
+function unbindTalkAutoStart() {
+  if (!talk.autoBound) return;
+  talk.autoBound = false;
+  document.removeEventListener("pointerdown", onTalkAutoStartPointer, true);
+  const input = document.getElementById("chat-input");
+  if (input) input.removeEventListener("focus", onTalkAutoStartFocus);
+}
+
+function disarmTalk(options = {}) {
+  talk.armed = false;
+  hideTalkStartOverlay();
+  unbindTalkAutoStart();
+  if (talk.active || talk.opening) {
+    stopTalk();
+  } else {
+    setTalkState("idle");
+  }
+  if (options.persist) setTalkPreference("off");
+}
+
+function armTalkForPhone() {
+  if (!shouldAutoArmTalk()) return;
+  if (!speechRecognitionCtor()) return;
+  talk.armed = true;
+  setTalkState("armed");
+  bindTalkAutoStart();
+  if (talkGestureRequired()) {
+    showTalkStartOverlay();
+  } else {
+    startTalkFromGesture();
+  }
 }
 
 function ensureTalkPlayer() {
@@ -1579,9 +1776,12 @@ function scheduleListen(delay) {
 function stopTalk() {
   window.clearTimeout(talk.restartTimer);
   talk.active = false;
+  talk.armed = false;
   talk.turn += 1;
   abortTalkRecognition();
   stopTalkAudio();
+  hideTalkStartOverlay();
+  unbindTalkAutoStart();
   setTalkState("idle");
 }
 
@@ -1814,8 +2014,17 @@ async function beginTalk() {
 }
 
 function onTalkClick() {
+  if (talk.armed && !talk.active) {
+    // Easy off switch while Talk is armed and waiting for a start gesture.
+    disarmTalk({ persist: true });
+    return;
+  }
   if (!talk.active) {
     // Prime audio synchronously on the click path before any await.
+    hideTalkStartOverlay();
+    unbindTalkAutoStart();
+    talk.armed = false;
+    if (isPhoneSurface()) setTalkPreference("on");
     unlockTalkAudio();
     beginTalk().catch(() => {
       if (talk.active) stopTalk();
@@ -1830,6 +2039,7 @@ function onTalkClick() {
     return;
   }
   stopTalk();
+  if (isPhoneSurface()) setTalkPreference("off");
 }
 
 /* ------------------------------------------------------------------ voice */
@@ -3908,3 +4118,4 @@ refreshAccount()
 refreshVoiceStatus().catch(() => {});
 refreshStatusLine().catch(() => {});
 selectOwnerHash();
+armTalkForPhone();
