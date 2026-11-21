@@ -170,6 +170,15 @@
                   📎
                 </button>
                 <button
+                  id="attach-image-btn"
+                  class="icon-btn"
+                  type="button"
+                  aria-label="Attach an image or chart"
+                  title="Attach image or chart"
+                >
+                  🖼
+                </button>
+                <button
                   id="unhinged-toggle"
                   class="mode-pill"
                   type="button"
@@ -189,6 +198,19 @@
                   Talk
                 </button>
               </div>
+              <div id="image-attachment" class="image-attachment" hidden>
+                <img id="image-attachment-thumb" alt="Attached image preview" />
+                <span id="image-attachment-name" class="image-attachment-name"></span>
+                <button
+                  id="image-attachment-remove"
+                  class="icon-btn icon-btn-small"
+                  type="button"
+                  aria-label="Remove attached image"
+                  title="Remove image"
+                >
+                  ×
+                </button>
+              </div>
               <div class="composer-row">
                 <label class="visually-hidden" for="chat-input">Ask Neural Forge</label>
                 <textarea
@@ -196,7 +218,7 @@
                   name="question"
                   rows="1"
                   autocomplete="off"
-                  placeholder="Ask about your data, or weather, markets, space…"
+                  placeholder="Ask about your data, weather, markets… or drop in a chart"
                 ></textarea>
                 <button class="btn primary send-btn" type="submit" aria-label="Send">
                   Ask
@@ -237,6 +259,11 @@
               <li>
                 <strong>Train on your own CSV</strong>
                 in one click in a private workspace.
+              </li>
+              <li>
+                <strong>Read charts and images</strong>
+                — attach a screenshot or photo and Neural Forge describes it,
+                pulls the numbers into a series, and forecasts what comes next.
               </li>
               <li>
                 <strong>Live answers</strong>
@@ -440,6 +467,25 @@
               </button>
               <button id="synthetic-train" class="btn secondary btn-small" type="button" hidden>
                 Use in Train on my CSV
+              </button>
+            </div>
+          </section>
+
+          <section class="tool-view" id="view-multimodal" data-tool-view="multimodal" hidden>
+            <header class="tool-view-head">
+              <h2>Images &amp; charts</h2>
+              <button type="button" class="btn secondary back-to-chat" data-view="chat">Back to chat</button>
+            </header>
+            <p class="hint">
+              Attach a chart screenshot, a table, or a photo in chat with 🖼, paste it,
+              or drag it onto the chat box. Neural Forge describes it, reads chart
+              numbers into a series, and draws a quick forecast you can download or
+              train on.
+            </p>
+            <p id="multimodal-allowance" class="hint"></p>
+            <div class="message-actions">
+              <button id="multimodal-attach" class="btn primary btn-small" type="button">
+                Attach an image
               </button>
             </div>
           </section>
@@ -910,6 +956,15 @@
         </div>
       </div>
     </div>
+
+    <input
+      id="image-attach-file"
+      class="visually-hidden"
+      type="file"
+      accept="image/png,image/jpeg,image/webp,image/gif"
+      tabindex="-1"
+      aria-hidden="true"
+    />
 
     <input
       id="csv-train-file"

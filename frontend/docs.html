@@ -120,6 +120,12 @@ curl -sS -X POST https://forge.youneek.dev/agent/chat \
   -H "Content-Type: application/json" \
   -d '{"question":"What can Neural Forge do?","mode":"unhinged"}'
 
+# Phase 4: read an image or chart (PNG/JPEG/WebP/GIF data URL, max 1.5 MB).
+# Returns a description, any chart numbers as a series, and a quick forecast.
+curl -sS -X POST https://forge.youneek.dev/agent/vision \
+  -H "Content-Type: application/json" \
+  -d "{\"question\":\"Where is this heading?\",\"image\":\"data:image/png;base64,$(base64 -w0 chart.png)\"}"
+
 # Fallback without tools (unchanged):
 curl -sS -X POST https://forge.youneek.dev/live/ask \
   -H "Content-Type: application/json" \

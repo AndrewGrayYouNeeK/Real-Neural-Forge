@@ -153,9 +153,9 @@
       id: "multimodal",
       name: "Multimodal",
       icon: "⧉",
-      description: "Charts, images, and text in one workflow.",
-      status: "coming-soon",
-      view: "coming-soon",
+      description: "Attach a chart or photo; read it and forecast its numbers.",
+      status: "in-progress",
+      view: "multimodal",
     },
     {
       id: "simulator",
@@ -293,11 +293,16 @@
     {
       id: "phase-4",
       title: "Phase 4 — Multimodal",
-      status: "coming-soon",
+      status: "in-progress",
       items: [
         {
-          name: "Multimodal inputs",
-          description: "Work with charts, images, and text in one place.",
+          name: "Read images & charts in chat",
+          description: "Attach a screenshot or photo and get a plain-English read.",
+          toolId: "multimodal",
+        },
+        {
+          name: "Chart to series",
+          description: "Pull the numbers out of a chart and forecast what comes next.",
           toolId: "multimodal",
         },
       ],

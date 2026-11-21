@@ -47,12 +47,18 @@ import {
   scenarioRerunQuestion,
 } from "./scenarios";
 import {
+  answerVision,
+  resolveVisionCaps,
+  visionAllowance,
+  type VisionEnv,
+} from "../vision/vision";
+import {
   authHeadersFromRequest,
   visitorFromRequest,
   type ContainerFetcher,
 } from "./tools";
 
-export type AgentEnv = AiQuotaEnv & {
+export type AgentEnv = AiQuotaEnv & VisionEnv & {
   AI?: AiLike;
   WORKSPACES_DB?: D1Like;
   NEURAL_FORGE_API_TOKEN?: string;
@@ -584,6 +590,71 @@ async function handleAlerts(
   return json({ error: "Method not allowed." }, 405);
 }
 
+async function handleVision(
+  request: Request,
+  env: AgentEnv,
+  path: string,
+  body: Record<string, unknown> | null,
+): Promise<Response> {
+  if (!env.AI || !env.WORKSPACES_DB) {
+    return json({ text: "Image reading is not configured on this server yet.", capped: true });
+  }
+  const identity = await identityFor(request, env);
+  const ip = clientIp(request);
+  const caps = resolveVisionCaps(env);
+  if (path === "/agent/vision/limits") {
+    if (request.method !== "GET") return json({ error: "Method not allowed." }, 405);
+    try {
+      const allowance = await visionAllowance({
+        db: env.WORKSPACES_DB,
+        owner: identity.owner,
+        ip,
+        identityScope: identity.scope,
+        caps,
+      });
+      return json({ allowance, owner: identity.owner });
+    } catch {
+      return json({ error: "Allowance unavailable." }, 503);
+    }
+  }
+  if (path !== "/agent/vision") return json({ error: "Not found." }, 404);
+  if (request.method !== "POST") return json({ error: "Method not allowed." }, 405);
+  const question = typeof body?.question === "string" ? body.question : "";
+  const mode = chatMode(typeof body?.mode === "string" ? body.mode : null);
+  const result = await answerVision(
+    {
+      ai: env.AI,
+      db: env.WORKSPACES_DB,
+      owner: identity.owner,
+      ip,
+      identityScope: identity.scope,
+      env,
+      chatModels: resolveChatModels(env),
+    },
+    body?.image,
+    question,
+    mode,
+  );
+  let threadId: string | null = null;
+  if (result.status === 200 && result.threadText) {
+    try {
+      const userLine = `[Image] ${question.replace(/\s+/g, " ").trim() || "Read this image"}`;
+      const thread = await ensureThreadForTurn(
+        env.WORKSPACES_DB,
+        identity.scope,
+        threadIdFrom(body),
+        userLine,
+      );
+      threadId = thread.id;
+      await appendMessage(env.WORKSPACES_DB, thread.id, "user", userLine);
+      await appendMessage(env.WORKSPACES_DB, thread.id, "assistant", result.threadText);
+    } catch {
+      threadId = null;
+    }
+  }
+  return json({ ...result.body, thread_id: threadId }, result.status);
+}
+
 export async function handleAgent(
   request: Request,
   env: AgentEnv,
@@ -619,6 +690,9 @@ export async function handleAgent(
   }
   if (path === "/agent/alerts" || path.startsWith("/agent/alerts/")) {
     return handleAlerts(request, env, path, body);
+  }
+  if (path === "/agent/vision" || path.startsWith("/agent/vision/")) {
+    return handleVision(request, env, path, body);
   }
   if (path === "/agent/chats" || path.startsWith("/agent/chats/")) {
     return handleChats(request, env, path, body);

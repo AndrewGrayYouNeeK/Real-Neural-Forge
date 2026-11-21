@@ -525,6 +525,25 @@ Workers Paid includes 10,000 neurons per day. Extra neurons are $0.011 per 1,000
 
 15,000 neurons past the free allocation is `15 × $0.011 = $0.165` per day, about $4.95 over 30 days. Override the defaults with `NEURAL_FORGE_AI_DAILY_NEURONS`, `NEURAL_FORGE_AI_FREE_DAILY_NEURONS`, `NEURAL_FORGE_AI_PER_IP_DAILY_NEURONS`, `NEURAL_FORGE_AI_PER_IP_DAILY_REQUESTS`, and `NEURAL_FORGE_AI_RESERVE_NEURONS` on the Worker. `NEURAL_FORGE_AI_MODEL` and `NEURAL_FORGE_AI_FALLBACK_MODEL` select the model ids.
 
+## Images and charts (Phase 4 — Multimodal)
+
+`POST /agent/vision` reads one attached image. Body: `{"image": "data:image/png;base64,...", "question": "optional", "mode": "normal"|"unhinged", "thread_id": "optional"}`.
+PNG, JPEG, WebP, or GIF up to 1.5 MB (the dashboard shrinks photos in the browser first).
+One Workers AI vision call on `@cf/google/gemma-4-26b-a4b-it` describes the image and, for a chart or table, reads its numbers into a series
+(`@cf/meta/llama-4-scout-17b-16e-instruct` runs only if that call errors). A damped-trend quick forecast is drawn on the series, and GPT-OSS 120B writes the reply in the normal or Unhinged voice.
+The response has `text`, `kind`, `title`, `description`, `series` (temperatures in °C), `display_series` (temperatures in °F for display), `forecast` (`steps` with `p10`/`p50`/`p90` in the API unit), `allowance`, and `thread_id`.
+`GET /agent/vision/limits` returns today's image allowance for the caller.
+
+A chart read is about 400 input and 150 output tokens on Gemma 4 (9,091 / 27,273 neurons per million), about 7 neurons; each image reserves 120 neurons to cover the read plus the 120B reply.
+
+| Image cap (per UTC day) | Default | Env override |
+| --- | --- | --- |
+| Each visitor / free account | 5 | `NEURAL_FORGE_VISION_VISITOR_DAILY` |
+| All non-owner visitors together | 120 | `NEURAL_FORGE_VISION_PUBLIC_DAILY` |
+| Owner | 60 | `NEURAL_FORGE_VISION_OWNER_DAILY` |
+
+Image calls also count toward the per-visitor and 25,000/day global neuron caps above, so the ~$5/month ceiling does not change. `NEURAL_FORGE_VISION_MODEL` and `NEURAL_FORGE_VISION_FALLBACK_MODEL` select the model ids.
+
 ## GQ voice: metered read-aloud
 
 The dashboard can read forecasts and results aloud in **GQ**, Andrew's professional voice clone on ElevenLabs (voice id `QMnwdN2oOwNXPcl9oXIl`). The rules:

@@ -39,9 +39,18 @@ and never deploy the frontend Worker `real-neural-forge`.
    + optional tiny diffusion); download CSV / Train-on-my-CSV; agent
    `generate_synthetic_series`. Landing **Live**.
 
-## Phase 4 — Multimodal
+## Phase 4 — Multimodal (in progress)
 
-- Charts, images, and text in one workflow
+Charts, images, and text in one workflow.
+
+1. **Read images in chat** — attach (🖼), paste, or drop a PNG/JPEG/WebP/GIF;
+   `POST /agent/vision` describes it with Workers AI
+   `@cf/google/gemma-4-26b-a4b-it`, and GPT-OSS 120B writes the reply.
+2. **Chart to series** — chart or table numbers come back as a series
+   (API °C for temperatures, °F on screen) with a quick damped-trend forecast,
+   Download CSV, and Train on this series (32+ points).
+3. **Caps** — 5 images/day per visitor, 120/day for all visitors, 60/day for
+   the owner; every image also counts toward the 25k neuron/day safety cap.
 
 ## Phase 5 — World model / simulator
 
