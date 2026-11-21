@@ -10,6 +10,7 @@
  */
 
 import {
+  NORMAL_TEMPERATURE,
   PRIMARY_MODEL,
   addExtraNeurons,
   chatMode,
@@ -119,7 +120,7 @@ export function agentSystemPrompt(
     return (
       `${base}\n\n` +
       "Directness: answer exactly what was asked. Lead with the answer. Keep it short. " +
-      "No rambling, tangents, or unasked extras. Wit stays light and secondary. " +
+      "No rambling, tangents, or unasked extras. Keep the personality: a quick quip or wry line is welcome. " +
       "Do not call tools and do not emit tool JSON." +
       memory
     );
@@ -130,7 +131,7 @@ export function agentSystemPrompt(
   return (
     `${base}\n\n` +
     "Directness: answer exactly what was asked. Lead with the answer. Keep it short. " +
-    "No rambling, tangents, or unasked extras. Wit stays light and secondary.\n\n" +
+    "No rambling, tangents, or unasked extras. Keep the personality: a quick quip or wry line is welcome.\n\n" +
     JSON_PROTOCOL +
     memory
   );
@@ -206,11 +207,15 @@ export function buildAgentInputs(options: {
     max_tokens: maxTokens,
   };
   if (allowTools) inputs.tools = toolsForChatCompletions();
-  if (mode === "unhinged") inputs.temperature = 0.9;
+  inputs.temperature = mode === "unhinged" ? 0.9 : NORMAL_TEMPERATURE;
   return inputs;
 }
 
-function toolNote(call: ParsedToolCall, result: ToolResult): string {
+/** Default-mode voice reminder appended to tool results (Unhinged keeps its own prompt). */
+export const NORMAL_TOOL_VOICE =
+  " Keep your usual witty voice: the facts first, then at most one short quip.";
+
+function toolNote(call: ParsedToolCall, result: ToolResult, mode: ChatMode = "normal"): string {
   // Never forward internal exception strings to the model — it echoes them.
   let safeData = result.data;
   if (safeData && typeof safeData === "object" && !Array.isArray(safeData)) {
@@ -220,7 +225,7 @@ function toolNote(call: ParsedToolCall, result: ToolResult): string {
   const payload = result.ok
     ? { tool: call.name, ok: true, result: safeData }
     : { tool: call.name, ok: false, error: friendlyToolFailure(call.name) };
-  return `Tool result for ${call.name}:\n${JSON.stringify(payload).slice(0, 3500)}\nUsing only these facts, answer the user directly. Lead with the key number or condition. Do not call another tool unless you still lack a required fact. Do not invent values. Never mention tool names or raw errors.`;
+  return `Tool result for ${call.name}:\n${JSON.stringify(payload).slice(0, 3500)}\nUsing only these facts, answer the user directly. Lead with the key number or condition. Do not call another tool unless you still lack a required fact. Do not invent values. Never mention tool names or raw errors.${mode === "unhinged" ? "" : NORMAL_TOOL_VOICE}`;
 }
 
 async function reserveOrFail(
@@ -657,7 +662,7 @@ export async function runAgentTurn(
     toolsUsed.push(call.name);
     const result = await dispatchTool(call.name, call.args, deps.toolContext, toolTimeout);
     toolResults.push(result);
-    toolNotes.push(toolNote(call, result));
+    toolNotes.push(toolNote(call, result, mode));
     toolLog.push({
       tool: call.name,
       args: summarizeArgs(call.args),
@@ -689,7 +694,7 @@ export async function runAgentTurn(
         answer =
           mode === "unhinged"
             ? "Hey. What the hell do you want?"
-            : "Hey — what do you want to forge?";
+            : "Hey. What are we gonna forge today: forecasts, chaos, or both?";
       }
       break;
     }
