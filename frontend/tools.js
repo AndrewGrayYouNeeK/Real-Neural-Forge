@@ -154,7 +154,7 @@
       name: "Multimodal",
       icon: "⧉",
       description: "Attach a chart or photo; read it and forecast its numbers.",
-      status: "in-progress",
+      status: "live",
       view: "multimodal",
     },
     {
@@ -293,7 +293,7 @@
     {
       id: "phase-4",
       title: "Phase 4 — Multimodal",
-      status: "in-progress",
+      status: "live",
       items: [
         {
           name: "Read images & charts in chat",
