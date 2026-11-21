@@ -1429,6 +1429,265 @@ async function handleQuestion(question) {
   }
 }
 
+/* ------------------------------------------------- images & charts (Phase 4) */
+
+const IMAGE_TYPES = ["image/png", "image/jpeg", "image/webp", "image/gif"];
+const IMAGE_MAX_SIDE = 1280;
+const IMAGE_MAX_BYTES = 1400000;
+const IMAGE_TRAIN_MIN_POINTS = 32;
+const pendingImage = { dataUrl: "", name: "" };
+
+function firstImageFile(files) {
+  if (!files) return null;
+  for (const file of files) {
+    if (file && typeof file.type === "string" && file.type.startsWith("image/")) return file;
+  }
+  return null;
+}
+
+function promptImagePicker() {
+  const input = document.getElementById("image-attach-file");
+  if (!input) return;
+  input.value = "";
+  input.click();
+}
+
+function dataUrlBytes(dataUrl) {
+  const comma = dataUrl.indexOf(",");
+  const base64 = comma >= 0 ? dataUrl.slice(comma + 1) : dataUrl;
+  return Math.floor((base64.length * 3) / 4);
+}
+
+function readAsDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.onerror = () => reject(new Error("Could not read that image."));
+    reader.readAsDataURL(file);
+  });
+}
+
+function loadImageElement(src) {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => resolve(image);
+    image.onerror = () => reject(new Error("That file does not look like an image."));
+    image.src = src;
+  });
+}
+
+/** Downsize big photos in the browser so uploads stay small and cheap. */
+async function prepareImage(file) {
+  if (!IMAGE_TYPES.includes(file.type)) {
+    throw new Error("Use a PNG, JPEG, WebP, or GIF image.");
+  }
+  const original = await readAsDataUrl(file);
+  const image = await loadImageElement(original);
+  const longest = Math.max(image.naturalWidth, image.naturalHeight);
+  if (longest <= IMAGE_MAX_SIDE && dataUrlBytes(original) <= IMAGE_MAX_BYTES && file.type !== "image/gif") {
+    return original;
+  }
+  for (const [side, quality] of [
+    [IMAGE_MAX_SIDE, 0.88],
+    [1024, 0.8],
+    [768, 0.72],
+  ]) {
+    const scale = Math.min(1, side / longest);
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
+    canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
+    const context = canvas.getContext("2d");
+    context.fillStyle = "#ffffff";
+    context.fillRect(0, 0, canvas.width, canvas.height);
+    context.drawImage(image, 0, 0, canvas.width, canvas.height);
+    const resized = canvas.toDataURL("image/jpeg", quality);
+    if (dataUrlBytes(resized) <= IMAGE_MAX_BYTES) return resized;
+  }
+  throw new Error("That image is too big even after shrinking. Try a smaller screenshot.");
+}
+
+async function setPendingImage(file) {
+  const box = document.getElementById("image-attachment");
+  const thumb = document.getElementById("image-attachment-thumb");
+  const name = document.getElementById("image-attachment-name");
+  try {
+    const dataUrl = await prepareImage(file);
+    pendingImage.dataUrl = dataUrl;
+    pendingImage.name = file.name || "image";
+    if (thumb) thumb.src = dataUrl;
+    if (name) name.textContent = pendingImage.name;
+    if (box) box.hidden = false;
+    const input = document.getElementById("chat-input");
+    if (input) {
+      input.placeholder = "Ask about this image, or just press Ask";
+      input.focus();
+    }
+    clearNotice();
+  } catch (error) {
+    clearPendingImage();
+    reportError(error);
+  }
+}
+
+function clearPendingImage() {
+  pendingImage.dataUrl = "";
+  pendingImage.name = "";
+  const box = document.getElementById("image-attachment");
+  const thumb = document.getElementById("image-attachment-thumb");
+  if (thumb) thumb.removeAttribute("src");
+  if (box) box.hidden = true;
+  const input = document.getElementById("chat-input");
+  if (input) input.placeholder = "Ask about your data, weather, markets… or drop in a chart";
+}
+
+function visionDisplayValue(series, value) {
+  const number = asNumber(value);
+  if (number == null) return null;
+  const shown = series && series.unit === "°C" ? celsiusToFahrenheit(number) : number;
+  return Math.round(shown * 100) / 100;
+}
+
+function visionChart(data) {
+  const series = data && data.series;
+  const display = data && data.display_series;
+  if (!series || !display || !Array.isArray(display.values) || display.values.length < 2) return null;
+  const values = display.values.map((value) => asNumber(value));
+  const labels = Array.isArray(series.labels) ? series.labels.map((label) => String(label)) : [];
+  while (labels.length < values.length) labels.push(String(labels.length + 1));
+  const steps = data.forecast && Array.isArray(data.forecast.steps) ? data.forecast.steps : [];
+  const pad = new Array(values.length - 1).fill(null);
+  const last = values[values.length - 1];
+  const median = [...pad, last];
+  const low = [...pad, last];
+  const high = [...pad, last];
+  steps.forEach((step, index) => {
+    labels.push(`+${index + 1}`);
+    median.push(visionDisplayValue(series, step.p50));
+    low.push(visionDisplayValue(series, step.p10));
+    high.push(visionDisplayValue(series, step.p90));
+  });
+  const unit = display.unit ? ` (${display.unit})` : "";
+  const chartSeries = [{ name: `${series.name || "From image"}${unit}`, color: "#e8eaed", values }];
+  if (steps.length) {
+    chartSeries.push({ name: "Quick forecast", color: "#7cffd6", markers: true, values: median });
+  }
+  return {
+    ariaLabel: "Numbers read from the image with a quick forecast",
+    labels,
+    series: chartSeries,
+    bands: steps.length ? [{ name: "Likely range", color: "#7cffd6", low, high }] : [],
+    empty: "No numbers to chart.",
+  };
+}
+
+function visionCsv(data) {
+  const series = data.series;
+  const display = data.display_series;
+  const unit = String(display.unit || "")
+    .replace("°", "")
+    .replace(/[^a-z0-9]+/gi, "")
+    .toLowerCase();
+  const column =
+    String(series.name || "value")
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "_")
+      .replace(/^_+|_+$/g, "") || "value";
+  const header = `label,${column}${unit ? `_${unit}` : ""}`;
+  const labels = Array.isArray(series.labels) ? series.labels : [];
+  const rows = display.values.map((value, index) => {
+    const label = String(labels[index] ?? index + 1).replace(/[",\n]/g, " ");
+    return `${label},${value}`;
+  });
+  return `${header}\n${rows.join("\n")}\n`;
+}
+
+function downloadText(text, filename, type) {
+  const blob = new Blob([text], { type });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  anchor.click();
+  URL.revokeObjectURL(url);
+}
+
+function addImageUserMessage(question, dataUrl) {
+  const message = addMessage("user", question || "Read this image");
+  const image = document.createElement("img");
+  image.className = "bubble-image";
+  image.alt = "Image you attached";
+  image.src = dataUrl;
+  message.querySelector(".bubble").prepend(image);
+  scrollToBottom();
+  return message;
+}
+
+async function handleImageQuestion(question, dataUrl) {
+  addImageUserMessage(question, dataUrl);
+  const pending = addMessage("assistant", "Reading your image…");
+  try {
+    const payload = { image: dataUrl, question, mode: chatMode() };
+    if (currentThreadId) payload.thread_id = currentThreadId;
+    const data = await fetchJson("/agent/vision", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    pending.remove();
+    if (data && typeof data.thread_id === "string" && data.thread_id.trim()) {
+      currentThreadId = data.thread_id.trim();
+      void refreshRemoteChatHistory();
+    }
+    const text = data && typeof data.text === "string" ? data.text.trim() : "";
+    const replyMessage = addReply(text || "I couldn't read that image.", visionChart(data));
+    showToolsUsed(replyMessage, data && data.tools_used);
+    if (data && data.series && data.display_series) {
+      const buttons = [
+        [
+          "Download CSV",
+          () => downloadText(visionCsv(data), "image-series.csv", "text/csv;charset=utf-8"),
+        ],
+      ];
+      if (data.display_series.values.length >= IMAGE_TRAIN_MIN_POINTS) {
+        buttons.push([
+          "Train on this series",
+          () =>
+            void handleCsvTrainFile(
+              new File([visionCsv(data)], "image-series.csv", { type: "text/csv" })
+            ),
+        ]);
+      }
+      attachReplyActions(replyMessage, buttons);
+    }
+    const allowance = data && data.allowance;
+    if (allowance && Number(allowance.remaining) <= 2) {
+      showHint(
+        replyMessage,
+        `${allowance.remaining} image read${Number(allowance.remaining) === 1 ? "" : "s"} left today.`
+      );
+    }
+    clearNotice();
+    return text;
+  } catch (error) {
+    pending.remove();
+    addReply(`I couldn't read that image. ${error.message || error}`);
+    return "";
+  }
+}
+
+async function loadMultimodalAllowance() {
+  const note = document.getElementById("multimodal-allowance");
+  if (!note) return;
+  try {
+    const data = await fetchJson("/agent/vision/limits");
+    const allowance = data && data.allowance;
+    if (!allowance) return;
+    note.textContent = `${allowance.remaining} of ${allowance.limit} image reads left today. Resets at midnight UTC.`;
+  } catch {
+    note.textContent = "";
+  }
+}
+
 /* --------------------------------------------------------------- talk mode */
 
 const TALK_UNSUPPORTED =
@@ -3178,11 +3437,16 @@ function activateTool(tool) {
     if (talkBtn && !talk.active) talkBtn.focus();
     return;
   }
-  if (tool.status === "coming-soon" || tool.status === "in-progress") {
+  const hasPanel =
+    tool.view && document.querySelector(`[data-tool-view="${tool.view}"]`) !== null;
+  if (tool.status === "coming-soon" || (tool.status === "in-progress" && !hasPanel)) {
     showToolView("coming-soon", tool);
     return;
   }
   showToolView(tool.view || "chat", tool);
+  if (tool.id === "multimodal") {
+    void loadMultimodalAllowance();
+  }
   if (tool.id === "memory") {
     void loadMemoryPanel();
   }
@@ -3811,6 +4075,15 @@ document.getElementById("chat-form").addEventListener("submit", (event) => {
   event.preventDefault();
   const input = document.getElementById("chat-input");
   const question = input.value.trim();
+  if (pendingImage.dataUrl) {
+    const image = pendingImage.dataUrl;
+    input.value = "";
+    resizeComposer();
+    clearPendingImage();
+    rememberChatTurn(`[Image] ${question || "Read this image"}`);
+    handleImageQuestion(question, image).then(() => syncHasChatClass());
+    return;
+  }
   if (!question) return;
   input.value = "";
   resizeComposer();
@@ -3818,8 +4091,49 @@ document.getElementById("chat-form").addEventListener("submit", (event) => {
   handleQuestion(question).then(() => syncHasChatClass());
 });
 
+const attachImageBtn = document.getElementById("attach-image-btn");
+if (attachImageBtn) attachImageBtn.addEventListener("click", () => promptImagePicker());
+const multimodalAttach = document.getElementById("multimodal-attach");
+if (multimodalAttach) {
+  multimodalAttach.addEventListener("click", () => {
+    showToolView("chat");
+    promptImagePicker();
+  });
+}
+const imageAttachRemove = document.getElementById("image-attachment-remove");
+if (imageAttachRemove) imageAttachRemove.addEventListener("click", () => clearPendingImage());
+const imageAttachFile = document.getElementById("image-attach-file");
+if (imageAttachFile) {
+  imageAttachFile.addEventListener("change", (event) => {
+    const input = event.currentTarget;
+    const file = input.files && input.files[0];
+    input.value = "";
+    if (file) void setPendingImage(file);
+  });
+}
+const chatFormEl = document.getElementById("chat-form");
+if (chatFormEl) {
+  chatFormEl.addEventListener("dragover", (event) => {
+    if (event.dataTransfer && [...event.dataTransfer.items].some((item) => item.kind === "file")) {
+      event.preventDefault();
+    }
+  });
+  chatFormEl.addEventListener("drop", (event) => {
+    const file = firstImageFile(event.dataTransfer && event.dataTransfer.files);
+    if (!file) return;
+    event.preventDefault();
+    void setPendingImage(file);
+  });
+}
+
 const chatInput = document.getElementById("chat-input");
 if (chatInput) {
+  chatInput.addEventListener("paste", (event) => {
+    const file = firstImageFile(event.clipboardData && event.clipboardData.files);
+    if (!file) return;
+    event.preventDefault();
+    void setPendingImage(file);
+  });
   chatInput.addEventListener("input", resizeComposer);
   chatInput.addEventListener("keydown", (event) => {
     if (event.key === "Enter" && !event.shiftKey) {

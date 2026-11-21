@@ -872,6 +872,15 @@ class TestForecastDashboard:
         assert "API docs" in html
         assert "/agent/chat" in client.get("/docs").text
         assert 'id="csv-train-file"' in html
+        assert 'id="attach-image-btn"' in html
+        assert 'id="image-attach-file"' in html
+        assert 'id="image-attachment"' in html
+        assert 'data-tool-view="multimodal"' in html
+        assert "Read charts and images" in html
+        assert "/agent/vision" in client.get("/docs").text
+        app_js = client.get("/assets/app.js").text
+        assert "/agent/vision" in app_js
+        assert "handleImageQuestion" in app_js
         assert 'id="account-btn"' in html
         assert 'id="sign-in-modal"' in html
         assert 'id="owner-modal" hidden' in html
