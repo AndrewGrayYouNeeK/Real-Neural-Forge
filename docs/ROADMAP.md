@@ -39,7 +39,7 @@ and never deploy the frontend Worker `real-neural-forge`.
    + optional tiny diffusion); download CSV / Train-on-my-CSV; agent
    `generate_synthetic_series`. Landing **Live**.
 
-## Phase 4 — Multimodal (in progress)
+## Phase 4 — Multimodal (shipped)
 
 Charts, images, and text in one workflow.
 
@@ -51,6 +51,7 @@ Charts, images, and text in one workflow.
    Download CSV, and Train on this series (32+ points).
 3. **Caps** — 5 images/day per visitor, 120/day for all visitors, 60/day for
    the owner; every image also counts toward the 25k neuron/day safety cap.
+   Landing **Live**.
 
 ## Phase 5 — World model / simulator
 

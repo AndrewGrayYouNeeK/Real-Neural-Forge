@@ -931,6 +931,9 @@ class TestForecastDashboard:
         assert 'id: "ml-tools"' in tools_js
         ml_tools = tools_js.split('id: "ml-tools"', 1)[1][:280]
         assert 'status: "live"' in ml_tools
+        assert 'id: "phase-4"' in tools_js
+        phase4 = tools_js.split('id: "phase-4"', 1)[1][:200]
+        assert 'status: "live"' in phase4
         assert 'id: "why"' in tools_js
         why_tool = tools_js.split('id: "why"', 1)[1][:180]
         assert 'status: "live"' in why_tool
