@@ -1,7 +1,13 @@
+import { createHash } from "node:crypto";
+
 import { afterEach, describe, expect, it, vi } from "vitest";
+
+/** SHA-256 of the shipped Unhinged prompt; Unhinged must never change. */
+const UNHINGED_PROMPT_SHA256 = "dc377e2d40781f22efb30a773dca8a6a598817e7464b3c35efedc5263ec6992b";
 
 import {
   FALLBACK_MODEL,
+  NORMAL_TEMPERATURE,
   PRIMARY_MODEL,
   SYSTEM_PROMPT,
   UNHINGED_PROMPT,
@@ -17,6 +23,7 @@ import {
   guardExplainAnswer,
   hitTokenCap,
   isSmallTalk,
+  NORMAL_TOOL_VOICE,
   runAgentTurn,
   trimDanglingFragment,
 } from "../src/agent/loop";
@@ -947,6 +954,98 @@ describe("agent turn caps and fallback", () => {
     expect(agentSystemPrompt("unhinged", true).startsWith(UNHINGED_PROMPT)).toBe(true);
     expect(UNHINGED_PROMPT).toContain("foul-mouthed comedian");
     expect(UNHINGED_PROMPT).not.toContain("Answer exactly what was asked");
+  });
+
+  it("gives the default mode a Grok-like witty persona and leaves Unhinged byte-for-byte unchanged", () => {
+    const normal = SYSTEM_PROMPT.toLowerCase();
+    for (const phrase of [
+      "witty",
+      "funny",
+      "confident",
+      "grok-style",
+      "playful",
+      "quick joke",
+      "casual cussing is fine",
+      "answer exactly what was asked",
+      "answer first",
+      "never a ramble",
+      "corporate help desk",
+      "°f",
+      "at most one light quip",
+    ]) {
+      expect(normal).toContain(phrase);
+    }
+    expect(normal).toContain("user: what's 2+2");
+    expect(agentSystemPrompt("normal", false)).toContain("quick quip");
+    expect(agentSystemPrompt("normal", true)).toContain("quick quip");
+    expect(agentSystemPrompt("normal", true)).not.toContain("Wit stays light and secondary");
+    // Unhinged stays exactly as shipped.
+    expect(createHash("sha256").update(UNHINGED_PROMPT).digest("hex")).toBe(UNHINGED_PROMPT_SHA256);
+    expect(agentSystemPrompt("unhinged", false).startsWith(UNHINGED_PROMPT)).toBe(true);
+    expect(agentSystemPrompt("unhinged", false)).not.toContain("quick quip");
+    expect(agentSystemPrompt("unhinged", true)).not.toContain("quick quip");
+  });
+
+  it("bumps default temperature only on chat-completions and keeps 120B inputs unchanged", () => {
+    const normal = buildAgentInputs({
+      model: FALLBACK_MODEL,
+      system: agentSystemPrompt("normal", false),
+      question: "hey",
+      history: [],
+      toolNotes: [],
+      mode: "normal",
+      allowTools: false,
+    });
+    expect(normal.temperature).toBe(NORMAL_TEMPERATURE);
+    const unhinged = buildAgentInputs({
+      model: FALLBACK_MODEL,
+      system: agentSystemPrompt("unhinged", false),
+      question: "hey",
+      history: [],
+      toolNotes: [],
+      mode: "unhinged",
+      allowTools: false,
+    });
+    expect(unhinged.temperature).toBe(0.9);
+    const primary = buildAgentInputs({
+      model: PRIMARY_MODEL,
+      system: agentSystemPrompt("normal", false),
+      question: "hey",
+      history: [],
+      toolNotes: [],
+      mode: "normal",
+      allowTools: false,
+    });
+    expect(primary.temperature).toBeUndefined();
+    expect(primary.reasoning).toEqual({ effort: "low" });
+  });
+
+  it("adds the witty voice reminder to tool notes only in normal mode", async () => {
+    const notes: Record<string, string[]> = { normal: [], unhinged: [] };
+    for (const mode of ["normal", "unhinged"] as const) {
+      let call = 0;
+      const ai = {
+        async run(_model: string, inputs: Record<string, unknown>) {
+          call += 1;
+          const input = inputs.input as Array<{ content: string }>;
+          notes[mode].push(...input.map((item) => item.content).filter((text) => text.startsWith("Tool result")));
+          return call === 1
+            ? { response: '{"tool":"get_evaluation_metrics","args":{"model_id":"weather"}}' }
+            : { response: "MAE about 5.95°F. Not bad for a robot." };
+        },
+      };
+      await runAgentTurn("how accurate is weather", mode, [], {
+        ai,
+        db: new MemoryD1(),
+        ip: "1.2.3.4",
+        owner: false,
+        toolContext: toolContext(),
+        models: { primary: PRIMARY_MODEL, fallback: FALLBACK_MODEL },
+      });
+    }
+    expect(notes.normal.some((text) => text.includes(NORMAL_TOOL_VOICE.trim()))).toBe(true);
+    expect(notes.unhinged.length).toBeGreaterThan(0);
+    expect(notes.unhinged.some((text) => text.includes(NORMAL_TOOL_VOICE.trim()))).toBe(false);
   });
 
   it("builds gpt-oss Responses inputs without a native tools field", () => {

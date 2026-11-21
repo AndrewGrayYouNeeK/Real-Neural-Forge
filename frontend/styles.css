@@ -944,12 +944,106 @@ body.has-chat #suggestion-chips {
   color: #f5d7a1;
 }
 
+.mode-pill[data-state="armed"] {
+  border-color: #f0c27a;
+  background: rgba(240, 194, 122, 0.16);
+  color: #f5d7a1;
+}
+
 .mode-pill[data-state="listening"],
 .mode-pill[data-state="thinking"],
 .mode-pill[data-state="speaking"] {
   border-color: var(--accent-3);
   background: rgba(168, 180, 200, 0.18);
   color: var(--text);
+}
+
+.mode-pill[data-state="armed"],
+.mode-pill[data-state="listening"] {
+  display: inline-flex;
+  align-items: center;
+}
+
+.mode-pill[data-state="armed"]::before,
+.mode-pill[data-state="listening"]::before {
+  content: "";
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: 8px;
+  border-radius: 50%;
+  background: #7dffb1;
+  box-shadow: 0 0 0 0 rgba(125, 255, 177, 0.7);
+  animation: talk-pulse 1.4s ease-out infinite;
+}
+
+@keyframes talk-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(125, 255, 177, 0.7);
+  }
+  70% {
+    box-shadow: 0 0 0 8px rgba(125, 255, 177, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(125, 255, 177, 0);
+  }
+}
+
+.talk-status {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.talk-status:empty,
+.talk-status[hidden] {
+  display: none;
+}
+
+.talk-start-overlay {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 25;
+  display: flex;
+  justify-content: center;
+  padding: 16px 16px calc(16px + env(safe-area-inset-bottom, 0px));
+  pointer-events: none;
+  background: linear-gradient(transparent, rgba(11, 12, 15, 0.72) 45%);
+}
+
+.talk-start-overlay[hidden] {
+  display: none;
+}
+
+.talk-start-card {
+  pointer-events: auto;
+  width: min(420px, 100%);
+  border: 1px solid var(--border-strong);
+  border-radius: 20px;
+  background: var(--panel-solid);
+  box-shadow: var(--shadow);
+  padding: 16px 16px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  text-align: center;
+}
+
+.talk-start-card p {
+  margin: 0;
+}
+
+#talk-start-title {
+  font-weight: 700;
+  font-size: 1.05rem;
+}
+
+.talk-start-copy {
+  color: var(--muted);
+  font-size: 0.95rem;
 }
 
 .composer-row textarea,
