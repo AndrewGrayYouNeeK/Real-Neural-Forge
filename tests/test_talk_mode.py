@@ -84,6 +84,7 @@ def test_unhinged_mode_wiring_is_unchanged_by_talk_fixes() -> None:
     assert "payload.facts = facts" in source
     assert 'mode === "unhinged"' in source
 
+
 def test_talk_mode_defaults_on_for_phones_and_stays_manual_on_desktop() -> None:
     source = APP_JS.read_text(encoding="utf-8")
     section = _talk_section(source)
@@ -97,7 +98,7 @@ def test_talk_mode_defaults_on_for_phones_and_stays_manual_on_desktop() -> None:
     assert "window.Capacitor" in section
     assert "neuralForgeTalkPref" in source
     assert "function shouldAutoArmTalk" in section
-    assert "isPhoneSurface() && talkPreference() !== \"off\"" in section
+    assert 'isPhoneSurface() && talkPreference() !== "off"' in section
     assert "function armTalkForPhone" in section
     assert "function startTalkFromGesture" in section
     assert "function talkGestureRequired" in section
@@ -111,7 +112,7 @@ def test_talk_mode_defaults_on_for_phones_and_stays_manual_on_desktop() -> None:
     assert "Talk is on. Tap anywhere to start listening." in section
     assert "pointerdown" in section
     assert 'input.addEventListener("focus", onTalkAutoStartFocus)' in section
-    assert "data-state=\"armed\"" in css or ".mode-pill[data-state=\"armed\"]" in css
+    assert 'data-state="armed"' in css or '.mode-pill[data-state="armed"]' in css
     # Desktop keeps the manual Talk click path and does not auto-arm.
     assert "function onTalkClick" in section
     assert "Prime audio synchronously on the click path before any await." in section
