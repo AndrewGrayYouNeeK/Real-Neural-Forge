@@ -35,6 +35,8 @@ import {
   buildArtifacts,
   checklistNote,
   deliverableDone,
+  hasUsableScenario,
+  scenarioFrom,
   missingDeliverables,
   planRequest,
   routeMissingStep,
@@ -855,6 +857,16 @@ export async function runAgentTurn(
       await executeToolCall({ id: `${call.id}_history`, name: "weather_history", args: { days: 30 } });
     }
     call = injectHistoryValues(call, toolResults, plan);
+    if (call.name === "simulate_world" && plan.namedScenario) {
+      // "Simulate a cold snap": if the model's scenario has no usable event,
+      // run the named one instead of a no-op copy of the baseline.
+      const raw = call.args.scenarios ?? call.args.scenario;
+      const fallback = scenarioFrom(clean);
+      if (fallback && !hasUsableScenario(raw)) {
+        const { scenario: _drop, ...rest } = call.args;
+        call = { ...call, args: { ...rest, scenarios: [fallback] } };
+      }
+    }
     doneCalls.add(callKey(raw));
     // A rewritten call (forecast -> simulate on fetched history) can match one already run.
     const executedKey = callKey({ ...call, args: publicArgs(call.args) });
