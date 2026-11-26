@@ -91,6 +91,52 @@ describe("simulate_world tool", () => {
     expect((result.data as Record<string, unknown>).series).toBe("custom");
   });
 
+  it("passes the JEPA encoder choice through and keeps the comparison", async () => {
+    const fetchContainer = vi.fn(async (_path: string, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body));
+      expect(body.encoder).toBe("auto");
+      expect(body.starter_id).toBe("lunar");
+      return {
+        status: 200,
+        json: {
+          ...fakePayload(7, "illumination fraction"),
+          encoder_comparison: {
+            winner: "jepa",
+            chosen: "jepa",
+            pca: { mae: 0.04 },
+            jepa: { mae: 0.029 },
+            improvement_pct: 27.5,
+          },
+        },
+      };
+    });
+    const result = await dispatchTool(
+      "simulate_world",
+      { series: "lunar", horizon: 7, encoder: "AUTO" },
+      ctxWith(fetchContainer),
+      2000,
+      { coldStartWaitMs: 0 },
+    );
+    const data = result.data as Record<string, any>;
+    expect(data.encoder_comparison.chosen).toBe("jepa");
+  });
+
+  it("drops unknown encoders back to PCA", async () => {
+    const fetchContainer = vi.fn(async (_path: string, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body));
+      expect(body.encoder).toBeUndefined();
+      return { status: 200, json: fakePayload(7, "°F") };
+    });
+    await dispatchTool(
+      "simulate_world",
+      { series: "weather", horizon: 7, encoder: "gpu-monster" },
+      ctxWith(fetchContainer),
+      2000,
+      { coldStartWaitMs: 0 },
+    );
+    expect(fetchContainer).toHaveBeenCalled();
+  });
+
   it("refuses unknown series without calling the container", async () => {
     const fetchContainer = vi.fn();
     const result = await dispatchTool(

@@ -1092,6 +1092,70 @@
             </div>
           </section>
 
+          <section class="tool-view" id="view-world-encoder" data-tool-view="world-encoder" hidden>
+            <header class="tool-view-head">
+              <h2>Self-supervised world model (JEPA)</h2>
+              <button type="button" class="btn secondary back-to-chat" data-view="chat">Back to chat</button>
+            </header>
+            <p class="hint">
+              Nous can learn its own picture of a series without labels. A small JEPA
+              encoder studies a window of the past and learns to predict the
+              <em>embedding</em> of the window a few steps later, not the raw numbers.
+              Those learned features join the PCA state of the world model. Nous then
+              backtests both encoders on your series and only uses JEPA when it wins by
+              at least 2%. Runs on the CPU in a few seconds, with no extra AI calls.
+            </p>
+            <form id="wenc-form" class="side-panel-body sim-form">
+              <label for="wenc-series">Series</label>
+              <select id="wenc-series" name="series">
+                <option value="lunar">Moon illumination</option>
+                <option value="weather">Central Park high (°F)</option>
+                <option value="near-earth">Near-Earth approaches</option>
+                <option value="stocks">AAPL daily return</option>
+                <option value="crypto">Bitcoin daily return</option>
+                <option value="custom">My numbers</option>
+              </select>
+              <div id="wenc-custom" class="sim-custom" hidden>
+                <label for="wenc-values">Your numbers (60 or more works best, oldest first)</label>
+                <textarea id="wenc-values" name="values" rows="3" placeholder="61, 63, 58, 57, …"></textarea>
+                <label for="wenc-unit">Unit (optional)</label>
+                <input id="wenc-unit" name="unit" type="text" maxlength="32" placeholder="°F, kWh, $" />
+              </div>
+              <label for="wenc-horizon">Steps to roll forward</label>
+              <input id="wenc-horizon" name="horizon" type="number" value="14" min="1" max="60" />
+              <button id="wenc-run" class="btn primary btn-small" type="submit">Train JEPA &amp; compare</button>
+            </form>
+            <p id="wenc-status" class="hint" aria-live="polite" hidden></p>
+            <div id="wenc-result" hidden>
+              <p id="wenc-verdict" class="pca-summary"></p>
+              <div class="table-wrap table-scroll">
+                <table>
+                  <caption class="visually-hidden">Encoder backtest: persistence vs PCA vs JEPA</caption>
+                  <thead>
+                    <tr>
+                      <th scope="col">Encoder</th>
+                      <th scope="col">Holdout MAE</th>
+                      <th scope="col">In 80% range</th>
+                    </tr>
+                  </thead>
+                  <tbody id="wenc-table"></tbody>
+                </table>
+              </div>
+              <div id="wenc-chart" class="chart-host"></div>
+              <p id="wenc-model" class="hint"></p>
+              <p id="wenc-note" class="hint"></p>
+            </div>
+            <div class="chip-row">
+              <button
+                class="chip"
+                type="button"
+                data-question="Use the self-supervised JEPA world model on the moon illumination series: which encoder wins the backtest, and what does the next 14 days look like?"
+              >
+                Ask chat: JEPA vs PCA on the moon
+              </button>
+            </div>
+          </section>
+
           <section class="tool-view" id="view-coming-soon" data-tool-view="coming-soon" hidden>
             <header class="tool-view-head">
               <h2 id="coming-soon-title">Coming soon</h2>
@@ -1168,5 +1232,6 @@
     <script src="/assets/chart.js"></script>
     <script src="/assets/tools.js"></script>
     <script src="/assets/app.js"></script>
+    <script src="/assets/world-encoder.js"></script>
   </body>
 </html>
