@@ -1,6 +1,6 @@
 """GQ voice: metered read-aloud in the owner's cloned voice.
 
-Text on Neural Forge is always free. Only audio playback spends voice
+Text on Nous is always free. Only audio playback spends voice
 credit: each account gets a small one-time free allowance. Additional
 packs are listed in the app. Checkout may run in Stripe test mode and
 will not charge a real card. Signed-out visitors get no GQ. The owner
@@ -263,7 +263,7 @@ def voice_status(actor: Actor | None, config: dict[str, Any] | None) -> dict[str
             "limit": cfg.daily_char_limit,
         },
         "usage": store.usage_history(actor.user_id, 20),
-        "message": "Text on Neural Forge is always free. Only GQ voice spends credit.",
+        "message": "Text on Nous is always free. Only GQ voice spends credit.",
     }
 
 
@@ -321,7 +321,7 @@ def speak(actor: Actor, text: str, config: dict[str, Any] | None) -> dict[str, A
                 raise WorkspaceError(
                     402,
                     "You are out of GQ voice credit. Buy a credit pack on the "
-                    "Voice & credits page. Text on Neural Forge stays free.",
+                    "Voice & credits page. Text on Nous stays free.",
                 )
     except (SqlError, StorageError) as exc:
         raise _unavailable_voice() from exc
@@ -347,7 +347,7 @@ def speak(actor: Actor, text: str, config: dict[str, Any] | None) -> dict[str, A
             raise WorkspaceError(
                 402,
                 "You are out of GQ voice credit. Buy a credit pack on the "
-                "Voice & credits page. Text on Neural Forge stays free.",
+                "Voice & credits page. Text on Nous stays free.",
             )
         store.add_daily_chars(day, len(cleaned))
         store.record_usage(
@@ -385,7 +385,7 @@ def create_checkout_session(
                         "currency": "usd",
                         "unit_amount": int(round(pack.price_usd * 100)),
                         "product_data": {
-                            "name": f"Neural Forge GQ voice — {pack.name}",
+                            "name": f"Nous GQ voice — {pack.name}",
                             "description": (
                                 f"{pack.chars:,} characters read aloud in GQ. "
                                 "Text on the site stays free."

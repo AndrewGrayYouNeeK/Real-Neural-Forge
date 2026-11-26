@@ -10,8 +10,8 @@ This repository must never deploy the Worker ``youneek-xyz``. That name is
 Andrew's portfolio. A build that still passes it is published as
 ``real-neural-forge-frontend`` instead. The generated config has no routes, so
 it cannot claim ``youneek.xyz``, ``www.youneek.xyz``, ``forge.youneek.xyz``, or
-``forge.youneek.dev``. Those hostnames belong to other Workers.
-``forge.youneek.xyz`` and ``forge.youneek.dev`` are only on
+``forge.youneek.dev``, or the ``nous.youneek.*`` hosts. Those hostnames
+belong to other Workers. The forge and nous hostnames are only on
 ``deploy/cloudflare`` (``real-neural-forge-api``).
 """
 
@@ -34,6 +34,8 @@ FORBIDDEN_HOSTS = (
     "www.youneek.xyz",
     "forge.youneek.xyz",
     "forge.youneek.dev",
+    "nous.youneek.xyz",
+    "nous.youneek.dev",
 )
 
 

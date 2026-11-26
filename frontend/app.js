@@ -1,6 +1,5 @@
-/* Neural Forge chat-first dashboard. All API text is written with textContent only. */
-const charts = window.NeuralForgeCharts;
-const TOKEN_KEY = "neuralForgeApiToken";
+/* Nous chat-first app. All API text is written with textContent only. */
+const charts = window.NousCharts;
 const MODE_KEY = "neuralForgeChatMode";
 const TALK_PREF_KEY = "neuralForgeTalkPref";
 const MAX_VOICE_CHARS = 2000;
@@ -46,9 +45,10 @@ function errorMessage(response, data, text) {
   return body || response.statusText || `Request failed (${response.status})`;
 }
 
+// Sign-in lives in the HttpOnly session cookie only. Nothing secret is kept in
+// localStorage, and no shared owner token exists any more.
 function authHeaders(extra = {}) {
-  const token = localStorage.getItem(TOKEN_KEY);
-  return token ? { Authorization: `Bearer ${token}`, ...extra } : { ...extra };
+  return { ...extra };
 }
 
 async function fetchJson(url, options = {}) {
@@ -76,6 +76,10 @@ async function fetchJson(url, options = {}) {
   if (!response.ok) {
     const error = new Error(errorMessage(response, data, text));
     error.status = response.status;
+    error.data = data;
+    if (response.status === 401 && data && data.auth_required && typeof onSessionLost === "function") {
+      onSessionLost();
+    }
     throw error;
   }
   return data;
@@ -1200,7 +1204,7 @@ function helpReply() {
 function greetReply() {
   return {
     text:
-      "Hello! I am Neural Forge. Ask me for a live weather forecast, a market or crypto price, the moon, space, or a general question. You can also try a sample model with no account, or train a model on your data. What would you like to know?",
+      "Hello! I am Nous. Ask me for a live weather forecast, a market or crypto price, the moon, space, or a general question. You can also try a sample model with no account, or train a model on your data. What would you like to know?",
   };
 }
 
@@ -1273,7 +1277,7 @@ function chatMode() {
   }
 }
 
-const NORMAL_PLACEHOLDER = "Ask about your data, or weather, markets, space…";
+const NORMAL_PLACEHOLDER = "Ask anything";
 const UNHINGED_PLACEHOLDER =
   "Unhinged is on. Ask anything. I'll roast the forecast and keep every number exact.";
 const ASK_UNAVAILABLE =
@@ -2497,35 +2501,24 @@ function refreshAuthModal() {
   const signedOut = document.getElementById("account-signed-out");
   const label = document.getElementById("account-label");
   const button = document.getElementById("account-btn");
+  const security = document.getElementById("account-security");
   if (state.account) {
     signedIn.hidden = false;
     signedOut.hidden = true;
     const auth = state.account.auth === "local" ? "local owner" : state.account.role;
     label.textContent = `${state.account.email} (${auth})`;
     button.textContent = state.account.email;
+    // Display only. The server decides what the account may do.
+    if (security) {
+      security.hidden = state.account.auth === "local";
+      if (!security.hidden) refreshSecuritySummary().catch(() => {});
+    }
   } else {
     signedIn.hidden = true;
     signedOut.hidden = false;
-    button.textContent = "Sign in";
+    if (security) security.hidden = true;
+    button.textContent = "Log in";
   }
-}
-
-function selectOwnerHash() {
-  const params = new URLSearchParams(window.location.search);
-  const ownerUrl =
-    params.get("owner") != null ||
-    window.location.hash.replace(/^#\/?/, "").toLowerCase() === "owner";
-  if (ownerUrl) openOwnerModal();
-}
-
-function openOwnerModal() {
-  const modal = document.getElementById("owner-modal");
-  modal.hidden = false;
-  document.getElementById("owner-token").focus();
-}
-
-function closeOwnerModal() {
-  document.getElementById("owner-modal").hidden = true;
 }
 
 async function refreshAccount() {
@@ -2861,7 +2854,7 @@ const HISTORY_KEY = "neuralForgeChatHistory";
 let currentThreadId = null;
 let remoteChatThreads = null;
 const toolsApi =
-  (typeof window !== "undefined" && window.NeuralForgeTools) || {
+  (typeof window !== "undefined" && window.NousTools) || {
     TOOL_REGISTRY: [],
     ROADMAP: [],
     byId() {
@@ -4060,6 +4053,34 @@ function toolStatusBadgeText(status) {
   return status || "";
 }
 
+const PINNED_TOOL_IDS = ["chat", "forecast", "simulator", "train", "live", "talk"];
+
+function toolNavButton(tool) {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "tool-nav-btn";
+  button.dataset.toolId = tool.id;
+  const icon = document.createElement("span");
+  icon.className = "tool-nav-icon";
+  icon.setAttribute("aria-hidden", "true");
+  icon.textContent = tool.icon || "·";
+  const meta = document.createElement("span");
+  meta.className = "tool-nav-meta";
+  const name = document.createElement("span");
+  name.className = "tool-nav-name";
+  name.textContent = tool.name;
+  meta.append(name);
+  if (tool.status === "coming-soon" || tool.status === "in-progress") {
+    const status = document.createElement("span");
+    status.className = "tool-nav-status";
+    status.textContent = toolStatusBadgeText(tool.status);
+    meta.append(status);
+  }
+  button.append(icon, meta);
+  button.addEventListener("click", () => activateTool(tool));
+  return button;
+}
+
 function renderToolNav() {
   const nav = document.getElementById("tool-nav");
   if (!nav || !toolsApi.TOOL_REGISTRY) return;
@@ -4068,30 +4089,21 @@ function renderToolNav() {
   label.className = "sidebar-section-label";
   label.textContent = "Tools";
   nav.append(label);
+  const pinned = [];
+  const others = [];
   for (const tool of toolsApi.TOOL_REGISTRY) {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = "tool-nav-btn";
-    button.dataset.toolId = tool.id;
-    const icon = document.createElement("span");
-    icon.className = "tool-nav-icon";
-    icon.setAttribute("aria-hidden", "true");
-    icon.textContent = tool.icon || "·";
-    const meta = document.createElement("span");
-    meta.className = "tool-nav-meta";
-    const name = document.createElement("span");
-    name.className = "tool-nav-name";
-    name.textContent = tool.name;
-    meta.append(name);
-    if (tool.status === "coming-soon" || tool.status === "in-progress") {
-      const status = document.createElement("span");
-      status.className = "tool-nav-status";
-      status.textContent = toolStatusBadgeText(tool.status);
-      meta.append(status);
-    }
-    button.append(icon, meta);
-    button.addEventListener("click", () => activateTool(tool));
-    nav.append(button);
+    (PINNED_TOOL_IDS.includes(tool.id) ? pinned : others).push(tool);
+  }
+  pinned.sort((a, b) => PINNED_TOOL_IDS.indexOf(a.id) - PINNED_TOOL_IDS.indexOf(b.id));
+  pinned.forEach((tool) => nav.append(toolNavButton(tool)));
+  if (others.length) {
+    const more = document.createElement("details");
+    more.className = "tool-nav-more";
+    const summary = document.createElement("summary");
+    summary.textContent = `All tools (${others.length})`;
+    more.append(summary);
+    others.forEach((tool) => more.append(toolNavButton(tool)));
+    nav.append(more);
   }
 }
 
@@ -4447,8 +4459,23 @@ if (chatInput) {
   });
 }
 
+function runChipAction(action) {
+  const click = (id) => {
+    const target = document.getElementById(id);
+    if (target) target.click();
+  };
+  if (action === "simulator") showToolView("simulator");
+  else if (action === "image") click("attach-image-btn");
+  else if (action === "talk") click("talk-toggle");
+  else if (action === "unhinged") click("unhinged-toggle");
+}
+
 document.querySelectorAll("#suggestion-chips .chip, #demo-chips .chip").forEach((chip) => {
   chip.addEventListener("click", () => {
+    if (chip.dataset.action) {
+      runChipAction(chip.dataset.action);
+      return;
+    }
     rememberChatTurn(chip.dataset.question);
     handleQuestion(chip.dataset.question).then(() => syncHasChatClass());
   });
@@ -4562,11 +4589,7 @@ if (forecastActions) {
 document.getElementById("account-btn").addEventListener("click", openSignInModal);
 const heroSignup = document.getElementById("hero-signup-btn");
 if (heroSignup) {
-  heroSignup.addEventListener("click", () => {
-    openSignInModal();
-    const showSignUp = document.getElementById("show-sign-up");
-    if (showSignUp) showSignUp.click();
-  });
+  heroSignup.addEventListener("click", () => openGate("signup"));
 }
 document.getElementById("modal-close").addEventListener("click", closeSignInModal);
 document.getElementById("sign-in-modal").addEventListener("click", (event) => {
@@ -4575,83 +4598,6 @@ document.getElementById("sign-in-modal").addEventListener("click", (event) => {
 document.addEventListener("keydown", (event) => {
   if (event.key === "Escape") {
     closeSignInModal();
-    closeOwnerModal();
-  }
-});
-
-document.getElementById("sign-in-form").addEventListener("submit", async (event) => {
-  event.preventDefault();
-  const form = event.currentTarget;
-  const notice = form.querySelector(".form-error");
-  if (notice) notice.remove();
-  try {
-    await fetchJson("/auth/login", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        email: form.email.value,
-        password: form.password.value,
-      }),
-    });
-    form.reset();
-    clearNotice();
-    await refreshAccount();
-    await refreshAccountDependents();
-    await resumeCsvTrainIfPending();
-  } catch (error) {
-    reportError(error);
-  }
-});
-
-document.getElementById("show-sign-up").addEventListener("click", () => {
-  document.getElementById("sign-in-form").hidden = true;
-  document.getElementById("sign-up-form").hidden = false;
-  document.getElementById("sign-up-email").focus();
-});
-
-document.getElementById("sign-up-form").addEventListener("submit", async (event) => {
-  event.preventDefault();
-  const form = event.currentTarget;
-  try {
-    await fetchJson("/auth/signup", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        email: form.email.value,
-        password: form.password.value,
-      }),
-    });
-    form.reset();
-    clearNotice();
-    await refreshAccount();
-    await refreshAccountDependents();
-    await resumeCsvTrainIfPending();
-  } catch (error) {
-    reportError(error);
-  }
-});
-
-document.getElementById("owner-modal-close").addEventListener("click", closeOwnerModal);
-document.getElementById("owner-modal").addEventListener("click", (event) => {
-  if (event.target === event.currentTarget) closeOwnerModal();
-});
-
-document.getElementById("owner-form").addEventListener("submit", async (event) => {
-  event.preventDefault();
-  const form = event.currentTarget;
-  const token = form.token.value.trim();
-  if (!token) return;
-  localStorage.setItem(TOKEN_KEY, token);
-  try {
-    await fetchJson("/auth/owner", { method: "POST" });
-    form.reset();
-    clearNotice();
-    closeOwnerModal();
-    await refreshAccount();
-    await refreshAccountDependents();
-  } catch (error) {
-    localStorage.removeItem(TOKEN_KEY);
-    reportError(new Error(error.message || "Invalid owner token."));
   }
 });
 
@@ -4661,10 +4607,7 @@ document.getElementById("sign-out-btn").addEventListener("click", async () => {
   } catch (error) {
     reportError(error);
   }
-  localStorage.removeItem(TOKEN_KEY);
-  await refreshAccount();
-  await refreshAccountDependents();
-  closeSignInModal();
+  window.location.assign("/");
 });
 
 document.getElementById("train-btn").addEventListener("click", (event) => {
@@ -4741,14 +4684,385 @@ window.addEventListener("resize", setSidebarControls);
 setSidebarControls();
 syncHasChatClass();
 
+
+/* ------------------------------------------------------------- auth gate */
+
+const HAS_ACCOUNT_KEY = "nousHasAccount";
+const gate = { mode: "signup", step: "email", started: false, afterRecovery: null };
+
+function setAuthView(view) {
+  const body = document.body;
+  body.classList.remove("auth-pending", "auth-in", "auth-out", "gate-open");
+  if (view === "in") body.classList.add("auth-in");
+  else if (view === "gate") body.classList.add("auth-out", "gate-open");
+  else body.classList.add("auth-out");
+}
+
+function gateError(message) {
+  const box = document.getElementById("gate-error");
+  if (!box) return;
+  box.textContent = message || "";
+  box.hidden = !message;
+}
+
+function showGatePanel(id) {
+  ["sign-in-form", "gate-mfa", "gate-setup", "gate-recovery"].forEach((panelId) => {
+    const panel = document.getElementById(panelId);
+    if (panel) panel.hidden = panelId !== id;
+  });
+  const signOut = document.getElementById("gate-sign-out");
+  if (signOut) signOut.hidden = id === "sign-in-form";
+  const title = document.getElementById("gate-title");
+  if (title) {
+    title.textContent =
+      id === "gate-mfa"
+        ? "Two-step sign-in"
+        : id === "gate-setup"
+          ? "Secure your account"
+          : id === "gate-recovery"
+            ? "Recovery codes"
+            : "Sign up or log in";
+  }
+}
+
+function syncGateMode() {
+  const signup = gate.mode === "signup";
+  const label = document.getElementById("gate-mode-label");
+  const toggle = document.getElementById("show-sign-up");
+  const password = document.getElementById("sign-in-password");
+  const hint = document.getElementById("gate-password-hint");
+  if (label) label.textContent = signup ? "Have an account?" : "New here?";
+  if (toggle) toggle.textContent = signup ? "Log in" : "Create account";
+  if (password) password.setAttribute("autocomplete", signup ? "new-password" : "current-password");
+  if (hint) hint.hidden = !signup || gate.step !== "password";
+  const button = document.getElementById("gate-continue");
+  if (button) button.textContent = gate.step === "email" ? "Continue" : signup ? "Create account" : "Log in";
+}
+
+function openGate(mode) {
+  if (mode === "login" || mode === "signup") gate.mode = mode;
+  else gate.mode = localStorage.getItem(HAS_ACCOUNT_KEY) ? "login" : "signup";
+  gate.step = "email";
+  const row = document.getElementById("gate-password-row");
+  if (row) row.hidden = true;
+  gateError("");
+  showGatePanel("sign-in-form");
+  syncGateMode();
+  setAuthView("gate");
+  if (window.location.pathname !== "/app") window.history.pushState({}, "", "/app");
+  const email = document.getElementById("sign-in-email");
+  if (email) email.focus();
+}
+
+function onSessionLost() {
+  if (!document.body.classList.contains("auth-in")) return;
+  state.account = null;
+  openGate("login");
+}
+
+async function bootAuth() {
+  const account = await refreshAccount();
+  if (account) {
+    afterSignIn(account);
+  } else if (window.location.pathname === "/app") {
+    openGate();
+  } else {
+    setAuthView("out");
+  }
+}
+
+function afterSignIn(account) {
+  state.account = account;
+  localStorage.setItem(HAS_ACCOUNT_KEY, "1");
+  refreshAuthModal();
+  if (account.role === "owner" && account.auth !== "local" && account.mfa !== "ok") {
+    setAuthView("gate");
+    gateError("");
+    if (account.mfa === "setup") {
+      showGatePanel("gate-setup");
+      syncPasskeyButtons();
+    } else {
+      showGatePanel("gate-mfa");
+      syncPasskeyButtons();
+    }
+    return;
+  }
+  enterApp();
+}
+
+function enterApp() {
+  setAuthView("in");
+  if (window.location.pathname === "/app") window.history.replaceState({}, "", "/");
+  if (gate.started) return;
+  gate.started = true;
+  loadDefaultDemos().catch(() => {});
+  refreshAccountDependents().catch(() => {});
+  refreshVoiceStatus().catch(() => {});
+  armTalkForPhone();
+}
+
+function passkeysAvailable() {
+  return typeof window.PublicKeyCredential === "function" && !!navigator.credentials;
+}
+
+function syncPasskeyButtons() {
+  const ok = passkeysAvailable();
+  ["gate-passkey-btn", "gate-add-passkey", "security-add-passkey"].forEach((id) => {
+    const button = document.getElementById(id);
+    if (button) button.hidden = !ok;
+  });
+}
+
+function b64urlToBuffer(text) {
+  const clean = String(text).replace(/-/g, "+").replace(/_/g, "/");
+  const padded = clean + "=".repeat((4 - (clean.length % 4)) % 4);
+  const binary = atob(padded);
+  const out = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) out[index] = binary.charCodeAt(index);
+  return out.buffer;
+}
+
+function bufferToB64url(buffer) {
+  const bytes = new Uint8Array(buffer);
+  let binary = "";
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+function postJson(url, body) {
+  return fetchJson(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body || {}),
+  });
+}
+
+function showRecoveryCodes(codes, then) {
+  if (!codes || !codes.length) {
+    then();
+    return;
+  }
+  const list = document.getElementById("gate-recovery-list");
+  list.replaceChildren();
+  codes.forEach((code) => {
+    const item = document.createElement("li");
+    item.textContent = code;
+    list.append(item);
+  });
+  gate.afterRecovery = then;
+  setAuthView("gate");
+  showGatePanel("gate-recovery");
+}
+
+async function finishSecondFactor(result) {
+  const account = await refreshAccount();
+  const done = () => {
+    if (account) afterSignIn(account);
+    else openGate("login");
+  };
+  showRecoveryCodes(result && result.recovery_codes, done);
+}
+
+async function registerPasskey() {
+  gateError("");
+  const options = await postJson("/auth/webauthn/register/options");
+  const publicKey = options.publicKey;
+  publicKey.challenge = b64urlToBuffer(publicKey.challenge);
+  publicKey.user.id = b64urlToBuffer(publicKey.user.id);
+  publicKey.excludeCredentials = (publicKey.excludeCredentials || []).map((item) => ({
+    ...item,
+    id: b64urlToBuffer(item.id),
+  }));
+  const credential = await navigator.credentials.create({ publicKey });
+  if (!credential) throw new Error("Passkey setup was cancelled.");
+  const result = await postJson("/auth/webauthn/register/verify", {
+    challenge_id: options.challenge_id,
+    id: credential.id,
+    clientDataJSON: bufferToB64url(credential.response.clientDataJSON),
+    attestationObject: bufferToB64url(credential.response.attestationObject),
+  });
+  await finishSecondFactor(result);
+}
+
+async function usePasskey() {
+  gateError("");
+  const options = await postJson("/auth/webauthn/login/options");
+  const publicKey = options.publicKey;
+  publicKey.challenge = b64urlToBuffer(publicKey.challenge);
+  publicKey.allowCredentials = (publicKey.allowCredentials || []).map((item) => ({
+    ...item,
+    id: b64urlToBuffer(item.id),
+  }));
+  const assertion = await navigator.credentials.get({ publicKey });
+  if (!assertion) throw new Error("Passkey sign-in was cancelled.");
+  const result = await postJson("/auth/webauthn/login/verify", {
+    challenge_id: options.challenge_id,
+    id: assertion.id,
+    clientDataJSON: bufferToB64url(assertion.response.clientDataJSON),
+    authenticatorData: bufferToB64url(assertion.response.authenticatorData),
+    signature: bufferToB64url(assertion.response.signature),
+  });
+  await finishSecondFactor(result);
+}
+
+async function startTotpSetup() {
+  gateError("");
+  const result = await postJson("/auth/mfa/totp/setup");
+  setAuthView("gate");
+  showGatePanel("gate-setup");
+  document.getElementById("gate-totp").hidden = false;
+  document.getElementById("gate-totp-secret").textContent = result.secret.replace(/(.{4})/g, "$1 ").trim();
+  document.getElementById("gate-totp-link").href = result.otpauth_url;
+  document.getElementById("gate-totp-code").focus();
+}
+
+async function refreshSecuritySummary() {
+  const summary = document.getElementById("security-summary");
+  if (!summary) return;
+  try {
+    const status = await fetchJson("/auth/mfa/status");
+    const parts = [];
+    parts.push(status.passkeys ? `${status.passkeys} passkey${status.passkeys === 1 ? "" : "s"}` : "no passkey");
+    parts.push(status.totp ? "authenticator app on" : "no authenticator app");
+    parts.push(`${status.recovery_codes_left} recovery codes left`);
+    summary.textContent = parts.join(" · ");
+  } catch {
+    summary.textContent = "";
+  }
+  syncPasskeyButtons();
+}
+
+function gateAction(fn) {
+  return (event) => {
+    if (event) event.preventDefault();
+    Promise.resolve()
+      .then(fn)
+      .catch((error) => {
+        const message =
+          error && error.name === "NotAllowedError"
+            ? "Passkey request was cancelled or timed out."
+            : (error && error.message) || "Something went wrong.";
+        if (document.body.classList.contains("gate-open")) gateError(message);
+        else reportError(error);
+      });
+  };
+}
+
+document.getElementById("sign-in-form").addEventListener(
+  "submit",
+  gateAction(async () => {
+    const form = document.getElementById("sign-in-form");
+    const email = form.email.value.trim();
+    if (!email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
+      gateError("Enter your email.");
+      return;
+    }
+    gateError("");
+    if (gate.step === "email") {
+      gate.step = "password";
+      document.getElementById("gate-password-row").hidden = false;
+      syncGateMode();
+      form.password.focus();
+      return;
+    }
+    const password = form.password.value;
+    if (!password) {
+      gateError("Enter your password.");
+      return;
+    }
+    const url = gate.mode === "signup" ? "/auth/signup" : "/auth/login";
+    const account = await postJson(url, { email, password });
+    form.password.value = "";
+    afterSignIn(account);
+  })
+);
+
+document.getElementById("show-sign-up").addEventListener("click", () => {
+  gate.mode = gate.mode === "signup" ? "login" : "signup";
+  gateError("");
+  syncGateMode();
+});
+
+document.getElementById("gate-code-form").addEventListener(
+  "submit",
+  gateAction(async () => {
+    const field = document.getElementById("gate-code");
+    const result = await postJson("/auth/mfa/verify", { code: field.value.trim() });
+    field.value = "";
+    await finishSecondFactor(result);
+  })
+);
+
+document.getElementById("gate-totp-form").addEventListener(
+  "submit",
+  gateAction(async () => {
+    const field = document.getElementById("gate-totp-code");
+    const result = await postJson("/auth/mfa/totp/confirm", { code: field.value.trim() });
+    field.value = "";
+    document.getElementById("gate-totp").hidden = true;
+    await finishSecondFactor(result);
+  })
+);
+
+document.getElementById("gate-passkey-btn").addEventListener("click", gateAction(usePasskey));
+document.getElementById("gate-add-passkey").addEventListener("click", gateAction(registerPasskey));
+document.getElementById("gate-add-totp").addEventListener("click", gateAction(startTotpSetup));
+document.getElementById("gate-recovery-done").addEventListener("click", () => {
+  document.getElementById("gate-recovery-list").replaceChildren();
+  const next = gate.afterRecovery;
+  gate.afterRecovery = null;
+  if (next) next();
+});
+document.getElementById("gate-sign-out").addEventListener("click", async () => {
+  try {
+    await fetchJson("/auth/logout", { method: "POST" });
+  } catch {
+    // Leaving anyway.
+  }
+  window.location.assign("/");
+});
+document.getElementById("security-add-passkey").addEventListener(
+  "click",
+  gateAction(async () => {
+    closeSignInModal();
+    await registerPasskey();
+  })
+);
+document.getElementById("security-add-totp").addEventListener(
+  "click",
+  gateAction(async () => {
+    closeSignInModal();
+    await startTotpSetup();
+  })
+);
+document.getElementById("security-new-codes").addEventListener(
+  "click",
+  gateAction(async () => {
+    const result = await postJson("/auth/mfa/recovery/regenerate");
+    closeSignInModal();
+    showRecoveryCodes(result.recovery_codes, () => enterApp());
+  })
+);
+document.getElementById("account-open-gate").addEventListener("click", () => {
+  closeSignInModal();
+  openGate("login");
+});
+document.querySelectorAll("[data-open-gate]").forEach((link) => {
+  link.addEventListener("click", (event) => {
+    event.preventDefault();
+    openGate(link.dataset.openGate);
+  });
+});
+window.addEventListener("popstate", () => {
+  if (document.body.classList.contains("auth-in")) return;
+  if (window.location.pathname === "/app") openGate();
+  else setAuthView("out");
+});
+
 /* ------------------------------------------------------------------- boot */
 
-loadDefaultDemos().catch(() => {});
+document.querySelectorAll("[data-view-open]").forEach((button) => {
+  button.addEventListener("click", () => showToolView(button.dataset.viewOpen));
+});
 
-refreshAccount()
-  .then(() => refreshAccountDependents())
-  .catch(() => {});
-refreshVoiceStatus().catch(() => {});
-refreshStatusLine().catch(() => {});
-selectOwnerHash();
-armTalkForPhone();
+bootAuth();

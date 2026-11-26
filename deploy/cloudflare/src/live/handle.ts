@@ -1,3 +1,4 @@
+import { capKey, resolveSession } from "../auth/session";
 import { visitorFromCf, type CfIncoming } from "./geo";
 import { answerWeather } from "./weather";
 import { answerQuote } from "./markets";
@@ -26,7 +27,6 @@ export type LiveEnv = AiQuotaEnv & {
   NEURAL_FORGE_AI_FALLBACK_MODEL?: string;
 };
 
-const SESSION_COOKIE = "nf_session";
 
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -50,61 +50,10 @@ function factsFrom(url: URL, body: Record<string, unknown> | null): string {
   return url.searchParams.get("facts") || "";
 }
 
-function cookieValue(request: Request, name: string): string | null {
-  const header = request.headers.get("Cookie") || "";
-  for (const part of header.split(";")) {
-    const trimmed = part.trim();
-    if (!trimmed) continue;
-    const index = trimmed.indexOf("=");
-    if (index < 0) continue;
-    if (trimmed.slice(0, index) === name) return decodeURIComponent(trimmed.slice(index + 1));
-  }
-  return null;
-}
-
-function bearerToken(request: Request): string | null {
-  const header = request.headers.get("Authorization") || "";
-  const match = header.match(/^Bearer\s+(.+)$/i);
-  return match ? match[1].trim() : null;
-}
-
-function timingEqual(left: string, right: string): boolean {
-  if (left.length !== right.length) return false;
-  let diff = 0;
-  for (let index = 0; index < left.length; index += 1) {
-    diff |= left.charCodeAt(index) ^ right.charCodeAt(index);
-  }
-  return diff === 0;
-}
-
-async function sha256Hex(value: string): Promise<string> {
-  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
-  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
-}
-
 async function isOwnerRequest(request: Request, env: LiveEnv): Promise<boolean> {
-  const bearer = bearerToken(request);
-  if (bearer && env.NEURAL_FORGE_API_TOKEN && timingEqual(bearer, env.NEURAL_FORGE_API_TOKEN)) {
-    return true;
-  }
-  const token = bearer || cookieValue(request, SESSION_COOKIE);
-  if (!token || !env.WORKSPACES_DB) return false;
-  try {
-    const hash = await sha256Hex(token);
-    const now = new Date().toISOString();
-    const result = await env.WORKSPACES_DB.prepare(
-      `SELECT users.role AS role
-       FROM sessions
-       JOIN users ON users.id = sessions.user_id
-       WHERE sessions.token_hash = ? AND sessions.expires_at > ?
-       LIMIT 1`,
-    )
-      .bind(hash, now)
-      .all();
-    return result.results?.[0]?.role === "owner";
-  } catch {
-    return false;
-  }
+  // Owner = role=owner in D1 plus a fresh second factor. No shared token.
+  const session = await resolveSession(request, env.WORKSPACES_DB);
+  return session?.owner === true;
 }
 
 async function answerBudget(request: Request, env: LiveEnv): Promise<Response> {
@@ -143,10 +92,11 @@ async function answerAsk(
       capped: true,
     });
   }
-  const owner = await isOwnerRequest(request, env);
+  const session = await resolveSession(request, env.WORKSPACES_DB);
+  const owner = session?.owner === true;
   const models = resolveChatModels(env);
   const caps = resolveAiCaps(env);
-  const ip = clientIp(request);
+  const ip = capKey(session, clientIp(request));
   const reserved = await tryReserve({
     db: env.WORKSPACES_DB,
     ip,

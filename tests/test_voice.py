@@ -15,6 +15,7 @@ import src.voice.service as voice_service
 from src.api import app, load_model
 from src.voice.store import SqlError, VoiceStore, audio_cache_key
 from src.workspace.runtime import runtime
+from tests.owner_session import owner_headers
 
 WEBHOOK_SECRET = "whsec_test_voice"
 STRIPE_SECRET = "sk_test_voice"
@@ -124,7 +125,7 @@ def test_signed_out_visitors_get_no_gq(voice_client):
     assert body["signed_in"] is False
     assert body["voice"] is True
     assert "free account" in body["message"]
-    denied = _speak(client, "Hello from Neural Forge.")
+    denied = _speak(client, "Hello from Nous.")
     assert denied.status_code == 401
     assert "free account" in denied.json()["detail"]
 
@@ -136,9 +137,7 @@ def test_owner_is_unlimited_and_bypasses_caps(
     client.cookies.clear()
     monkeypatch.setenv("NEURAL_FORGE_VOICE_DAILY_LIMIT", "1")
     monkeypatch.setattr(voice_service, "utc_day", lambda: "2031-01-01-owner")
-    owner = client.get(
-        "/voice/status", headers={"Authorization": "Bearer owner-secret"}
-    )
+    owner = client.get("/voice/status", headers=owner_headers())
     assert owner.status_code == 200
     body = owner.json()
     assert body["owner_unlimited"] is True
@@ -147,7 +146,7 @@ def test_owner_is_unlimited_and_bypasses_caps(
         spoken = client.post(
             "/voice/speak",
             json={"text": f"Owner briefing number {index} " + "x" * 90},
-            headers={"Authorization": "Bearer owner-secret"},
+            headers=owner_headers(),
         )
         assert spoken.status_code == 200, spoken.text
     assert len(fake_speech) == 3
@@ -507,8 +506,8 @@ def test_cache_store_failure_is_json_503(voice_client, monkeypatch: pytest.Monke
     monkeypatch.setattr(VoiceStore, "cache_get", boom)
     spoken = client.post(
         "/voice/speak",
-        json={"text": "Hello from Neural Forge."},
-        headers={"Authorization": "Bearer owner-secret"},
+        json={"text": "Hello from Nous."},
+        headers=owner_headers(),
     )
     assert spoken.status_code == 503
     assert "application/json" in spoken.headers["content-type"]

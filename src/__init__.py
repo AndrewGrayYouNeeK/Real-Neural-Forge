@@ -1,4 +1,4 @@
-"""Neural Forge: transformer pipeline for time-series prediction."""
+"""Nous: transformer pipeline for time-series prediction."""
 
 from __future__ import annotations
 

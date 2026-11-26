@@ -25,7 +25,7 @@ from src.domain_forecasts.baselines import iter_months
 from src.utils.paths import resolve_repo_path
 
 USER_AGENT = (
-    "RealNeuralForge/1.0 "
+    "Nous/1.0 "
     "(monthly category counts; https://github.com/AndrewGrayYouNeeK/Real-Neural-Forge)"
 )
 _TOTAL = re.compile(r"<opensearch:totalResults>(\d+)</opensearch:totalResults>")

@@ -31,7 +31,6 @@ from src.workspace.service import (
     list_predictions,
     list_starter_cards,
     login,
-    login_owner,
     logout,
     model_metrics,
     predict_latest_model,
@@ -134,23 +133,6 @@ def auth_login(
         _raise(exc)
     apply_session_cookie(response, request, token)
     return actor.public()
-
-
-@router.post("/auth/owner", tags=["accounts"])
-def auth_owner(
-    request: Request,
-    response: Response,
-    authorization: str | None = Header(default=None),
-) -> dict[str, str]:
-    actor = _actor(request, authorization)
-    if not actor.is_owner or actor.via != "bearer":
-        _raise(WorkspaceError(401, "Invalid or missing API token."))
-    try:
-        session_actor, token = login_owner()
-    except WorkspaceError as exc:
-        _raise(exc)
-    apply_session_cookie(response, request, token)
-    return session_actor.public()
 
 
 @router.post("/auth/logout", tags=["accounts"])

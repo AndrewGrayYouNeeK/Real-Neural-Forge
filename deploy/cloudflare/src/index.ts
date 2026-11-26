@@ -1,4 +1,7 @@
 import { Container, ContainerProxy, getContainer, type State } from "@cloudflare/containers";
+import { authRequired, isPublicPath, legacyRedirect } from "./auth/gate";
+import { handleAuthRoute } from "./auth/routes";
+import { resolveSession } from "./auth/session";
 
 import { BINDINGS_HOST, containerEnv } from "./containerEnv";
 import { isAllowedObjectKey } from "./objectKey";
@@ -377,11 +380,29 @@ function forwardedRequest(request: Request): Request {
   return new Request(request, { headers });
 }
 
+async function forwardToContainer(request: Request, env: Env): Promise<Response> {
+  const container = getContainer(env.NEURAL_FORGE, "primary");
+  await container.startAndWaitForPorts({
+    ports: 8000,
+    startOptions: { envVars: containerEnv(env) },
+  });
+  return container.fetch(forwardedRequest(request));
+}
+
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
     if (url.pathname === "/_bindings/sql" || url.pathname === "/_bindings/object") {
       return handleBindings(request, env);
+    }
+    const moved = legacyRedirect(request);
+    if (moved) return moved;
+    const forward = (next: Request) => forwardToContainer(next, env);
+    const authResponse = await handleAuthRoute(request, env, forward);
+    if (authResponse) return authResponse;
+    if (!isPublicPath(request.method, url.pathname)) {
+      const session = await resolveSession(request, env.WORKSPACES_DB);
+      if (!session) return authRequired();
     }
     if (url.pathname === "/live" || url.pathname.startsWith("/live/")) {
       return handleLive(request, env);
@@ -389,11 +410,6 @@ export default {
     if (url.pathname === "/agent" || url.pathname.startsWith("/agent/")) {
       return handleAgent(request, env, ctx);
     }
-    const container = getContainer(env.NEURAL_FORGE, "primary");
-    await container.startAndWaitForPorts({
-      ports: 8000,
-      startOptions: { envVars: containerEnv(env) },
-    });
-    return container.fetch(forwardedRequest(request));
+    return forwardToContainer(request, env);
   },
 };

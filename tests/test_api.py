@@ -664,35 +664,54 @@ class TestTrainProtection:
         assert resp.status_code == 200
         run.assert_called_once()
 
-    def test_token_required_when_set(self, client, monkeypatch):
+    @pytest.fixture
+    def owner_store(self, tmp_path, monkeypatch):
+        from src.workspace.runtime import runtime
+        from src.workspace.store import open_workspace
+
+        monkeypatch.setenv("NEURAL_FORGE_STORAGE", "local")
+        store, error = open_workspace(str(tmp_path / "ws"))
+        assert store is not None, error
+        monkeypatch.setattr(runtime, "store", store)
+        return store
+
+    def test_sign_in_required_on_public_deploy(self, client, monkeypatch, owner_store):
+        from tests.owner_session import owner_headers
+
         monkeypatch.setenv("NEURAL_FORGE_API_TOKEN", "secret-token")
         with patch("src.api._run_training") as run:
             missing = client.post("/train", json={})
             wrong = client.post(
                 "/train", json={}, headers={"Authorization": "Bearer nope"}
             )
-            ok = client.post(
+            retired = client.post(
                 "/train",
                 json={},
                 headers={"Authorization": "Bearer secret-token"},
             )
+            no_second_factor = client.post(
+                "/train", json={}, headers=owner_headers(owner_store, mfa=False)
+            )
+            ok = client.post("/train", json={}, headers=owner_headers(owner_store))
         assert missing.status_code == 401
-        assert "token" in missing.json()["detail"].lower()
-        assert missing.headers["www-authenticate"].lower().startswith("bearer")
+        assert "sign in" in missing.json()["detail"].lower()
         assert wrong.status_code == 401
+        # The shared owner token is no longer a login.
+        assert retired.status_code == 401
+        assert no_second_factor.status_code == 403
         assert ok.status_code == 200
         run.assert_called_once()
         assert _state["training"]["status"] == "running"
 
-    def test_disabled_training_rejects_even_with_token(self, client, monkeypatch):
+    def test_disabled_training_rejects_even_the_owner(
+        self, client, monkeypatch, owner_store
+    ):
+        from tests.owner_session import owner_headers
+
         monkeypatch.setenv("NEURAL_FORGE_API_TOKEN", "secret-token")
         _state["config"].setdefault("api", {})["training_enabled"] = False
         with patch("src.api._run_training") as run:
-            resp = client.post(
-                "/train",
-                json={},
-                headers={"Authorization": "Bearer secret-token"},
-            )
+            resp = client.post("/train", json={}, headers=owner_headers(owner_store))
         assert resp.status_code == 403
         assert "disabled" in resp.json()["detail"].lower()
         run.assert_not_called()
@@ -838,7 +857,7 @@ class TestForecastDashboard:
         assert "Text chat is free" in html
         assert "Voice credits are sold on this website" in html
         assert 'id="capabilities"' in html
-        assert "What Neural Forge can do" in html
+        assert "What Nous can do" in html
         assert "Forecast any number series" in html
         assert "Train on your own CSV" in html
         assert "Live answers" in html
@@ -887,11 +906,28 @@ class TestForecastDashboard:
         assert "/analysis/simulate" in client.get("/docs").text
         assert 'id="account-btn"' in html
         assert 'id="sign-in-modal"' in html
-        assert 'id="owner-modal" hidden' in html
-        assert "Owner sign-in" in html
-        assert html.split('id="owner-modal"', 1)[0].count("Owner sign-in") == 0
+        # The hidden owner sign-in and shared token login are gone.
+        assert 'id="owner-modal"' not in html
+        assert "Owner sign-in" not in html
+        assert 'id="owner-token"' not in html
         assert 'id="auth-tab-owner"' not in html
-        assert 'id="owner-token"' in html
+        # Sign-up/log-in gate before the app, with a second factor step.
+        assert 'id="auth-gate"' in html
+        assert 'id="landing"' in html
+        assert 'id="gate-mfa"' in html
+        assert 'id="gate-setup"' in html
+        assert 'id="gate-recovery"' in html
+        assert "<title>Nous" in html
+        assert 'rel="manifest"' in html
+        assert "/assets/brand/nous-s.webp" in html
+        assert ">NOU</span>" in html
+        assert "andrewgray@youneek.xyz" in html
+        assert 'data-tool-view="about"' in html
+        assert client.get("/app").status_code == 200
+        assert client.get("/manifest.webmanifest").json()["name"] == "Nous"
+        for size in (16, 32, 180, 192, 512):
+            icon = client.get(f"/assets/brand/icon-{size}.png")
+            assert icon.status_code == 200
         assert 'id="api-token"' not in html
         assert 'id="sidebar"' in html
         assert 'id="workspace-panel"' in html
@@ -1008,9 +1044,10 @@ class TestForecastDashboard:
         assert "celsiusToFahrenheit" in app_js
         assert "return `${formatMetric(celsiusToFahrenheit(number))}°F`" in app_js
         assert "formatWeatherMaeFahrenheit" in app_js
-        assert "neuralForgeApiToken" in app_js
-        assert "Authorization" in app_js
-        assert "Bearer " in app_js
+        assert "neuralForgeApiToken" not in app_js
+        assert "/auth/owner" not in app_js
+        assert "/auth/webauthn/login/verify" in app_js
+        assert "/auth/mfa/verify" in app_js
         assert "/voice/speak" in app_js
         assert "let currentAudio" in app_js
         assert "stopCurrentAudio" in app_js
@@ -1096,7 +1133,7 @@ class TestLunarEndpoints:
         assert page.status_code == 200
         html = page.text
         assert "API docs and examples" in html
-        assert "curl -sS https://forge.youneek.dev/health" in html
+        assert "curl -sS https://nous.youneek.dev/health" in html
         assert "/starters/weather/forecast" in html
         assert "/workspace/limits" in html
         assert "/agent/chat" in html

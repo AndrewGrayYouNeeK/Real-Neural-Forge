@@ -3,19 +3,22 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Neural Forge API docs</title>
+    <title>Nous API docs</title>
     <meta
       name="description"
-      content="API docs and examples for Neural Forge: health, sample models, predict, forecast, workspace training, and live data."
+      content="API docs and examples for Nous: health, sample models, predict, forecast, workspace training, and live data."
     />
     <link rel="icon" href="/favicon.ico" sizes="any" />
+    <link rel="icon" href="/assets/brand/icon-32.png" sizes="32x32" type="image/png" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="/assets/styles.css" />
   </head>
   <body>
     <a class="skip-link" href="#docs">Skip to the API docs</a>
     <div class="grid-bg" aria-hidden="true"></div>
     <header class="topbar">
-      <p class="eyebrow topbar-brand"><a href="/">Neural Forge</a></p>
+      <a class="brand" href="/" aria-label="Nous home"><span class="nous-wordmark" role="img" aria-label="Nous"><span class="nou" aria-hidden="true">NOU</span><img class="nous-s" src="/assets/brand/nous-s.webp" alt="" aria-hidden="true" /></span></a>
       <div class="topbar-actions">
         <a class="topbar-link" href="/docs" aria-current="page">API docs</a>
         <a class="topbar-link" href="/">Back to chat</a>
@@ -24,7 +27,7 @@
     <main class="docs-shell" id="docs">
       <h1>API docs and examples</h1>
       <p>
-        Neural Forge is a small time-series model you can train on your own
+        Nous is a small time-series model you can train on your own
         numbers, plus live weather, markets, and space answers in the chat.
         The examples below use the public site origin. Replace the host if you
         are calling a local server. Text answers are free. Training needs a
@@ -42,7 +45,7 @@
       </p>
 
       <h2>Health</h2>
-      <pre><code>curl -sS https://forge.youneek.dev/health</code></pre>
+      <pre><code>curl -sS https://nous.youneek.dev/health</code></pre>
       <p>A healthy process returns <code>{"status":"ok"}</code>.</p>
 
       <h2>Sample models (no account)</h2>
@@ -52,9 +55,9 @@
         approaches, and moon illumination. The public catalog and forecasts
         need no sign-in.
       </p>
-      <pre><code>curl -sS https://forge.youneek.dev/starters
+      <pre><code>curl -sS https://nous.youneek.dev/starters
 
-curl -sS "https://forge.youneek.dev/starters/weather/forecast?points=16"</code></pre>
+curl -sS "https://nous.youneek.dev/starters/weather/forecast?points=16"</code></pre>
       <p>
         Other starter ids are <code>stocks</code>, <code>crypto</code>,
         <code>near-earth</code>, and <code>lunar</code>. Each forecast includes
@@ -68,14 +71,14 @@ curl -sS "https://forge.youneek.dev/starters/weather/forecast?points=16"</code><
         champion model. The default response is a single point:
         <code>{"prediction":[...]}</code>.
       </p>
-      <pre><code>curl -sS -X POST https://forge.youneek.dev/predict \
+      <pre><code>curl -sS -X POST https://nous.youneek.dev/predict \
   -H "Content-Type: application/json" \
   -d '{"sequence":[[0.1],[0.2],[0.3],[0.4]]}'</code></pre>
       <p>
         <code>POST /forecast</code> asks for a multi-step outlook from the same
         model. See the schema for horizon and quantile fields.
       </p>
-      <pre><code>curl -sS -X POST https://forge.youneek.dev/forecast \
+      <pre><code>curl -sS -X POST https://nous.youneek.dev/forecast \
   -H "Content-Type: application/json" \
   -d '{"sequence":[[0.1],[0.2],[0.3],[0.4]],"horizon":3}'</code></pre>
 
@@ -85,15 +88,15 @@ curl -sS "https://forge.youneek.dev/starters/weather/forecast?points=16"</code><
         Authenticated routes accept a session cookie from the site, or
         <code>Authorization: Bearer YOUR_TOKEN</code>.
       </p>
-      <pre><code>curl -sS https://forge.youneek.dev/workspace/limits
+      <pre><code>curl -sS https://nous.youneek.dev/workspace/limits
 
 # After you upload a CSV (multipart) and get a dataset id:
-curl -sS -X POST https://forge.youneek.dev/workspace/datasets/DATASET_ID/train \
+curl -sS -X POST https://nous.youneek.dev/workspace/datasets/DATASET_ID/train \
   -H "Authorization: Bearer YOUR_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"target_column":"value"}'
 
-curl -sS -X POST https://forge.youneek.dev/workspace/models/MODEL_ID/predict-latest \
+curl -sS -X POST https://nous.youneek.dev/workspace/models/MODEL_ID/predict-latest \
   -H "Authorization: Bearer YOUR_TOKEN"</code></pre>
 
       <h2>Live data</h2>
@@ -101,44 +104,44 @@ curl -sS -X POST https://forge.youneek.dev/workspace/models/MODEL_ID/predict-lat
         These routes are answered by the Worker in front of the API. They do
         not require an account.
       </p>
-      <pre><code>curl -sS "https://forge.youneek.dev/live/weather?q=Dallas"
+      <pre><code>curl -sS "https://nous.youneek.dev/live/weather?q=Dallas"
 
-curl -sS "https://forge.youneek.dev/live/quote?kind=stock&amp;q=AAPL"
+curl -sS "https://nous.youneek.dev/live/quote?kind=stock&amp;q=AAPL"
 
-curl -sS -X POST https://forge.youneek.dev/agent/chat \
+curl -sS -X POST https://nous.youneek.dev/agent/chat \
   -H "Content-Type: application/json" \
-  -d '{"question":"What can Neural Forge do?"}'
+  -d '{"question":"What can Nous do?"}'
 
 # Optional history and mode. The agent may call forecast, live-data, and
 # evaluation tools before answering.
-curl -sS -X POST https://forge.youneek.dev/agent/chat \
+curl -sS -X POST https://nous.youneek.dev/agent/chat \
   -H "Content-Type: application/json" \
   -d '{"question":"How accurate is the weather sample?","mode":"normal","history":[]}'
 
 # Unhinged mode on the agent route (same voice rules as /live/ask).
-curl -sS -X POST https://forge.youneek.dev/agent/chat \
+curl -sS -X POST https://nous.youneek.dev/agent/chat \
   -H "Content-Type: application/json" \
-  -d '{"question":"What can Neural Forge do?","mode":"unhinged"}'
+  -d '{"question":"What can Nous do?","mode":"unhinged"}'
 
 # Phase 4: read an image or chart (PNG/JPEG/WebP/GIF data URL, max 1.5 MB).
 # Returns a description, any chart numbers as a series, and a quick forecast.
-curl -sS -X POST https://forge.youneek.dev/agent/vision \
+curl -sS -X POST https://nous.youneek.dev/agent/vision \
   -H "Content-Type: application/json" \
   -d "{\"question\":\"Where is this heading?\",\"image\":\"data:image/png;base64,$(base64 -w0 chart.png)\"}"
 
 # Phase 5: world model simulator. Baseline vs scenarios, 14 days, weather in °F.
-curl -sS -X POST https://forge.youneek.dev/analysis/simulate \
+curl -sS -X POST https://nous.youneek.dev/analysis/simulate \
   -H "Content-Type: application/json" \
   -d '{"starter_id":"weather","display_unit":"°F","horizon":14,"scenarios":[{"name":"Cold snap","events":[{"kind":"shock","step":1,"value":-15}]}]}'
 
 # Fallback without tools (unchanged):
-curl -sS -X POST https://forge.youneek.dev/live/ask \
+curl -sS -X POST https://nous.youneek.dev/live/ask \
   -H "Content-Type: application/json" \
-  -d '{"question":"What can Neural Forge do?"}'
+  -d '{"question":"What can Nous do?"}'
 
-curl -sS -X POST https://forge.youneek.dev/live/ask \
+curl -sS -X POST https://nous.youneek.dev/live/ask \
   -H "Content-Type: application/json" \
-  -d '{"question":"What can Neural Forge do?","mode":"unhinged"}'</code></pre>
+  -d '{"question":"What can Nous do?","mode":"unhinged"}'</code></pre>
       <p>
         <code>POST /agent/chat</code> is the tool-calling chat agent. Same
         request shape as <code>/live/ask</code> (<code>question</code>,
@@ -175,12 +178,27 @@ curl -sS -X POST https://forge.youneek.dev/live/ask \
         “Daily limit reached, back tomorrow.” The owner skips the per-visitor
         cap and still counts toward that global cap.
       </p>
+      <h2 id="auth">Sign-in</h2>
+      <p>
+        Chat and tool endpoints need a signed-in account. Sign up or log in with
+        <code>POST /auth/signup</code> or <code>POST /auth/login</code>
+        (<code>{"email": "…", "password": "…"}</code>). The session is an
+        HttpOnly, Secure, SameSite=Strict cookie that lasts 14 days. Send it on
+        later calls (for example <code>curl -c jar -b jar</code>). Without it the
+        API answers <code>401 {"auth_required": true}</code>. Public without
+        sign-in: <code>/</code>, <code>/docs</code>, <code>/openapi.json</code>,
+        <code>/health</code>, and shared report links. Daily AI caps are
+        counted per account. Five wrong passwords in 15 minutes lock that
+        email for 15 minutes.
+      </p>
       <p>
         Related container routes include
         <code>GET /lunar</code>,
         <code>GET /space/near-earth</code>, and
         <code>GET /space/solar-system</code>.
       </p>
+      <h2 id="contact">Contact</h2>
+      <p><a href="mailto:andrewgray@youneek.xyz">andrewgray@youneek.xyz</a></p>
     </main>
   </body>
 </html>

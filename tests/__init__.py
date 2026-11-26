@@ -1,1 +1,1 @@
-"""Tests for the Neural Forge package."""
+"""Tests for the Nous package."""

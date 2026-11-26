@@ -3,23 +3,149 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Neural Forge — Train a small model on your numbers</title>
+    <title>Nous — forecast anything, just ask</title>
     <meta
       name="description"
-      content="Train a small model on your numbers. Ask what comes next — forecast with confidence, train on your CSV, live weather and prices, backtested accuracy, Talk mode, and a developer API. Text chat is free. Voice credits are sold on the site."
+      content="Nous forecasts your numbers, weather and markets, reads charts, runs what-if simulations, and talks back. Text chat is free."
     />
+    <meta name="application-name" content="Nous" />
+    <meta name="apple-mobile-web-app-title" content="Nous" />
+    <meta name="theme-color" content="#000000" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Nous" />
+    <meta property="og:title" content="Nous — forecast anything, just ask" />
+    <meta
+      property="og:description"
+      content="Forecasts, live data, chart reading, what-if simulations and voice. Text chat is free."
+    />
+    <meta property="og:url" content="https://nous.youneek.dev/" />
+    <meta property="og:image" content="https://nous.youneek.dev/assets/brand/nous-og.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:image" content="https://nous.youneek.dev/assets/brand/nous-og.png" />
+    <meta name="twitter:title" content="Nous" />
+    <meta name="twitter:description" content="Forecast anything. Just ask." />
     <link rel="icon" href="/favicon.ico" sizes="any" />
+    <link rel="icon" href="/assets/brand/icon-32.png" sizes="32x32" type="image/png" />
+    <link rel="icon" href="/assets/brand/icon-16.png" sizes="16x16" type="image/png" />
+    <link rel="apple-touch-icon" href="/assets/brand/apple-touch-icon.png" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="preload" as="image" href="/assets/brand/nous-s.webp" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=Instrument+Serif:ital@0;1&display=swap"
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=Montserrat:wght@500&family=Instrument+Serif:ital@0;1&display=swap"
       rel="stylesheet"
     />
     <link rel="stylesheet" href="/assets/styles.css" />
   </head>
-  <body>
+  <body class="auth-pending">
     <a class="skip-link" href="#chat-input">Skip to the chat box</a>
     <div class="ambient" aria-hidden="true"></div>
+
+    <section id="landing" class="landing" aria-labelledby="landing-title">
+      <header class="landing-top">
+        <a class="brand" href="/" aria-label="Nous home">
+          <span class="nous-wordmark" role="img" aria-label="Nous"><span class="nou" aria-hidden="true">NOU</span><img class="nous-s" src="/assets/brand/nous-s.webp" alt="" aria-hidden="true" /></span>
+        </a>
+        <nav class="landing-links" aria-label="Site">
+          <a href="#landing-more">Pricing</a>
+          <a href="/docs">API</a>
+          <a href="/app" class="btn secondary btn-small" data-open-gate="login">Log in</a>
+        </nav>
+      </header>
+      <div class="landing-hero">
+        <h1 id="landing-title" class="landing-wordmark">
+          <span class="nous-wordmark" role="img" aria-label="Nous"><span class="nou" aria-hidden="true">NOU</span><img class="nous-s" src="/assets/brand/nous-s.webp" alt="" aria-hidden="true" /></span>
+        </h1>
+        <p class="landing-tag">Forecast anything. Just ask.</p>
+        <div class="landing-cta">
+          <a href="/app" class="btn primary" id="open-app-btn" data-open-gate="signup">Open app</a>
+          <a href="/app" class="btn secondary" data-open-gate="login">Log in</a>
+        </div>
+        <ul class="landing-pills" aria-label="What it does">
+          <li>Forecasts</li>
+          <li>Live weather &amp; markets</li>
+          <li>Read charts</li>
+          <li>What-if sims</li>
+          <li>Talk</li>
+        </ul>
+      </div>
+      <footer class="landing-more" id="landing-more">
+        <p><strong>Text chat is free.</strong> Voice uses credits.</p>
+        <p>
+          <a href="/docs">API docs</a> ·
+          <a href="mailto:andrewgray@youneek.xyz">andrewgray@youneek.xyz</a>
+        </p>
+      </footer>
+    </section>
+
+    <section id="auth-gate" class="auth-gate" aria-labelledby="gate-title">
+      <div class="auth-card">
+        <a class="brand brand-center" href="/" aria-label="Nous home">
+          <span class="nous-wordmark gate-wordmark" role="img" aria-label="Nous"><span class="nou" aria-hidden="true">NOU</span><img class="nous-s" src="/assets/brand/nous-s.webp" alt="" aria-hidden="true" /></span>
+        </a>
+        <h1 id="gate-title" class="gate-title">Sign up or log in</h1>
+        <p id="gate-error" class="gate-error" role="alert" hidden></p>
+
+        <form id="sign-in-form" class="gate-form" novalidate>
+          <label class="visually-hidden" for="sign-in-email">Email</label>
+          <input id="sign-in-email" name="email" type="email" autocomplete="username" placeholder="Email" required />
+          <div id="gate-password-row" hidden>
+            <label class="visually-hidden" for="sign-in-password">Password</label>
+            <input
+              id="sign-in-password"
+              name="password"
+              type="password"
+              autocomplete="current-password"
+              placeholder="Password"
+              minlength="10"
+            />
+            <p id="gate-password-hint" class="gate-hint" hidden>10+ characters.</p>
+          </div>
+          <button id="gate-continue" class="btn primary gate-btn" type="submit">Continue</button>
+          <p class="gate-switch">
+            <span id="gate-mode-label">New here?</span>
+            <button id="show-sign-up" class="linklike" type="button">Create account</button>
+          </p>
+        </form>
+
+        <div id="gate-mfa" class="gate-form" hidden>
+          <p class="gate-hint" id="gate-mfa-lead">Confirm it's you.</p>
+          <button id="gate-passkey-btn" class="btn primary gate-btn" type="button">Use passkey</button>
+          <form id="gate-code-form">
+            <label class="visually-hidden" for="gate-code">Code</label>
+            <input id="gate-code" name="code" inputmode="text" autocomplete="one-time-code" placeholder="6-digit code or recovery code" />
+            <button class="btn secondary gate-btn" type="submit">Verify</button>
+          </form>
+        </div>
+
+        <div id="gate-setup" class="gate-form" hidden>
+          <p class="gate-hint">Owner account: add a second factor.</p>
+          <button id="gate-add-passkey" class="btn primary gate-btn" type="button">Add a passkey</button>
+          <button id="gate-add-totp" class="btn secondary gate-btn" type="button">Use an authenticator app</button>
+          <div id="gate-totp" hidden>
+            <p class="gate-hint">Add this key to your authenticator app, then enter the code.</p>
+            <code id="gate-totp-secret" class="gate-secret"></code>
+            <a id="gate-totp-link" class="linklike" href="#">Open in authenticator</a>
+            <form id="gate-totp-form">
+              <label class="visually-hidden" for="gate-totp-code">Code</label>
+              <input id="gate-totp-code" name="code" inputmode="numeric" autocomplete="one-time-code" placeholder="6-digit code" />
+              <button class="btn primary gate-btn" type="submit">Confirm</button>
+            </form>
+          </div>
+        </div>
+
+        <div id="gate-recovery" class="gate-form" hidden>
+          <p class="gate-hint"><strong>Save these recovery codes.</strong> Each works once. They will not be shown again.</p>
+          <ol id="gate-recovery-list" class="gate-codes"></ol>
+          <button id="gate-recovery-done" class="btn primary gate-btn" type="button">I saved them</button>
+        </div>
+
+        <button id="gate-sign-out" class="linklike gate-signout" type="button" hidden>Sign out</button>
+      </div>
+    </section>
 
     <div class="app-shell">
       <button
@@ -37,9 +163,8 @@
       <aside class="sidebar" id="sidebar" aria-label="Tools and chat history">
         <div class="sidebar-top">
           <div class="sidebar-head">
-            <a class="sidebar-logo" href="/" aria-label="Neural Forge home">
-              <span class="logo-mark" aria-hidden="true">NF</span>
-              <span class="logo-text">Neural Forge</span>
+            <a class="sidebar-logo" href="/" aria-label="Nous home">
+              <span class="nous-wordmark" role="img" aria-label="Nous"><span class="nou" aria-hidden="true">NOU</span><img class="nous-s" src="/assets/brand/nous-s.webp" alt="" aria-hidden="true" /></span>
             </a>
             <button
               id="sidebar-close"
@@ -80,7 +205,11 @@
           <button id="account-btn" class="btn secondary account-btn" type="button">
             Sign in
           </button>
-          <a class="sidebar-foot-link" href="/docs">API docs</a>
+          <nav class="sidebar-foot-links" aria-label="About">
+            <button type="button" class="linklike sidebar-foot-link" data-view-open="about">About &amp; pricing</button>
+            <a class="sidebar-foot-link" href="/docs">API docs</a>
+            <a class="sidebar-foot-link" href="mailto:andrewgray@youneek.xyz">Contact</a>
+          </nav>
         </div>
       </aside>
 
@@ -95,27 +224,30 @@
 
           <div class="chat-stage" id="chat-stage">
             <div class="empty-greeting" id="empty-greeting">
-              <p class="eyebrow topbar-brand"><a href="/">Neural Forge</a></p>
+              <img class="brand-mark" src="/assets/brand/icon-192.png" alt="" width="56" height="56" />
               <p class="greeting-line" id="greeting-line">What can I help you forecast?</p>
-              <p class="hero-copy empty-copy">
-                Train a small model on your numbers. Ask what comes next.
-              </p>
             </div>
 
             <div id="chat-log" class="chat-log" aria-live="polite"></div>
 
-            <nav class="chip-row" id="suggestion-chips" aria-label="Try asking">
+            <nav class="chip-row action-chips" id="suggestion-chips" aria-label="Quick actions">
               <button class="chip" type="button" data-question="What will the weather be tomorrow?">
-                Predict tomorrow's weather
+                <span aria-hidden="true">☀️</span> Forecast weather
               </button>
-              <button class="chip" type="button" data-question="Try the Central Park temperature sample">
-                Central Park temperature
+              <button class="chip" type="button" data-action="simulator">
+                <span aria-hidden="true">🧪</span> Simulate what-if
               </button>
-              <button class="chip" type="button" data-question="How are the markets doing?">
-                How are the markets?
+              <button class="chip" type="button" data-action="image">
+                <span aria-hidden="true">📈</span> Upload a chart
+              </button>
+              <button class="chip" type="button" data-action="talk">
+                <span aria-hidden="true">🎙️</span> Talk
               </button>
               <button class="chip" type="button" data-question="Train on my CSV">
-                Train on my CSV
+                <span aria-hidden="true">🏋️</span> Train
+              </button>
+              <button class="chip" type="button" data-action="unhinged">
+                <span aria-hidden="true">😈</span> Unhinged
               </button>
             </nav>
 
@@ -148,7 +280,32 @@
             </nav>
 
             <form id="chat-form" class="chat-form composer">
+              <p id="talk-status" class="talk-status" hidden></p>
+              <div id="image-attachment" class="image-attachment" hidden>
+                <img id="image-attachment-thumb" alt="Attached image preview" />
+                <span id="image-attachment-name" class="image-attachment-name"></span>
+                <button
+                  id="image-attachment-remove"
+                  class="icon-btn icon-btn-small"
+                  type="button"
+                  aria-label="Remove attached image"
+                  title="Remove image"
+                >
+                  ×
+                </button>
+              </div>
+              <div class="composer-row">
+                <label class="visually-hidden" for="chat-input">Ask Nous</label>
+                <textarea
+                  id="chat-input"
+                  name="question"
+                  rows="1"
+                  autocomplete="off"
+                  placeholder="Ask anything"
+                ></textarea>
+              </div>
               <div class="composer-toolbar">
+                <div class="composer-left">
                 <button
                   id="tools-menu-btn"
                   class="icon-btn"
@@ -187,6 +344,8 @@
                 >
                   Unhinged
                 </button>
+                </div>
+                <div class="composer-right">
                 <button
                   id="talk-toggle"
                   class="mode-pill"
@@ -197,40 +356,21 @@
                 >
                   Talk
                 </button>
-              </div>
-              <p id="talk-status" class="talk-status" hidden></p>
-              <div id="image-attachment" class="image-attachment" hidden>
-                <img id="image-attachment-thumb" alt="Attached image preview" />
-                <span id="image-attachment-name" class="image-attachment-name"></span>
-                <button
-                  id="image-attachment-remove"
-                  class="icon-btn icon-btn-small"
-                  type="button"
-                  aria-label="Remove attached image"
-                  title="Remove image"
-                >
-                  ×
-                </button>
-              </div>
-              <div class="composer-row">
-                <label class="visually-hidden" for="chat-input">Ask Neural Forge</label>
-                <textarea
-                  id="chat-input"
-                  name="question"
-                  rows="1"
-                  autocomplete="off"
-                  placeholder="Ask about your data, weather, markets… or drop in a chart"
-                ></textarea>
-                <button class="btn primary send-btn" type="submit" aria-label="Send">
-                  Ask
-                </button>
+                  <button class="send-btn" type="submit" aria-label="Send" title="Send">
+                    ↑
+                  </button>
+                </div>
               </div>
               <div id="tools-menu" class="tools-menu" hidden role="menu" aria-label="Tools"></div>
             </form>
           </div>
 
-          <!-- Public landing copy kept below the chat shell for SEO + contract tests -->
-          <section class="hero landing-block" id="welcome" aria-labelledby="welcome-heading">
+          <section class="tool-view about-view" id="view-about" data-tool-view="about" hidden>
+            <header class="tool-view-head">
+              <h2>About Nous</h2>
+              <button type="button" class="btn secondary back-to-chat" data-view="chat">Back to chat</button>
+            </header>
+          <section class="hero" id="welcome" aria-labelledby="welcome-heading">
             <h1 id="welcome-heading">
               Train a small model on your numbers.
               <span class="hero-lead">Ask what comes next.</span>
@@ -240,7 +380,7 @@
               to the model in plain English. Text chat is free.
             </p>
             <div class="hero-cta">
-              <a class="btn primary" href="#chat-input">Try it free</a>
+              <button class="btn primary back-to-chat" type="button" data-view="chat">Try it free</button>
               <button class="btn secondary" type="button" id="hero-signup-btn">
                 Sign up
               </button>
@@ -250,8 +390,8 @@
             </p>
           </section>
 
-          <section class="capabilities landing-block" id="capabilities" aria-labelledby="capabilities-heading">
-            <h2 id="capabilities-heading">What Neural Forge can do</h2>
+          <section class="capabilities" id="capabilities" aria-labelledby="capabilities-heading">
+            <h2 id="capabilities-heading">What Nous can do</h2>
             <ul class="capability-list">
               <li>
                 <strong>Forecast any number series</strong>
@@ -263,7 +403,7 @@
               </li>
               <li>
                 <strong>Read charts and images</strong>
-                — attach a screenshot or photo and Neural Forge describes it,
+                — attach a screenshot or photo and Nous describes it,
                 pulls the numbers into a series, and forecasts what comes next.
               </li>
               <li>
@@ -289,7 +429,7 @@
             </ul>
           </section>
 
-          <section class="pricing landing-block" id="pricing" aria-labelledby="pricing-heading">
+          <section class="pricing" id="pricing" aria-labelledby="pricing-heading">
             <h2 id="pricing-heading">What's free, and what uses credits</h2>
             <ul>
               <li>
@@ -315,7 +455,7 @@
           </section>
 
           <section
-            class="tools-roadmap landing-block"
+            class="tools-roadmap"
             id="tools-roadmap"
             aria-labelledby="tools-roadmap-heading"
           >
@@ -325,6 +465,12 @@
               later — statuses stay in sync with the Tools list.
             </p>
             <div id="tools-roadmap-list" class="tools-roadmap-list"></div>
+          </section>
+
+            <section class="contact" id="contact" aria-labelledby="contact-heading">
+              <h2 id="contact-heading">Contact</h2>
+              <p><a href="mailto:andrewgray@youneek.xyz">andrewgray@youneek.xyz</a></p>
+            </section>
           </section>
 
           <!-- Tool panels (driven by TOOL_REGISTRY) -->
@@ -479,7 +625,7 @@
             </header>
             <p class="hint">
               Attach a chart screenshot, a table, or a photo in chat with 🖼, paste it,
-              or drag it onto the chat box. Neural Forge describes it, reads chart
+              or drag it onto the chat box. Nous describes it, reads chart
               numbers into a series, and draws a quick forecast you can download or
               train on.
             </p>
@@ -967,7 +1113,7 @@
         aria-labelledby="sign-in-heading"
       >
         <div class="modal-head">
-          <h2 id="sign-in-heading">Sign in</h2>
+          <h2 id="sign-in-heading">Account</h2>
           <button id="modal-close" class="modal-close" type="button" aria-label="Close">
             ✕
           </button>
@@ -979,63 +1125,15 @@
           </button>
         </div>
         <div id="account-signed-out" class="modal-body">
-          <form id="sign-in-form">
-            <label for="sign-in-email">Email</label>
-            <input id="sign-in-email" name="email" type="email" autocomplete="username" required />
-            <label for="sign-in-password">Password</label>
-            <input id="sign-in-password" name="password" type="password" autocomplete="current-password" required />
-            <button class="btn primary" type="submit">Sign in</button>
-          </form>
-          <p class="hint">New here? <button id="show-sign-up" class="linklike" type="button">Create a free account</button> — it only adds a private workspace.</p>
-          <form id="sign-up-form" hidden>
-            <label for="sign-up-email">Email</label>
-            <input id="sign-up-email" name="email" type="email" autocomplete="username" required />
-            <label for="sign-up-password">Password</label>
-            <input
-              id="sign-up-password"
-              name="password"
-              type="password"
-              autocomplete="new-password"
-              minlength="10"
-              required
-            />
-            <p class="hint">At least 10 characters. A new account gets its own sample datasets and models.</p>
-            <button class="btn primary" type="submit">Create account</button>
-          </form>
+          <p class="hint">You are signed out.</p>
+          <button id="account-open-gate" class="btn primary" type="button">Log in</button>
         </div>
-      </div>
-    </div>
-
-    <div class="modal-backdrop" id="owner-modal" hidden>
-      <div
-        class="modal"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="owner-heading"
-      >
-        <div class="modal-head">
-          <h2 id="owner-heading">Owner sign-in</h2>
-          <button id="owner-modal-close" class="modal-close" type="button" aria-label="Close">
-            ✕
-          </button>
-        </div>
-        <div class="modal-body">
-          <form id="owner-form">
-            <label for="owner-token">Owner API token</label>
-            <input
-              id="owner-token"
-              name="token"
-              type="password"
-              autocomplete="off"
-              placeholder="The token configured on the server"
-              required
-            />
-            <p class="hint">
-              The owner token unlocks the shared champion model and unlimited
-              GQ voice. Saved in this browser only.
-            </p>
-            <button class="btn primary" type="submit">Sign in as owner</button>
-          </form>
+        <div id="account-security" class="modal-body" hidden>
+          <h3>Security</h3>
+          <p id="security-summary" class="hint"></p>
+          <button id="security-add-passkey" class="btn secondary btn-small" type="button">Add a passkey</button>
+          <button id="security-add-totp" class="btn secondary btn-small" type="button">Set up authenticator app</button>
+          <button id="security-new-codes" class="btn secondary btn-small" type="button">New recovery codes</button>
         </div>
       </div>
     </div>
