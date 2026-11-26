@@ -308,8 +308,9 @@ describe("multi-step agent loop", () => {
       models: MODELS,
       toolContext: context(SIM_ASK, simBodies),
     });
-    expect(simBodies.length).toBe(2);
-    const scenarios = simBodies[1].scenarios as Array<{ name: string }>;
+    // The named cold snap is filled into the model's baseline-only call, so one run covers both.
+    expect(simBodies.length).toBe(1);
+    const scenarios = simBodies[0].scenarios as Array<{ name: string }>;
     expect(scenarios[0].name).toBe("Cold snap");
     expect(result.csv?.text.split("\n")[0]).toContain("Cold snap");
     expect(result.csv?.text.split("\n")[0]).toContain("Baseline (median)");
@@ -473,5 +474,46 @@ describe("artifacts", () => {
     const csv = buildArtifacts(plan, results).csv!.text.split("\n");
     expect(csv[0]).toContain("What-if (-15) (°F)");
     expect(csv[2]).toBe("+1,,51,40,48,54");
+  });
+});
+
+describe("named scenarios", () => {
+  it("fills a cold snap when the model's scenario has no usable event", async () => {
+    const simBodies: Array<Record<string, unknown>> = [];
+    const { ai } = scriptedAi([
+      '{"tool":"simulate_world","args":{"series":"weather","horizon":7,"scenarios":[{"name":"Scenario A","events":[]}]}}',
+      "Normal ends near 53.8°F and the cold snap ends about 2°F lower. CSV attached.",
+    ]);
+    const result = await runAgentTurn(SIM_ASK, "normal", [], {
+      ai,
+      db: new MemoryD1(),
+      ip: "11.0.0.1",
+      owner: false,
+      models: MODELS,
+      toolContext: context(SIM_ASK, simBodies),
+    });
+    expect(simBodies).toHaveLength(1);
+    const scenarios = simBodies[0].scenarios as Array<{ name: string; events: Array<{ value: number }> }>;
+    expect(scenarios[0].name).toBe("Cold snap");
+    expect(scenarios[0].events[0].value).toBe(-15);
+    expect(result.csv?.text).toContain("Cold snap");
+  });
+
+  it("keeps a usable model scenario as sent", async () => {
+    const simBodies: Array<Record<string, unknown>> = [];
+    const { ai } = scriptedAi([
+      '{"tool":"simulate_world","args":{"series":"weather","horizon":7,"scenario":{"name":"Deep freeze","events":[{"kind":"shock","step":1,"value":-25}]}}}',
+      "Normal ends near 53.8°F and the deep freeze ends lower. CSV attached.",
+    ]);
+    await runAgentTurn(SIM_ASK, "normal", [], {
+      ai,
+      db: new MemoryD1(),
+      ip: "11.0.0.2",
+      owner: false,
+      models: MODELS,
+      toolContext: context(SIM_ASK, simBodies),
+    });
+    const scenarios = simBodies[0].scenarios as Array<{ name: string }>;
+    expect(scenarios[0].name).toBe("Deep freeze");
   });
 });

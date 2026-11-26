@@ -246,7 +246,8 @@ export function pastedSeries(question: string): number[] {
   return values.length >= 12 ? values : [];
 }
 
-function scenarioFrom(question: string): Record<string, unknown> | null {
+/** Default scenario for a named ask (cold snap, heat wave, crash, spike, volatility). */
+export function scenarioFrom(question: string): Record<string, unknown> | null {
   const q = question.toLowerCase();
   if (/cold\s*snap|freeze|cold front/.test(q)) {
     return { name: "Cold snap", events: [{ kind: "shock", step: 1, value: -15 }] };
@@ -522,4 +523,21 @@ export function buildArtifacts(plan: RequestPlan, results: ToolResult[]): TurnAr
   if (wantsChart) out.chart = chart;
   if (wantsCsv) out.csv = { filename: "neural-forge-data.csv", text: chartToCsv(chart) };
   return out;
+}
+
+const EVENT_KINDS = new Set(["shock", "drift", "volatility", "set"]);
+
+/** True when at least one scenario carries a usable event (kind + numeric value). */
+export function hasUsableScenario(raw: unknown): boolean {
+  const list = Array.isArray(raw) ? raw : raw && typeof raw === "object" ? [raw] : [];
+  return list.some((scenario) => {
+    const events = record(scenario).events;
+    return (
+      Array.isArray(events) &&
+      events.some((event) => {
+        const e = record(event);
+        return typeof e.kind === "string" && EVENT_KINDS.has(e.kind) && typeof e.value === "number" && Number.isFinite(e.value) && e.value !== 0;
+      })
+    );
+  });
 }
