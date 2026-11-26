@@ -1906,7 +1906,9 @@ body:not(.has-chat) #chat-log {
   }
 }
 
-/* Brand: HTML "NOU" + the cosmos S image. Size it with font-size. */
+/* Brand: HTML "N" and "U" + the black hole O and swirl S images.
+   Size it with font-size. Both images are cropped centred on the cap
+   centre of the source letters (cap height 147px = 0.7em in Montserrat). */
 .nous-wordmark {
   display: inline-flex;
   align-items: center;
@@ -1922,11 +1924,19 @@ body:not(.has-chat) #chat-log {
   letter-spacing: 0.06em;
 }
 
-.nous-wordmark .nous-s {
-  /* Measured from the source art: the S (with glow) is 1.48x the cap height. */
-  height: 1.06em;
+.nous-wordmark .nous-o {
+  /* 241px tall in the source = 1.148em. */
+  height: 1.148em;
   width: auto;
-  margin-left: 0.02em;
+  margin: 0 0.01em 0 -0.01em;
+  display: block;
+}
+
+.nous-wordmark .nous-s {
+  /* 255px tall in the source = 1.214em. */
+  height: 1.214em;
+  width: auto;
+  margin: -0.05em 0 -0.05em -0.02em;
   display: block;
 }
 
@@ -1944,11 +1954,12 @@ body:not(.has-chat) #chat-log {
 
 .landing-wordmark .nous-wordmark {
   font-size: clamp(56px, 11vw, 112px);
+  margin-bottom: 0.08em;
 }
 
 .gate-wordmark {
   font-size: 40px;
-  margin: 0 auto;
+  margin: 0 auto 0.08em;
 }
 
 .sidebar-logo .nous-wordmark {
@@ -1995,4 +2006,55 @@ body:not(.has-chat) #chat-log {
   .sidebar {
     overflow-y: auto;
   }
+}
+
+/* Unhinged switch: off by default, never restored from storage. */
+.unhinged-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 32px;
+  padding: 4px 10px 4px 6px;
+  border: 1px solid var(--line, #2a2f3a);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted, #9aa3b2);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.unhinged-switch .switch-track {
+  position: relative;
+  width: 30px;
+  height: 18px;
+  border-radius: 999px;
+  background: #3a4050;
+  transition: background 0.15s ease;
+  flex: none;
+}
+.unhinged-switch .switch-thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #fff;
+  transition: transform 0.15s ease;
+}
+.unhinged-switch.is-on {
+  color: #fff;
+  border-color: #ff5a36;
+}
+.unhinged-switch.is-on .switch-track {
+  background: #ff5a36;
+}
+.unhinged-switch.is-on .switch-thumb {
+  transform: translateX(12px);
+}
+.unhinged-switch:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 2px;
 }
