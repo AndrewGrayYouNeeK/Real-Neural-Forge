@@ -6,7 +6,8 @@
 import type { D1Like } from "../live/ai";
 import { visitorFromCf, wantsCurrentConditions, type CfIncoming, type VisitorGeo } from "../live/geo";
 import { isWeatherAsk, resolveFetchLiveKind } from "../live/kind";
-import { answerWeather } from "../live/weather";
+import { answerWeather, fetchDailyHistory, resolveHistoryPlace } from "../live/weather";
+import { formatPlace } from "../live/geo";
 import { answerQuote } from "../live/markets";
 import {
   clearMemory,
@@ -59,7 +60,7 @@ export function weatherQuestionForTool(originalQuestion: string, toolQuery: stri
   return base;
 }
 
-export const MAX_TOOL_CALLS = 4;
+export const MAX_TOOL_CALLS = 8;
 export const TOOL_TIMEOUT_MS = 8_000;
 /** Per-attempt timeout for forecast/eval (kept under the shared budget). */
 export const FORECAST_TOOL_TIMEOUT_MS = 12_000;
@@ -562,7 +563,12 @@ export const TOOL_DEFINITIONS = [
         values: {
           type: "array",
           items: { type: "number" },
-          description: "Optional: the user's own series (24-2000 numbers, oldest first) instead of a starter.",
+          description: "Optional: the user's own series (24-2000 numbers, oldest first) instead of a starter. To fit/train a quick model on numbers the user pasted and backtest it, pass them here; the result includes an honest holdout backtest.",
+        },
+        values_from: {
+          type: "string",
+          enum: ["weather_history"],
+          description: "Use the daily highs from this turn's weather_history result as the series (instead of copying numbers into values).",
         },
         unit: {
           type: "string",
@@ -607,6 +613,20 @@ export const TOOL_DEFINITIONS = [
             additionalProperties: false,
           },
         },
+      },
+      additionalProperties: false,
+    },
+  },
+  {
+    type: "function" as const,
+    name: "weather_history",
+    description:
+      "Past daily high/low temperatures (°F) for a place over the last N days (7-92), plus Open-Meteo's own next-7-day highs. Use for 'last 30 days', 'past few weeks', or as the input series before forecasting or simulating a city's weather. To forecast that city from its history, call simulate_world next with values_from='weather_history'. Values are already °F.",
+    parameters: {
+      type: "object",
+      properties: {
+        place: { type: "string", description: "City/place name, e.g. 'Louisville, KY'. Omit to use the visitor's location." },
+        days: { type: "integer", description: "How many past days (7-92). Default 30." },
       },
       additionalProperties: false,
     },
@@ -1798,18 +1818,29 @@ async function runSimulateWorld(
   args: Record<string, unknown>,
 ): Promise<ToolResult["data"]> {
   const horizon = intArg(args, "horizon", 14, 1, 60);
-  const scenarios = sanitizeSimScenarios(args.scenarios, horizon);
+  // Models sometimes send one `scenario` object instead of a `scenarios` list.
+  const scenarioList =
+    Array.isArray(args.scenarios) || !args.scenario || typeof args.scenario !== "object"
+      ? args.scenarios
+      : [args.scenario];
+  const scenarios = sanitizeSimScenarios(scenarioList, horizon);
   const rawValues = Array.isArray(args.values)
     ? args.values.filter((v): v is number => typeof v === "number" && Number.isFinite(v))
     : [];
   let body: Record<string, unknown>;
   let series = stringArg(args, "series", "weather").toLowerCase() || "weather";
+  const rawDates = Array.isArray(args.dates)
+    ? args.dates.filter((d): d is string => typeof d === "string").slice(-2000)
+    : [];
+  const fromHistory = args._from_history === true;
   if (rawValues.length >= 24) {
     series = "custom";
     const unit = stringArg(args, "unit").slice(0, 32);
+    const values = rawValues.slice(-2000);
     body = {
-      values: rawValues.slice(-2000),
+      values,
       ...(unit ? { unit } : {}),
+      ...(rawDates.length === values.length ? { dates: rawDates } : {}),
       horizon,
       n_paths: 128,
       scenarios,
@@ -1876,6 +1907,68 @@ async function runSimulateWorld(
     scenarios: compactScenarios,
     backtest: payload.backtest,
     model: model.description,
+    ...(fromHistory ? { from_history: true } : {}),
+    // Full paths for charts / CSV; stripped before the model sees the result.
+    _full: {
+      history: Array.isArray(payload.history) ? (payload.history as unknown[]).slice(-60) : [],
+      baseline: { p10: baseline.p10, p50: baseline.p50, p90: baseline.p90 },
+      scenarios: Array.isArray(payload.scenarios)
+        ? (payload.scenarios as Array<Record<string, unknown>>).map((sc) => ({
+            name: sc.name,
+            p10: sc.p10,
+            p50: sc.p50,
+            p90: sc.p90,
+          }))
+        : [],
+    },
+  };
+}
+
+async function runWeatherHistory(
+  ctx: ToolContext,
+  args: Record<string, unknown>,
+): Promise<ToolResult["data"]> {
+  const days = intArg(args, "days", 30, 7, 92);
+  const placeArg =
+    stringArg(args, "place") || stringArg(args, "location") || stringArg(args, "city") || stringArg(args, "query");
+  const place = await resolveHistoryPlace(placeArg, ctx.question, ctx.visitor);
+  const history = await fetchDailyHistory(place, days);
+  if (!history.highs.length) throw new Error("No weather history returned.");
+  const highs = history.highs;
+  const avg = highs.reduce((sum, v) => sum + v, 0) / highs.length;
+  const max = Math.max(...highs);
+  const min = Math.min(...highs);
+  const label = formatPlace(place);
+  const first = history.dates[0];
+  const last = history.dates[history.dates.length - 1];
+  const fmt = (v: number) => `${Math.round(v * 10) / 10}°F`;
+  const nextAvg = history.nextHighs.length
+    ? history.nextHighs.reduce((sum, v) => sum + v, 0) / history.nextHighs.length
+    : null;
+  const text =
+    `Last ${highs.length} days in ${label} (${first} to ${last}): daily highs averaged ${fmt(avg)}, ` +
+    `ranging ${fmt(min)} to ${fmt(max)}; the most recent high was ${fmt(highs[highs.length - 1])}.` +
+    (nextAvg != null ? ` Open-Meteo's own next-7-day highs average ${fmt(nextAvg)}.` : "");
+  return {
+    kind: "weather_history",
+    text,
+    place: label,
+    unit: "°F",
+    days: highs.length,
+    first_date: first,
+    last_date: last,
+    highs,
+    avg_high: Math.round(avg * 10) / 10,
+    min_high: min,
+    max_high: max,
+    open_meteo_next_highs: history.nextHighs,
+    _full: {
+      dates: history.dates,
+      highs,
+      lows: history.lows,
+      next_dates: history.nextDates,
+      next_highs: history.nextHighs,
+    },
   };
 }
 
@@ -2141,7 +2234,7 @@ async function runAnalyzeRegimes(
 }
 
 function defaultTimeoutForTool(toolName: AgentToolName, override?: number): number {
-  if (toolName === "forecast" || toolName === "get_evaluation_metrics") {
+  if (toolName === "forecast" || toolName === "get_evaluation_metrics" || toolName === "simulate_world") {
     if (typeof override === "number" && Number.isFinite(override)) {
       // Raise the loop's generic 8s default; keep intentionally short test overrides.
       if (override >= TOOL_TIMEOUT_MS) return Math.max(override, FORECAST_TOOL_TIMEOUT_MS);
@@ -2223,6 +2316,8 @@ export async function dispatchTool(
         return runGenerateSynthetic(keyed, args);
       case "simulate_world":
         return runSimulateWorld(keyed, args);
+      case "weather_history":
+        return runWeatherHistory(keyed, args);
       default: {
         const unexpected: never = toolName;
         throw new Error(`Unhandled tool: ${String(unexpected)}`);

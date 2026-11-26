@@ -32,6 +32,18 @@ import {
 } from "../live/ai";
 import { routeClearIntent } from "./intent";
 import {
+  buildArtifacts,
+  checklistNote,
+  deliverableDone,
+  missingDeliverables,
+  planRequest,
+  routeMissingStep,
+  shortLabels,
+  type ChartSpec,
+  type Deliverable,
+  type RequestPlan,
+} from "./plan";
+import {
   collectToolCalls,
   finalAnswerText,
   isDegenerateAnswer,
@@ -62,6 +74,12 @@ export type AgentTurnResult = {
   reason?: string;
   voiceResting: boolean;
   voiceMessage: string | null;
+  /** Chart spec for the frontend line chart (only when the user asked for one). */
+  chart?: ChartSpec;
+  /** CSV download (only when the user asked for one). */
+  csv?: { filename: string; text: string };
+  /** Multi-step bookkeeping: what was asked and what never happened. */
+  steps?: { planned: Deliverable[]; missing: Deliverable[] };
 };
 
 export type AgentLoopDeps = {
@@ -78,17 +96,26 @@ export type AgentLoopDeps = {
   now?: Date;
   /** Preloaded user memory block appended to the system prompt. */
   memoryPrompt?: string;
+  maxModelSteps?: number;
+  turnNeuronBudget?: number;
 };
 
 const JSON_PROTOCOL =
   "Tools are optional. For greetings, small talk, thanks, or questions that need no live data or model facts, answer in plain language with NO tool call. " +
-  "When you do need a tool, reply with ONLY one JSON object and nothing else: " +
-  '{"tool":"<name>","args":{...}}. ' +
+  "When you do need a tool, reply with ONLY JSON and nothing else: one call " +
+  '{"tool":"<name>","args":{...}} ' +
+  "or, for independent steps that do not need each other's results, an array " +
+  '[{"tool":"<name>","args":{...}},{"tool":"<name>","args":{...}}]. ' +
   "Valid tools:\n" +
   toolCatalogForPrompt() +
+  "\nMulti-step requests (for example: get data, then forecast, then chart, then explain): silently list every step the user asked for, " +
+  "do them in order (one tool reply per step, or an array for independent steps), and write the final answer only after every step is done. " +
+  "Never stop after the first step, and never say you will do something later: do it now with a tool, or say plainly that it cannot be done. " +
+  "For simulate / scenario / cold snap / heat wave asks, use simulate_world with a named scenario (it rolls many days and compares against the baseline) rather than a one-step what_if. " +
+  "Do not stall on missing details: with no place given, weather tools use the visitor's location; with no series given, use the weather sample. " +
+  "Charts and CSV downloads are attached to your reply automatically from the tool data, so never claim you cannot draw a chart or make a file; just make sure the data tool ran. " +
   "\nAfter tool results are provided, answer the user in plain language. " +
-  "Never invent live weather or prices. Never show tool JSON, planning, or hidden reasoning to the user. " +
-  "Call at most one tool per reply.";
+  "Never invent live weather or prices. Never show tool JSON, planning, checklists, or hidden reasoning to the user.";
 
 const STRICT_TOOL_RETRY =
   "Your previous reply was not a valid tool JSON object. " +
@@ -140,6 +167,19 @@ export function agentSystemPrompt(
 /** Budget for the tool-picking / small-talk step. */
 export const AGENT_STEP_MAX_TOKENS = 220;
 /**
+ * Tool-picking budget for multi-step asks. GPT-OSS spends hidden reasoning
+ * tokens on the plan, and simulate_world JSON with scenarios is long; 220 cut
+ * those replies off mid-JSON so no tool call parsed and the turn ended early.
+ */
+export const AGENT_PLAN_STEP_MAX_TOKENS = 900;
+/** Hard cap on model calls in one turn (each one reserves against the caps). */
+export const MAX_MODEL_STEPS = 8;
+/**
+ * Per-turn neuron guard (~$0.016 at overage pricing). Daily per-visitor and
+ * global caps still apply on top; this only stops one runaway turn.
+ */
+export const TURN_NEURON_BUDGET = 1500;
+/**
  * Budget once tool results are in. GPT-OSS counts hidden reasoning against
  * this cap, so 220 cut explain answers mid-word ("…tug-"). Reasoning stays
  * hidden; the prompt still asks for a short answer.
@@ -173,10 +213,16 @@ export function buildAgentInputs(options: {
   toolNotes: string[];
   mode: ChatMode;
   allowTools: boolean;
+  /** Multi-step plan: give tool-picking steps room for the plan + longer JSON. */
+  multiStep?: boolean;
 }): Record<string, unknown> {
   const { model, system, question, history, toolNotes, mode, allowTools } = options;
   const prior = historyForModel(history);
-  const maxTokens = toolNotes.length ? AGENT_ANSWER_MAX_TOKENS : AGENT_STEP_MAX_TOKENS;
+  const maxTokens = options.multiStep
+    ? Math.max(AGENT_PLAN_STEP_MAX_TOKENS, toolNotes.length ? AGENT_ANSWER_MAX_TOKENS : 0)
+    : toolNotes.length
+      ? AGENT_ANSWER_MAX_TOKENS
+      : AGENT_STEP_MAX_TOKENS;
   if (usesResponsesApi(model)) {
     const input: Array<Record<string, unknown>> = [{ role: "system", content: system }];
     for (const item of prior) {
@@ -215,17 +261,32 @@ export function buildAgentInputs(options: {
 export const NORMAL_TOOL_VOICE =
   " Keep your usual witty voice: the facts first, then at most one short quip.";
 
-function toolNote(call: ParsedToolCall, result: ToolResult, mode: ChatMode = "normal"): string {
+function toolNote(
+  call: ParsedToolCall,
+  result: ToolResult,
+  mode: ChatMode = "normal",
+  multiStep = false,
+): string {
   // Never forward internal exception strings to the model — it echoes them.
+  // `_full` / `_…` keys hold chart and CSV data the model never needs.
   let safeData = result.data;
   if (safeData && typeof safeData === "object" && !Array.isArray(safeData)) {
-    const { error: _internal, ...rest } = safeData as Record<string, unknown>;
+    const rest: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(safeData as Record<string, unknown>)) {
+      if (key === "error" || key.startsWith("_")) continue;
+      rest[key] = value;
+    }
     safeData = rest;
   }
   const payload = result.ok
     ? { tool: call.name, ok: true, result: safeData }
     : { tool: call.name, ok: false, error: friendlyToolFailure(call.name) };
-  return `Tool result for ${call.name}:\n${JSON.stringify(payload).slice(0, 3500)}\nUsing only these facts, answer the user directly. Lead with the key number or condition. Do not call another tool unless you still lack a required fact. Do not invent values. Never mention tool names or raw errors.${mode === "unhinged" ? "" : NORMAL_TOOL_VOICE}`;
+  const voice = mode === "unhinged" ? "" : NORMAL_TOOL_VOICE;
+  if (multiStep) {
+    // The checklist note that follows says whether to call the next tool or answer.
+    return `Tool result for ${call.name}:\n${JSON.stringify(payload).slice(0, 3500)}\nUse only these facts. Do not invent values. Never mention tool names or raw errors.${voice}`;
+  }
+  return `Tool result for ${call.name}:\n${JSON.stringify(payload).slice(0, 3500)}\nUsing only these facts, answer the user directly. Lead with the key number or condition. Do not call another tool unless you still lack a required fact. Do not invent values. Never mention tool names or raw errors.${voice}`;
 }
 
 async function reserveOrFail(
@@ -290,6 +351,7 @@ async function runModelStep(
   toolNotes: string[],
   mode: ChatMode,
   allowTools: boolean,
+  multiStep = false,
 ): Promise<ModelStep> {
   const inputs = buildAgentInputs({
     model,
@@ -299,6 +361,7 @@ async function runModelStep(
     toolNotes,
     mode,
     allowTools,
+    multiStep,
   });
   const raw = await deps.ai.run(model, inputs);
   const text = extractModelText(raw);
@@ -323,6 +386,7 @@ async function runModelWithFallback(
   mode: ChatMode,
   models: { primary: string; fallback: string },
   allowTools: boolean,
+  multiStep = false,
 ): Promise<ModelStep> {
   try {
     return await runModelStep(
@@ -334,6 +398,7 @@ async function runModelWithFallback(
       toolNotes,
       mode,
       allowTools,
+      multiStep,
     );
   } catch (error) {
     if (models.fallback === models.primary) throw error;
@@ -357,6 +422,7 @@ async function runModelWithFallback(
       toolNotes,
       mode,
       allowTools,
+      multiStep,
     );
   }
 }
@@ -595,6 +661,104 @@ function logAgentTurn(payload: Record<string, unknown>): void {
   );
 }
 
+/** True when a reply promises work instead of doing it ("I'll chart that next"). */
+export function promisesFutureWork(answer: string | null): boolean {
+  if (!answer) return false;
+  return /\b(?:I'll|I will|I'm going to|I am going to|let me|next,? I(?:'ll| will)|give me a (?:sec|second|moment)|stand by|hang tight)\b[^.!?\n]{0,80}\b(?:chart|plot|graph|csv|export|forecast|simulat\w*|run|backtest|train|fetch|pull|grab|explain|compare|calculate|generate)\b/i.test(
+    answer,
+  );
+}
+
+function callKey(call: ParsedToolCall): string {
+  const sorted = Object.keys(call.args)
+    .sort()
+    .map((key) => [key, call.args[key]]);
+  return `${call.name}:${JSON.stringify(sorted)}`;
+}
+
+/** Drop model-supplied private (`_…`) args; only the loop may set those. */
+function publicArgs(args: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(args || {})) {
+    if (!key.startsWith("_")) out[key] = value;
+  }
+  return out;
+}
+
+function latestHistory(results: ToolResult[]): Record<string, unknown> | null {
+  for (let i = results.length - 1; i >= 0; i--) {
+    const item = results[i];
+    if (item.ok && item.name === "weather_history" && item.data && typeof item.data === "object") {
+      return item.data as Record<string, unknown>;
+    }
+  }
+  return null;
+}
+
+const NON_WEATHER_SERIES = new Set(["stocks", "crypto", "lunar", "near-earth", "loaded"]);
+
+/** True when a series arg plausibly means "the weather data we just fetched". */
+function meansFetchedWeather(series: string): boolean {
+  if (!series || series === "weather") return true;
+  if (NON_WEATHER_SERIES.has(series)) return false;
+  if (/history|highs?|temp/.test(series)) return true;
+  // Workspace model ids carry digits; a bare word is usually the place name.
+  return !/\d/.test(series);
+}
+
+/**
+ * Feed this turn's weather_history highs into the simulator when the model
+ * asked for it (values_from) or plainly meant "forecast that city" — e.g.
+ * series:"weather_history", series:"louisville", or the NYC weather starter
+ * after fetching another city's history. A `forecast` call in that situation
+ * becomes a simulate_world run on the fetched series.
+ */
+function injectHistoryValues(
+  call: ParsedToolCall,
+  results: ToolResult[],
+  plan: RequestPlan,
+): ParsedToolCall {
+  if (call.name !== "simulate_world" && call.name !== "forecast") return call;
+  const args = { ...call.args };
+  const wantsHistory = args.values_from === "weather_history";
+  delete args.values_from;
+  const hasValues = Array.isArray(args.values) && args.values.length >= 24;
+  const series = typeof args.series === "string" ? args.series.trim().toLowerCase() : "";
+  const history = latestHistory(results);
+  if (!history || hasValues) return { ...call, args };
+  if (!wantsHistory && !(plan.deliverables.includes("history") && meansFetchedWeather(series))) {
+    return { ...call, args };
+  }
+  const full = (history._full || {}) as { dates?: unknown; highs?: unknown };
+  const highs = Array.isArray(full.highs) ? (full.highs as unknown[]).filter((v): v is number => typeof v === "number") : [];
+  if (highs.length < 24) return { ...call, args };
+  const dates = Array.isArray(full.dates) ? (full.dates as unknown[]).map(String) : [];
+  delete args.series;
+  const horizon = typeof args.horizon === "number" ? args.horizon : Number(args.horizon) || 7;
+  return {
+    ...call,
+    name: "simulate_world",
+    args: {
+      ...(call.name === "simulate_world" ? args : {}),
+      horizon,
+      values: highs,
+      ...(dates.length === highs.length ? { dates } : {}),
+      unit: "°F",
+      _from_history: true,
+    },
+  };
+}
+
+const NO_MORE_TOOLS_NOTE =
+  "No more tools are available for this turn. Write the final answer now from the tool results above, covering every step the user asked for. " +
+  "If a step could not be done, say so plainly in one short line. Do not output tool JSON.";
+
+const FINISH_THE_JOB_NOTE =
+  "You stopped before finishing the user's request. Do not answer yet and do not promise to do it later. Reply with ONLY the tool JSON for the next missing step now.";
+
+const WRITE_FULL_ANSWER_NOTE =
+  "Every data step is done. Write the complete final answer now, covering every step the user asked for, including a short plain-words explanation. Do not promise further work.";
+
 export async function runAgentTurn(
   question: string,
   mode: ChatMode,
@@ -604,6 +768,8 @@ export async function runAgentTurn(
   const started = Date.now();
   const turnTimeout = deps.turnTimeoutMs ?? TURN_TIMEOUT_MS;
   const maxTools = deps.maxToolCalls ?? MAX_TOOL_CALLS;
+  const maxSteps = deps.maxModelSteps ?? MAX_MODEL_STEPS;
+  const neuronBudget = deps.turnNeuronBudget ?? TURN_NEURON_BUDGET;
   const toolTimeout = deps.toolTimeoutMs ?? TOOL_TIMEOUT_MS;
   const clean = sanitizeQuestion(question);
   const caps = deps.caps ?? resolveAiCaps();
@@ -612,17 +778,26 @@ export async function runAgentTurn(
     fallback: deps.models?.fallback?.trim() || resolveChatModels({}).fallback,
   };
   const allowTools = !isSmallTalk(clean);
+  const plan = allowTools ? planRequest(clean) : { steps: [clean], deliverables: [], multiStep: false };
+  const multiStep = allowTools && plan.multiStep;
   const system = agentSystemPrompt(mode, allowTools, deps.memoryPrompt);
   const toolNotes: string[] = [];
   const toolLog: Array<Record<string, unknown>> = [];
   const toolsUsed: string[] = [];
   const toolResults: ToolResult[] = [];
+  const doneCalls = new Set<string>();
+  const executedKeys = new Set<string>();
   let totalNeurons = 0;
   let modelId = PRIMARY_MODEL;
   let voiceResting = false;
   let strictRetryUsed = false;
   let intentRouted = false;
   let lastStepTruncated = false;
+  let modelSteps = 0;
+  let nudges = 0;
+  let plannedRoutes = 0;
+  let stopReason = "answered";
+  let progressNote: string | null = null;
 
   const firstReserve = await reserveOrFail(deps, caps);
   if (!firstReserve.ok) {
@@ -657,36 +832,131 @@ export async function runAgentTurn(
   let answer: string | null = null;
   let toolCallsThisTurn = 0;
 
-  const executeToolCall = async (call: ParsedToolCall): Promise<void> => {
+  const notesForModel = (extra?: string): string[] => {
+    const notes = [...toolNotes];
+    if (progressNote) notes.push(progressNote);
+    if (extra) notes.push(extra);
+    return notes;
+  };
+
+  const refreshProgress = () => {
+    if (multiStep) progressNote = checklistNote(plan, toolResults);
+  };
+
+  const executeToolCall = async (raw: ParsedToolCall): Promise<void> => {
+    let call: ParsedToolCall = { ...raw, args: publicArgs(raw.args) };
+    if (
+      call.name === "simulate_world" &&
+      call.args.values_from === "weather_history" &&
+      !latestHistory(toolResults) &&
+      toolCallsThisTurn + 1 < maxTools
+    ) {
+      // The model skipped the fetch it depends on: do it first.
+      await executeToolCall({ id: `${call.id}_history`, name: "weather_history", args: { days: 30 } });
+    }
+    call = injectHistoryValues(call, toolResults, plan);
+    doneCalls.add(callKey(raw));
+    // A rewritten call (forecast -> simulate on fetched history) can match one already run.
+    const executedKey = callKey({ ...call, args: publicArgs(call.args) });
+    if (executedKeys.has(executedKey)) return;
+    executedKeys.add(executedKey);
     toolCallsThisTurn += 1;
     toolsUsed.push(call.name);
     const result = await dispatchTool(call.name, call.args, deps.toolContext, toolTimeout);
     toolResults.push(result);
-    toolNotes.push(toolNote(call, result, mode));
+    toolNotes.push(toolNote(call, result, mode, multiStep));
     toolLog.push({
       tool: call.name,
-      args: summarizeArgs(call.args),
+      args: summarizeArgs(publicArgs(call.args)),
       duration_ms: result.durationMs,
       ok: result.ok,
       error: result.error || null,
     });
   };
 
-  while (Date.now() - started < turnTimeout) {
+  /** Run every parsed call (not just the first). Independent calls run in parallel. */
+  const executeBatch = async (calls: ParsedToolCall[]): Promise<number> => {
+    const fresh: ParsedToolCall[] = [];
+    const seen = new Set<string>();
+    for (const call of calls) {
+      const key = callKey(call);
+      if (doneCalls.has(key) || seen.has(key)) continue;
+      seen.add(key);
+      fresh.push(call);
+    }
+    const room = Math.max(0, maxTools - toolCallsThisTurn);
+    const batch = fresh.slice(0, room);
+    if (!batch.length) return 0;
+    // simulate_world may depend on a weather_history in the same batch.
+    const dependent = batch.filter(
+      (call) => call.name === "simulate_world" && batch.some((other) => other.name === "weather_history"),
+    );
+    const independent = batch.filter((call) => !dependent.includes(call));
+    if (independent.length === 1) {
+      await executeToolCall(independent[0]);
+    } else if (independent.length > 1) {
+      await Promise.all(independent.map((call) => executeToolCall(call)));
+    }
+    for (const call of dependent) await executeToolCall(call);
+    refreshProgress();
+    return batch.length;
+  };
+
+  const outOfRoom = (): string | null => {
+    if (Date.now() - started >= turnTimeout) return "timeout";
+    if (modelSteps >= maxSteps) return "max_steps";
+    if (totalNeurons >= neuronBudget) return "neuron_budget";
+    return null;
+  };
+
+  const modelStep = async (extra?: string) => {
     const step = await runModelWithFallback(
       deps,
       system,
       clean,
       history,
-      toolNotes,
+      notesForModel(extra),
       mode,
       models,
       allowTools,
+      multiStep,
     );
+    modelSteps += 1;
     totalNeurons += step.neurons;
     modelId = step.modelId;
     lastStepTruncated = hitTokenCap(step.raw);
     await settleExtraNeurons(deps, caps, step.neurons);
+    return step;
+  };
+
+  const proseFrom = (step: { raw: unknown; text: string | null }): string | null => {
+    const text =
+      finalAnswerText(step.raw) ||
+      (step.text && !collectToolCalls(null, step.text).length ? sanitizeAgentAnswer(step.text) : null);
+    return text && !isDegenerateAnswer(text) ? text : null;
+  };
+
+  let pendingExtra: string | undefined;
+
+  while (true) {
+    const room = outOfRoom();
+    if (room) {
+      stopReason = room;
+      break;
+    }
+    if (modelSteps > 0) {
+      const nextReserve = await reserveOrFail(deps, caps);
+      if (!nextReserve.ok) {
+        answer = factualFallback(toolResults) || nextReserve.message;
+        voiceResting = true;
+        stopReason = "cap";
+        break;
+      }
+      voiceResting = nextReserve.voiceResting;
+    }
+    const extra = pendingExtra;
+    pendingExtra = undefined;
+    const step = await modelStep(extra);
 
     if (!allowTools) {
       answer = finalAnswerText(step.raw) || (step.text ? sanitizeAgentAnswer(step.text) : null);
@@ -715,19 +985,7 @@ export async function runAgentTurn(
       const retryReserve = await reserveOrFail(deps, caps);
       if (retryReserve.ok) {
         voiceResting = retryReserve.voiceResting;
-        const retryStep = await runModelWithFallback(
-          deps,
-          system,
-          clean,
-          history,
-          [...toolNotes, STRICT_TOOL_RETRY],
-          mode,
-          models,
-          allowTools,
-        );
-        totalNeurons += retryStep.neurons;
-        modelId = retryStep.modelId;
-        await settleExtraNeurons(deps, caps, retryStep.neurons);
+        const retryStep = await modelStep(STRICT_TOOL_RETRY);
         if (retryStep.calls.length) {
           calls = retryStep.calls;
         } else {
@@ -741,51 +999,104 @@ export async function runAgentTurn(
       }
     }
 
-    // Deterministic intent router when the model still produced no tool call.
+    // Deterministic router when the model still produced no tool call.
     if (!calls.length && !toolResults.length && !intentRouted && !answer) {
-      const routed = routeClearIntent(clean);
+      const routed = multiStep
+        ? routeMissingStep(missingDeliverables(plan, toolResults), clean, toolResults) || routeClearIntent(clean)
+        : routeClearIntent(clean);
       if (routed) {
         intentRouted = true;
         calls = [routed];
       }
     }
 
-    if (!calls.length) {
-      if (!answer) {
-        answer = finalAnswerText(step.raw) || (step.text ? sanitizeAgentAnswer(step.text) : null);
-      }
-      if (isDegenerateAnswer(answer)) {
+    if (calls.length) {
+      if (toolCallsThisTurn >= maxTools) {
+        stopReason = "max_tools";
         answer = null;
+        break;
       }
-      break;
+      const missingBefore = multiStep ? missingDeliverables(plan, toolResults).filter((d) => d !== "explain") : [];
+      const ran = await executeBatch(calls);
+      if (multiStep && ran > 0 && missingBefore.length) {
+        // No progress on the checklist (e.g. the model keeps calling side tools):
+        // run the next missing step ourselves instead of asking again.
+        const missingAfter = missingDeliverables(plan, toolResults).filter((d) => d !== "explain");
+        if (missingAfter.length >= missingBefore.length && plannedRoutes < 3 && toolCallsThisTurn < maxTools) {
+          const routed = routeMissingStep(missingAfter, clean, toolResults, plan.deliverables);
+          if (routed && !doneCalls.has(callKey(routed))) {
+            plannedRoutes += 1;
+            await executeBatch([routed]);
+          }
+        }
+      }
+      if (ran === 0) {
+        // Every call was a repeat of one already done: ask for the answer instead.
+        pendingExtra = multiStep ? undefined : "You already have those tool results. Answer the user now.";
+        if (nudges >= 2) {
+          stopReason = "repeat_calls";
+          break;
+        }
+        nudges += 1;
+      }
+      answer = null;
+      continue;
     }
 
-    if (toolCallsThisTurn >= maxTools) {
-      answer =
-        leadWithToolFacts(
-          finalAnswerText(step.raw) ||
-            (step.text && !collectToolCalls(null, step.text).length
-              ? sanitizeAgentAnswer(step.text)
-              : null),
-          toolResults,
-        ) || factualFallback(toolResults);
+    // The model answered in prose. Before accepting it, check the plan.
+    const prose: string | null = answer || proseFrom(step);
+    answer = prose;
+    if (!multiStep) break;
+    const missingData = missingDeliverables(plan, toolResults, prose).filter((item) => item !== "explain");
+    const explainMissing = plan.deliverables.includes("explain") && !deliverableDone("explain", toolResults, prose);
+    const promised = promisesFutureWork(prose);
+    if (!missingData.length && !explainMissing && !promised) break;
+
+    if (missingData.length) {
+      if (nudges < 1) {
+        nudges += 1;
+        pendingExtra = FINISH_THE_JOB_NOTE;
+        answer = null;
+        continue;
+      }
+      const routed = plannedRoutes < 3 ? routeMissingStep(missingData, clean, toolResults, plan.deliverables) : null;
+      if (routed && toolCallsThisTurn < maxTools && !doneCalls.has(callKey(routed))) {
+        plannedRoutes += 1;
+        await executeBatch([routed]);
+        answer = null;
+        continue;
+      }
+      // Nothing safe left to run: keep the answer and report the gap honestly below.
       break;
     }
-
-    await executeToolCall(calls[0]);
-
-    if (Date.now() - started >= turnTimeout) {
-      answer = factualFallback(toolResults);
-      break;
+    if ((explainMissing || promised) && nudges < 2) {
+      nudges += 1;
+      pendingExtra = WRITE_FULL_ANSWER_NOTE;
+      continue;
     }
+    break;
+  }
 
-    const nextReserve = await reserveOrFail(deps, caps);
-    if (!nextReserve.ok) {
-      answer = factualFallback(toolResults) || nextReserve.message;
-      voiceResting = true;
-      break;
+  // Out of steps / tools / time with no final answer: one tools-off wrap-up call.
+  if (
+    allowTools &&
+    (!answer || isDegenerateAnswer(answer)) &&
+    toolResults.length &&
+    Date.now() - started < turnTimeout + 2_000 &&
+    totalNeurons < neuronBudget + caps.reserve * 2 &&
+    stopReason !== "cap"
+  ) {
+    const wrapReserve = await reserveOrFail(deps, caps);
+    if (wrapReserve.ok) {
+      voiceResting = wrapReserve.voiceResting;
+      try {
+        const step = await modelStep(NO_MORE_TOOLS_NOTE);
+        const wrapped = proseFrom(step);
+        if (wrapped) answer = leadWithToolFacts(wrapped, toolResults) || wrapped;
+      } catch {
+        // Fall through to the factual fallback.
+      }
     }
-    voiceResting = nextReserve.voiceResting;
   }
 
   if (!answer || isDegenerateAnswer(answer)) {
@@ -813,12 +1124,28 @@ export async function runAgentTurn(
   }
 
   answer = guardExplainAnswer(answer, toolResults);
-  answer = sanitizeAgentAnswer(answer);
+  answer = answer ? sanitizeAgentAnswer(answer) : answer;
   if (answer) answer = trimDanglingFragment(answer, lastStepTruncated);
   if (isDegenerateAnswer(answer)) {
     const fromTools = factualFallback(toolResults);
     answer = fromTools || "I could not produce an answer right now.";
   }
+
+  // Honest reporting: name any requested step that never happened.
+  const missingAtEnd = multiStep
+    ? missingDeliverables(plan, toolResults, answer).filter((item) => item !== "explain")
+    : [];
+  if (missingAtEnd.length && answer) {
+    const failed = toolResults.some((item) => !item.ok);
+    const already = /\b(couldn't|could not|wasn't able|was not able|can't|cannot|unable)\b/i.test(answer);
+    if (!already) {
+      answer =
+        `${answer}\n\nHeads up: I couldn't finish ${shortLabels(missingAtEnd)} this time` +
+        (failed ? " because a data service didn't answer" : "") +
+        ". Ask again and I'll retry.";
+    }
+  }
+  const artifacts = allowTools ? buildArtifacts(plan, toolResults) : {};
 
   let voiceMessage = voiceResting && !deps.owner ? VOICE_RESTING_MESSAGE : null;
   try {
@@ -849,6 +1176,13 @@ export async function runAgentTurn(
     small_talk: !allowTools,
     intent_routed: intentRouted,
     strict_retry: strictRetryUsed,
+    model_steps: modelSteps,
+    multi_step: multiStep,
+    planned: plan.deliverables,
+    missing: missingAtEnd,
+    nudges,
+    planned_routes: plannedRoutes,
+    stop_reason: stopReason,
   });
 
   return {
@@ -858,5 +1192,8 @@ export async function runAgentTurn(
     toolsUsed: [...new Set(toolsUsed)],
     voiceResting,
     voiceMessage,
+    ...(artifacts.chart ? { chart: artifacts.chart } : {}),
+    ...(artifacts.csv ? { csv: artifacts.csv } : {}),
+    ...(multiStep ? { steps: { planned: plan.deliverables, missing: missingAtEnd } } : {}),
   };
 }

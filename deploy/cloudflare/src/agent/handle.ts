@@ -250,6 +250,9 @@ async function answerAgentChat(
       reason: result.reason,
       memory_scope: identity.signedIn ? (identity.owner ? "owner" : "user") : "visitor",
       thread_id: activeThreadId,
+      ...(result.chart ? { chart: result.chart } : {}),
+      ...(result.csv ? { csv: result.csv } : {}),
+      ...(result.steps ? { steps: result.steps } : {}),
     });
   } catch {
     return json({

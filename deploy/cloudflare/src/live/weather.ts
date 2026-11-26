@@ -295,3 +295,82 @@ export async function answerWeather(question: string, visitor: VisitorGeo): Prom
     };
   }
 }
+
+export type DailyHistory = {
+  timezone: string;
+  dates: string[];
+  highs: number[];
+  lows: number[];
+  /** Open-Meteo's own next-days highs (forecast, not our model). */
+  nextDates: string[];
+  nextHighs: number[];
+};
+
+/**
+ * Past daily highs/lows (°F) for the last `days` full days plus Open-Meteo's
+ * next-days forecast, in one cached call (`past_days` on the forecast API).
+ */
+export async function fetchDailyHistory(place: Place, days: number): Promise<DailyHistory> {
+  const pastDays = Math.min(92, Math.max(1, Math.floor(days)));
+  const url =
+    "https://api.open-meteo.com/v1/forecast?" +
+    new URLSearchParams({
+      latitude: String(place.latitude),
+      longitude: String(place.longitude),
+      daily: ["temperature_2m_max", "temperature_2m_min"].join(","),
+      temperature_unit: "fahrenheit",
+      timezone: place.timezone && place.timezone !== "auto" ? place.timezone : "auto",
+      past_days: String(pastDays),
+      forecast_days: "8",
+    }).toString();
+  const cacheKey = `weather-history:${place.latitude.toFixed(3)},${place.longitude.toFixed(3)}:${pastDays}`;
+  const payload = await cachedJson(cacheKey, WEATHER_TTL_SECONDS, () => fetchJson<ForecastResult>(url));
+  const daily = payload.daily || {};
+  const times = daily.time || [];
+  const dates: string[] = [];
+  const highs: number[] = [];
+  const lows: number[] = [];
+  const nextDates: string[] = [];
+  const nextHighs: number[] = [];
+  times.forEach((date, index) => {
+    const high = Number(daily.temperature_2m_max?.[index]);
+    const low = Number(daily.temperature_2m_min?.[index]);
+    if (!Number.isFinite(high)) return;
+    // The first `pastDays` rows are history; the rest (today onward) are forecast.
+    if (index < pastDays) {
+      dates.push(date);
+      highs.push(Math.round(high * 10) / 10);
+      lows.push(Number.isFinite(low) ? Math.round(low * 10) / 10 : NaN);
+    } else if (index > pastDays) {
+      // Skip today (partly observed); keep the next 7 days.
+      nextDates.push(date);
+      nextHighs.push(Math.round(high * 10) / 10);
+    }
+  });
+  return { timezone: payload.timezone || place.timezone, dates, highs, lows, nextDates, nextHighs };
+}
+
+const PLACE_HINT =
+  /\b(?:in|for|at|near|around)\s+([A-Z][A-Za-z.'-]+(?:[ ,]+[A-Z][A-Za-z.'-]+){0,2})|\b([A-Z][A-Za-z.'-]+(?:\s+[A-Z][A-Za-z.'-]+)?)(?:'s)?\s+(?:weather|temps?|temperatures?|highs?)\b/;
+
+/** Place for a history ask: explicit arg, a capitalized place in the text, then the visitor. */
+export async function resolveHistoryPlace(
+  placeArg: string,
+  question: string,
+  visitor: VisitorGeo,
+): Promise<Place> {
+  const candidates: string[] = [];
+  if (placeArg.trim()) candidates.push(placeArg.trim());
+  const hint = question.match(PLACE_HINT);
+  const hinted = hint
+    ? (hint[1] || hint[2] || "").trim().replace(/^(?:get|show|give|fetch|pull|grab|chart|plot)\s+/i, "")
+    : "";
+  if (hinted && !/^(The|Last|Past|Next|Get|Show|Give|Fetch|Pull|Forecast|Chart|Then)$/i.test(hinted)) {
+    candidates.push(hinted);
+  }
+  for (const name of candidates) {
+    const found = await geocodePlace(name.replace(/[.,]+$/, ""));
+    if (found) return found;
+  }
+  return resolvePlace(question, visitor);
+}

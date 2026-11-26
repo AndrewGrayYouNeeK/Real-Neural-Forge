@@ -1440,7 +1440,7 @@ describe("agent turn caps and fallback", () => {
   });
 
   it("stops after the max tool calls and never exceeds the cap", async () => {
-    expect(MAX_TOOL_CALLS).toBe(4);
+    expect(MAX_TOOL_CALLS).toBe(8);
     const db = new MemoryD1();
     const ai = {
       async run() {
