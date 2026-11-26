@@ -921,7 +921,8 @@ class TestForecastDashboard:
         assert "<title>Nous" in html
         assert 'rel="manifest"' in html
         assert "/assets/brand/nous-s.webp" in html
-        assert ">NOU</span>" in html
+        assert "/assets/brand/nous-o.webp" in html
+        assert ">N</span>" in html and ">U</span>" in html
         assert "andrewgray@youneek.xyz" in html
         assert 'data-tool-view="about"' in html
         assert client.get("/app").status_code == 200

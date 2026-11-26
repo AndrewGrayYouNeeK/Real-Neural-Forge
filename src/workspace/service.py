@@ -257,6 +257,14 @@ def _issue_session(store: WorkspaceStore, user_id: str) -> str:
     return token
 
 
+# The owner email is public (it is the contact address), so saying that the
+# owner account still needs its setup link leaks nothing useful.
+OWNER_NEEDS_SETUP_LINK = (
+    "This is the owner account and it is not set up yet. "
+    "Open your one-time owner setup link to choose a password."
+)
+
+
 def signup(
     email: str, password: str, setup_token: str | None = None
 ) -> tuple[Actor, str]:
@@ -291,10 +299,14 @@ def _claim_owner(
     row without a password. The new session has no second factor yet, so owner
     powers stay locked until a passkey or authenticator app is enrolled.
     """
-    if not setup_token or store.owner_claimed():
+    if store.owner_claimed():
         raise WorkspaceError(409, "An account with that email already exists.")
+    if not setup_token:
+        raise WorkspaceError(409, OWNER_NEEDS_SETUP_LINK)
     if not store.consume_owner_setup(_token_hash(setup_token), utc_now()):
-        raise WorkspaceError(409, "An account with that email already exists.")
+        raise WorkspaceError(
+            409, "That setup link is used or expired. Ask for a new owner setup link."
+        )
     store.ensure_owner(email)
     if not store.claim_owner(email, hash_password(password)):
         raise WorkspaceError(409, "An account with that email already exists.")
@@ -363,6 +375,8 @@ def login(email: str, password: str) -> tuple[Actor, str]:
         else _DUMMY_HASH
     )
     if user is None or not verify_password(password, stored_hash):
+        if cleaned == owner_email() and not store.owner_claimed():
+            raise WorkspaceError(401, OWNER_NEEDS_SETUP_LINK)
         raise WorkspaceError(401, "Invalid email or password.")
     token = _issue_session(store, str(user["id"]))
     mfa = "none"
