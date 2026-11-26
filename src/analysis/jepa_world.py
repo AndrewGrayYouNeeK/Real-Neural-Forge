@@ -146,10 +146,16 @@ def train_jepa_encoder(scaled: np.ndarray, *, seed: int = 0) -> JepaEncoder:
             n = len(context_x)
 
             encoder = nn.Sequential(
-                nn.Linear(window, HIDDEN), nn.ReLU(), nn.Linear(HIDDEN, LATENT), nn.Tanh()
+                nn.Linear(window, HIDDEN),
+                nn.ReLU(),
+                nn.Linear(HIDDEN, LATENT),
+                nn.Tanh(),
             )
             target = nn.Sequential(
-                nn.Linear(window, HIDDEN), nn.ReLU(), nn.Linear(HIDDEN, LATENT), nn.Tanh()
+                nn.Linear(window, HIDDEN),
+                nn.ReLU(),
+                nn.Linear(HIDDEN, LATENT),
+                nn.Tanh(),
             )
             target.load_state_dict(encoder.state_dict())
             for param in target.parameters():
