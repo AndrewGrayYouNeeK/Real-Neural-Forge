@@ -339,7 +339,7 @@ The blend was chosen on 2009–2016. The other rows are references on the same 3
 
 ## API Reference
 
-The same curl examples live on the site at [https://forge.youneek.dev/docs](https://forge.youneek.dev/docs). The OpenAPI schema is `/openapi.json`, with explorers at `/openapi/docs` and `/openapi/redoc`.
+The same curl examples live on the site at [https://nous.youneek.dev/docs](https://nous.youneek.dev/docs). The OpenAPI schema is `/openapi.json`, with explorers at `/openapi/docs` and `/openapi/redoc`.
 
 ### `GET /starters`
 
@@ -732,11 +732,11 @@ npx wrangler secret put NEURAL_FORGE_CHECKPOINT_TOKEN
 
 | Secret or variable | Required | Purpose |
 | --- | --- | --- |
-| `NEURAL_FORGE_API_TOKEN` | Yes on a public URL | Owner account. Bearer token for the owner's `POST /train` and for `POST /auth/owner`. Visitors use email and password instead. If it is unset, the process is the local owner and `POST /train` stays open. |
+| `NEURAL_FORGE_API_TOKEN` | Yes on a public URL | Internal container secret only: the Worker sends it as the training-watch header on localhost. It is **not** a login any more (`POST /auth/owner` is gone). Setting it (or `NEURAL_FORGE_STORAGE=cloudflare`) turns off the local-owner fallback, so every call needs a session. If both are unset, the process is the local owner for development. |
 | `NEURAL_FORGE_STORAGE_SECRET` | Yes when `NEURAL_FORGE_STORAGE` is `cloudflare` | Shared secret for the container to call the Worker's D1/R2 proxy at `/_bindings/*`. Use a long random string. It is not a visitor password. |
 | `NEURAL_FORGE_STORAGE` | Set in `wrangler.jsonc` `vars` | `cloudflare` in production. The container then refuses to keep visitor workspaces only on its disk. Unset or `local` uses SQLite for development. |
 | `NEURAL_FORGE_BINDINGS_URL` | Set in `wrangler.jsonc` `vars` | Where the container calls for D1 and R2. The shipped value is `http://bindings.neuralforge`. The Worker intercepts that host with `outboundByHost` and uses the D1 and R2 bindings directly. It is not a public URL. |
-| `NEURAL_FORGE_OWNER_EMAIL` | No | Email reserved for the owner row. Default `andrew@youneek.xyz`. |
+| `NEURAL_FORGE_OWNER_EMAIL` | No | Owner account email. Default `andrewgray@youneek.xyz`. The first sign-up with this email claims the owner row once (see [Owner account](#owner-account-and-two-step-sign-in)). |
 | `NEURAL_FORGE_CHECKPOINT_TOKEN` | Only when the champions release is private | GitHub fine-grained PAT with contents read. Sent only to `github.com`, `api.github.com`, and `uploads.github.com`. Omit it for a public release. |
 | `NEURAL_FORGE_CHECKPOINT_URL` | Before the first real deploy | Set in `wrangler.jsonc` `vars`, not as a secret. Startup fails when this is set and the download fails, so run **Retrain champions** once before the first deploy (or clear the URL to boot an untrained model). |
 | `NEURAL_FORGE_CONFIG` | No | Config path inside the image. Default `config/config.yaml`. |
@@ -749,13 +749,24 @@ npx wrangler secret put NEURAL_FORGE_CHECKPOINT_TOKEN
 
 The container needs outbound internet so it can download the champion. D1 and R2 calls stay inside the Worker: the container requests `http://bindings.neuralforge`, and `outboundByHost` serves those paths with the bindings.
 
-Sessions use a host-only cookie named `nf_session` (`HttpOnly`, `SameSite=Lax`, `Secure` on HTTPS, no `Domain` attribute). A sign-in on `forge.youneek.xyz` is not sent to `forge.youneek.dev` or to the workers.dev host. The Worker sets `X-Forwarded-Proto` and `X-Forwarded-Host` from the public URL and strips any client-supplied `X-Neural-Forge-Watch` header before the request reaches the container.
+Sessions use a host-only cookie named `nf_session` (`HttpOnly`, `SameSite=Strict`, `Secure` on HTTPS, 14-day expiry, no `Domain` attribute). A sign-in on `nous.youneek.xyz` is not sent to `nous.youneek.dev` or to the workers.dev host. `forge.youneek.dev` and `forge.youneek.xyz` answer `301` to the matching `nous.youneek.*` host with the same path and query (`deploy/cloudflare/src/auth/gate.ts`); only `POST /voice/stripe/webhook` is served on the old hosts so the Stripe dashboard endpoint keeps working.
+
+### Owner account and two-step sign-in
+
+There is no hidden owner sign-in and no shared owner token login. The owner is a normal email + password account (`id='owner'`, `role='owner'` in D1). Owner powers (shared champion training, caps bypass, unlimited voice) only unlock on a session that passed a second factor in the last 12 hours. All checks are server-side: the container (`src/workspace/service.py`) and the Worker (`deploy/cloudflare/src/auth/session.ts`).
+
+* **Claim, once.** The first `POST /auth/signup` with `andrewgray@youneek.xyz` sets the owner password while it is unset. After that the email behaves like any taken address. There is no email verification (no free mail sender is wired up), so claim it right after deploy.
+* **Second factor.** Passkeys (WebAuthn, `ES256`/`RS256`, user verification required, RP ID = the `nous.youneek.*` hostname) are preferred. An authenticator app (TOTP, SHA-1, 6 digits, 30 s) is the backup. Enrolling either shows 10 one-time recovery codes once; only their hashes are stored. Endpoints: `/auth/mfa/status`, `/auth/mfa/totp/setup|confirm`, `/auth/mfa/verify`, `/auth/mfa/recovery/regenerate`, `/auth/webauthn/register/options|verify`, `/auth/webauthn/login/options|verify`.
+* **Lockout.** Five wrong passwords for an email in 15 minutes lock it for 15 minutes; an IP is locked after 20. Five wrong second-factor attempts lock that account's second factor for 15 minutes. Locked calls return `429`.
+* **Gate.** Everything except `/`, `/app`, `/assets/*`, `/docs`, `/openapi*`, `/health`, `/auth/*`, `/youneek/*`, `POST /voice/stripe/webhook`, and `GET /agent/reports/{id}` needs a session (`401 {"auth_required": true}`). Daily AI caps count per account (`acct:<id>`) once signed in.
+
+Tables: `deploy/cloudflare/migrations/0011_auth_security.sql` (same text as `src/accounts/auth_schema.sql`). `0012_owner_account.sql` moves the unclaimed owner row to `andrewgray@youneek.xyz` and ends old owner-token sessions. The Worker sets `X-Forwarded-Proto` and `X-Forwarded-Host` from the public URL and strips any client-supplied `X-Neural-Forge-Watch` header before the request reaches the container.
 
 ### Accounts, isolation, and starter kits
 
 Visitor rows (users, sessions, datasets, configs, models, jobs, predictions) live in D1 database `neural-forge-workspaces` (`13f8ec26-e2a0-41a6-b49d-a4ba4623082a`). Dataset and checkpoint bytes live in R2 bucket `neural-forge-workspaces`. The container reaches them by calling `http://bindings.neuralforge/_bindings/sql` and `/_bindings/object`. The Worker intercepts that hostname and uses the D1 and R2 bindings. Those calls require `NEURAL_FORGE_STORAGE_SECRET` and send `User-Agent: NeuralForge-Container/1.0`. They are not forwarded into the container, and they do not go out to workers.dev.
 
-The owner's existing experiment database, champion checkpoints, and public forecast stay where they are. The API token authenticates as that owner. New accounts do not read or write those files.
+The owner's existing experiment database, champion checkpoints, and public forecast stay where they are. The owner account (with its second factor) owns them. New accounts do not read or write those files.
 
 Each new account is seeded with five starter kits (Central Park temperature, AAPL returns, Bitcoin returns, near-Earth approach counts, and moon illumination). The bytes are one shared object per kit under `bases/starters/` in R2, published from `starters/` in the image the first time a base is missing. The account stores a reference. Replacing a dataset or editing a template writes a private copy. Training saves a new private checkpoint. The shared base and the owner's files are not modified. The dashboard's Getting started panel calls `POST /workspace/starters/{id}/predict` and `POST /workspace/starters/{id}/train`.
 

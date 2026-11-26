@@ -38,8 +38,19 @@
     { "tag": "v1", "new_sqlite_classes": ["NeuralForgeContainer"] }
   ],
   // workers.dev stays on. Custom hostnames are additional routes.
+  // nous.* is the Nous home; forge.* 301-redirects there (src/auth/gate.ts).
   "workers_dev": true,
   "routes": [
+    {
+      "pattern": "nous.youneek.dev",
+      "zone_name": "youneek.dev",
+      "custom_domain": true
+    },
+    {
+      "pattern": "nous.youneek.xyz",
+      "zone_name": "youneek.xyz",
+      "custom_domain": true
+    },
     {
       "pattern": "forge.youneek.xyz",
       "zone_name": "youneek.xyz",
@@ -73,8 +84,8 @@
     "NEURAL_FORGE_CHECKPOINT_URL": "https://github.com/AndrewGrayYouNeeK/Real-Neural-Forge/releases/download/champions/champion-default.pt",
     "NEURAL_FORGE_STORAGE": "cloudflare",
     "NEURAL_FORGE_BINDINGS_URL": "http://bindings.neuralforge",
-    "NEURAL_FORGE_PUBLIC_URL": "https://forge.youneek.dev",
-    "NEURAL_FORGE_OWNER_EMAIL": "andrew@youneek.xyz",
+    "NEURAL_FORGE_PUBLIC_URL": "https://nous.youneek.dev",
+    "NEURAL_FORGE_OWNER_EMAIL": "andrewgray@youneek.xyz",
     "NEURAL_FORGE_AI_MODEL": "@cf/openai/gpt-oss-120b",
     "NEURAL_FORGE_AI_FALLBACK_MODEL": "@cf/meta/llama-3.1-8b-instruct-fp8-fast",
     "NEURAL_FORGE_AI_DAILY_NEURONS": "25000",

@@ -207,7 +207,7 @@ export function parseStooqCsv(text: string): Quote | null {
   };
 }
 
-const MARKET_UA = "Mozilla/5.0 (compatible; NeuralForge/1.0; +https://forge.youneek.dev)";
+const MARKET_UA = "Mozilla/5.0 (compatible; Nous/1.0; +https://nous.youneek.dev)";
 
 export async function fetchYahooChart(ticker: string): Promise<Quote> {
   const yahooUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker.toUpperCase())}?interval=1d&range=5d`;

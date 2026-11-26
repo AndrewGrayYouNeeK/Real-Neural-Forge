@@ -22,6 +22,7 @@ from src.workspace.bindings import BindingTransport, StorageError
 from src.workspace.keys import valid_object_key
 
 _SCHEMA = Path(__file__).with_name("schema.sql")
+_AUTH_SCHEMA = Path(__file__).parent.parent / "accounts" / "auth_schema.sql"
 _JOB_COLUMNS = (
     "id",
     "user_id",
@@ -184,6 +185,58 @@ class WorkspaceStore:
 
     def migrate(self) -> None:
         self.sql.script(sql_statements())
+        self.migrate_auth()
+
+    def migrate_auth(self) -> None:
+        """Account-security tables (owner MFA, passkeys, lockout). Idempotent."""
+        self.sql.script(sql_statements(_AUTH_SCHEMA.read_text(encoding="utf-8")))
+
+    def claim_owner(self, email: str, password_hash: str) -> bool:
+        """First signup with the owner email sets the owner password, once."""
+        self.sql.query(
+            """
+            UPDATE users SET email = ?, password_hash = ?
+            WHERE id = 'owner' AND password_hash IS NULL
+            """,
+            (email, password_hash),
+        )
+        rows = self.sql.query(
+            "SELECT password_hash FROM users WHERE id = 'owner' AND email = ?",
+            (email,),
+        )
+        return bool(rows) and rows[0].get("password_hash") == password_hash
+
+    def owner_claimed(self) -> bool:
+        rows = self.sql.query("SELECT password_hash FROM users WHERE id = 'owner'", ())
+        return bool(rows) and bool(rows[0].get("password_hash"))
+
+    def mfa_enrolled(self, user_id: str) -> bool:
+        rows = self.sql.query(
+            """
+            SELECT
+              (SELECT COUNT(*) FROM mfa_totp
+                 WHERE user_id = ? AND secret IS NOT NULL) AS totp,
+              (SELECT COUNT(*) FROM webauthn_credentials WHERE user_id = ?) AS passkeys
+            """,
+            (user_id, user_id),
+        )
+        if not rows:
+            return False
+        row = rows[0]
+        return int(row.get("totp") or 0) > 0 or int(row.get("passkeys") or 0) > 0
+
+    def mark_session_mfa(
+        self, token_hash: str, user_id: str, method: str, now: str
+    ) -> None:
+        self.sql.query(
+            """
+            INSERT INTO session_mfa (token_hash, user_id, method, verified_at)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT(token_hash) DO UPDATE SET
+              method = excluded.method, verified_at = excluded.verified_at
+            """,
+            (token_hash, user_id, method, now),
+        )
 
     def put_blob(self, key: str, data: bytes) -> None:
         self.blobs.put(key, data)
@@ -258,9 +311,11 @@ class WorkspaceStore:
     def user_for_session(self, token_hash: str, now: str) -> dict[str, Any] | None:
         rows = self.sql.query(
             """
-            SELECT users.id, users.email, users.role
+            SELECT users.id, users.email, users.role,
+                   session_mfa.verified_at AS mfa_verified_at
             FROM sessions
             JOIN users ON users.id = sessions.user_id
+            LEFT JOIN session_mfa ON session_mfa.token_hash = sessions.token_hash
             WHERE sessions.token_hash = ? AND sessions.expires_at > ?
             """,
             (token_hash, now),

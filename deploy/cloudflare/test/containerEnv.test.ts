@@ -7,7 +7,7 @@ function env(overrides: Partial<Record<string, string>> = {}): Record<string, st
     NEURAL_FORGE_CONFIG: "config/config.yaml",
     NEURAL_FORGE_CHECKPOINT_URL: "https://example.com/champion.pt",
     NEURAL_FORGE_STORAGE: "cloudflare",
-    NEURAL_FORGE_OWNER_EMAIL: "andrew@youneek.xyz",
+    NEURAL_FORGE_OWNER_EMAIL: "andrewgray@youneek.xyz",
     ...overrides,
   };
 }

@@ -1116,10 +1116,10 @@ describe("agent turn caps and fallback", () => {
             error.status = 400;
             throw error;
           }
-          return { response: "Real Neural Forge predicts time series with transformers." };
+          return { response: "Nous predicts time series with transformers." };
         },
       };
-      const result = await runAgentTurn("What does Real Neural Forge do?", "normal", [], {
+      const result = await runAgentTurn("What does Nous do?", "normal", [], {
         ai,
         db,
         ip: "4.4.4.4",

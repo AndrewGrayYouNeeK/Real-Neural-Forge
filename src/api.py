@@ -264,7 +264,7 @@ async def lifespan(app: FastAPI):  # noqa: ARG001
 
 
 app = FastAPI(
-    title="Neural Forge",
+    title="Nous",
     description="Production-ready transformer pipeline for time-series prediction.",
     version=__version__,
     lifespan=lifespan,
@@ -419,6 +419,7 @@ def _run_training(config_path: str) -> None:
 
 
 @app.get("/", include_in_schema=False)
+@app.get("/app", include_in_schema=False)
 def dashboard() -> FileResponse:
     index = FRONTEND_DIR / "index.html"
     if not index.exists():
@@ -432,6 +433,14 @@ def favicon() -> FileResponse:
     if not icon.exists():
         raise HTTPException(status_code=404, detail="Favicon not found.")
     return FileResponse(icon, media_type="image/x-icon")
+
+
+@app.get("/manifest.webmanifest", include_in_schema=False)
+def web_manifest() -> FileResponse:
+    manifest = FRONTEND_DIR / "manifest.webmanifest"
+    if not manifest.exists():
+        raise HTTPException(status_code=404, detail="Manifest not found.")
+    return FileResponse(manifest, media_type="application/manifest+json")
 
 
 @app.get("/docs", include_in_schema=False)

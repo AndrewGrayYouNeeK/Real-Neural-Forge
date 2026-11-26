@@ -20,6 +20,7 @@ import {
   listMessages,
   listThreads,
 } from "./chats";
+import { capKey } from "../auth/session";
 import { runAgentTurn, type HistoryMessage } from "./loop";
 import {
   clearMemory,
@@ -116,7 +117,6 @@ async function identityFor(
   env: AgentEnv,
 ): Promise<Awaited<ReturnType<typeof resolveMemoryIdentity>>> {
   return resolveMemoryIdentity(request, {
-    apiToken: env.NEURAL_FORGE_API_TOKEN,
     db: env.WORKSPACES_DB,
     ip: clientIp(request),
   });
@@ -190,7 +190,8 @@ async function answerAgentChat(
   const identity = await identityFor(request, env);
   const models = resolveChatModels(env);
   const caps = resolveAiCaps(env);
-  const ip = clientIp(request);
+  // Daily caps are per account once signed in (IP only for anonymous calls).
+  const ip = capKey(identity, clientIp(request));
   let memoryPrompt = memoryPromptBlock([]);
   try {
     const facts = await listMemory(env.WORKSPACES_DB, identity.scope);
@@ -600,7 +601,7 @@ async function handleVision(
     return json({ text: "Image reading is not configured on this server yet.", capped: true });
   }
   const identity = await identityFor(request, env);
-  const ip = clientIp(request);
+  const ip = capKey(identity, clientIp(request));
   const caps = resolveVisionCaps(env);
   if (path === "/agent/vision/limits") {
     if (request.method !== "GET") return json({ error: "Method not allowed." }, 405);

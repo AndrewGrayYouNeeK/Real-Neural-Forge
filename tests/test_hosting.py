@@ -62,6 +62,10 @@ def test_container_worker_is_not_a_dashboard_worker():
     assert hostnames["forge.youneek.xyz"]["zone_name"] == "youneek.xyz"
     assert hostnames["forge.youneek.dev"]["custom_domain"] is True
     assert hostnames["forge.youneek.dev"]["zone_name"] == "youneek.dev"
+    assert hostnames["nous.youneek.dev"]["custom_domain"] is True
+    assert hostnames["nous.youneek.dev"]["zone_name"] == "youneek.dev"
+    assert hostnames["nous.youneek.xyz"]["custom_domain"] is True
+    assert hostnames["nous.youneek.xyz"]["zone_name"] == "youneek.xyz"
     worker = (ROOT / "deploy" / "cloudflare" / "src" / "index.ts").read_text()
     # Voice and payments secrets must reach the container through envVars.
     forward = (ROOT / "deploy" / "cloudflare" / "src" / "containerEnv.ts").read_text()

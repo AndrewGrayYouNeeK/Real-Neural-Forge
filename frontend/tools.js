@@ -1,5 +1,5 @@
 /**
- * Future-proof tool registry for the Neural Forge shell.
+ * Future-proof tool registry for the Nous shell.
  * Add a tool later: one entry here + optional panel markup with data-tool-view.
  * Landing "Tools & Roadmap" is driven by ROADMAP (statuses: live | in-progress | coming-soon).
  */
@@ -336,7 +336,7 @@
     return STATUS_LABELS[status] || status;
   }
 
-  global.NeuralForgeTools = {
+  global.NousTools = {
     TOOL_REGISTRY,
     ROADMAP,
     STATUS_LABELS,

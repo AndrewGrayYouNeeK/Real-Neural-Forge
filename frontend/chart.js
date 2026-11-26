@@ -370,5 +370,5 @@
     container.replaceChildren(figure);
   }
 
-  window.NeuralForgeCharts = { renderLineChart, renderBarChart };
+  window.NousCharts = { renderLineChart, renderBarChart };
 })();

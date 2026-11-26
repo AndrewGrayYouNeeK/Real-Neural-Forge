@@ -21,6 +21,8 @@ import yaml
 from fastapi import Request, Response
 
 from src.accounts.actor import (
+    OWNER_ID,
+    OWNER_MFA_SECONDS,
     SESSION_COOKIE,
     SESSION_SECONDS,
     Actor,
@@ -62,8 +64,16 @@ _DUMMY_HASH = hash_password("workspace-timing-pad")
 
 
 def configured_api_token() -> str | None:
+    """Internal container secret (training-watch header). Never a login."""
     raw = os.environ.get(_API_TOKEN_ENV, "").strip()
     return raw or None
+
+
+def locked_mode() -> bool:
+    """True on a public deploy: no anonymous local-owner fallback."""
+    if configured_api_token():
+        return True
+    return os.environ.get("NEURAL_FORGE_STORAGE", "").strip().lower() == "cloudflare"
 
 
 def prepare_workspace(config: dict[str, Any] | None = None) -> None:
@@ -139,7 +149,7 @@ def apply_session_cookie(response: Response, request: Request, token: str) -> No
         max_age=SESSION_SECONDS,
         httponly=True,
         secure=_secure_cookie(request),
-        samesite="lax",
+        samesite="strict",
         path="/",
     )
 
@@ -150,41 +160,79 @@ def clear_session_cookie(response: Response, request: Request) -> None:
         path="/",
         httponly=True,
         secure=_secure_cookie(request),
-        samesite="lax",
+        samesite="strict",
     )
 
 
 def _owner_actor(via: str) -> Actor:
-    return Actor(user_id="owner", email=owner_email(), role="owner", via=via)
+    return Actor(user_id=OWNER_ID, email=owner_email(), role="owner", via=via)
+
+
+def _mfa_state(store: WorkspaceStore, user: dict[str, Any]) -> str:
+    if str(user.get("role")) != "owner":
+        return "none"
+    verified = user.get("mfa_verified_at")
+    if verified:
+        try:
+            stamp = datetime.fromisoformat(str(verified))
+            if stamp.tzinfo is None:
+                stamp = stamp.replace(tzinfo=timezone.utc)
+            age = (datetime.now(timezone.utc) - stamp).total_seconds()
+            if 0 <= age <= OWNER_MFA_SECONDS:
+                return "ok"
+        except ValueError:
+            pass
+    try:
+        enrolled = store.mfa_enrolled(str(user["id"]))
+    except SqlError:
+        enrolled = True
+    return "required" if enrolled else "setup"
+
+
+def session_token(request: Request, authorization: str | None) -> str | None:
+    """Session token from the HttpOnly cookie, or ``Authorization: Bearer``."""
+    if authorization:
+        scheme, _, provided = authorization.partition(" ")
+        if scheme.lower() == "bearer" and provided.strip():
+            return provided.strip()
+    raw = request.cookies.get(SESSION_COOKIE)
+    return raw or None
 
 
 def resolve_actor(request: Request, authorization: str | None) -> Actor:
-    """Return the caller. A wrong bearer token is rejected before any cookie."""
-    expected = configured_api_token()
-    if authorization:
-        scheme, _, provided = authorization.partition(" ")
-        if scheme.lower() == "bearer":
-            token = provided.strip()
-            if expected and token and secrets.compare_digest(token, expected):
-                return _owner_actor("bearer")
-            if expected:
-                raise WorkspaceError(401, "Invalid or missing API token.")
-    raw_cookie = request.cookies.get(SESSION_COOKIE)
+    """Return the signed-in caller from a session token.
+
+    The old shared owner token is no longer a login. A bearer value is treated
+    as a session token, exactly like the cookie. Owner powers need a session
+    that passed a second factor recently (see ``Actor.is_owner``).
+    """
+    token = session_token(request, authorization)
     store = runtime.store
-    if raw_cookie and store is not None:
-        user = store.user_for_session(_token_hash(raw_cookie), utc_now())
+    if token and store is not None:
+        user = store.user_for_session(_token_hash(token), utc_now())
         if user is not None:
-            return Actor(
+            actor = Actor(
                 user_id=str(user["id"]),
                 email=str(user["email"]),
                 role=str(user["role"]),
                 via="session",
+                mfa=_mfa_state(store, user),
             )
-        if expected:
-            raise WorkspaceError(401, "Invalid or missing API token.")
-    if expected is None:
+            if (
+                actor.role == "owner"
+                and not actor.is_owner
+                and not request.url.path.startswith("/auth/")
+            ):
+                raise WorkspaceError(
+                    403, "Finish two-step sign-in to use the owner account."
+                )
+            return actor
+        raise WorkspaceError(401, "Sign in to continue.")
+    if token and locked_mode():
+        raise WorkspaceError(401, "Sign in to continue.")
+    if not locked_mode():
         return _owner_actor("local")
-    raise WorkspaceError(401, "Invalid or missing API token.")
+    raise WorkspaceError(401, "Sign in to continue.")
 
 
 def watch_authorized(host: str, header: str | None) -> bool:
@@ -212,11 +260,11 @@ def _issue_session(store: WorkspaceStore, user_id: str) -> str:
 def signup(email: str, password: str) -> tuple[Actor, str]:
     store = require_store()
     cleaned = _normalize_email(email)
-    if cleaned == owner_email():
-        raise WorkspaceError(409, "That email is reserved.")
     problem = validate_password(password, cleaned)
     if problem:
         raise WorkspaceError(422, problem)
+    if cleaned == owner_email():
+        return _claim_owner(store, cleaned, password)
     user_id = new_id("usr_")
     try:
         store.create_user(user_id, cleaned, hash_password(password))
@@ -230,6 +278,22 @@ def signup(email: str, password: str) -> tuple[Actor, str]:
         raise
     token = _issue_session(store, user_id)
     return Actor(user_id=user_id, email=cleaned, role="member", via="session"), token
+
+
+def _claim_owner(store: WorkspaceStore, email: str, password: str) -> tuple[Actor, str]:
+    """One-time owner claim: sets the owner password while it is still unset.
+
+    The new session has no second factor yet, so owner powers stay locked until
+    a passkey or authenticator app is enrolled and verified.
+    """
+    store.ensure_owner(email)
+    if not store.claim_owner(email, hash_password(password)):
+        raise WorkspaceError(409, "An account with that email already exists.")
+    token = _issue_session(store, OWNER_ID)
+    return (
+        Actor(user_id=OWNER_ID, email=email, role="owner", via="session", mfa="setup"),
+        token,
+    )
 
 
 def seed_starters(store: WorkspaceStore, user_id: str) -> None:
@@ -289,30 +353,22 @@ def login(email: str, password: str) -> tuple[Actor, str]:
         if user and user.get("password_hash")
         else _DUMMY_HASH
     )
-    if (
-        user is None
-        or user.get("role") == "owner"
-        or not verify_password(password, stored_hash)
-    ):
+    if user is None or not verify_password(password, stored_hash):
         raise WorkspaceError(401, "Invalid email or password.")
     token = _issue_session(store, str(user["id"]))
+    mfa = "none"
+    if str(user.get("role")) == "owner":
+        mfa = "required" if store.mfa_enrolled(str(user["id"])) else "setup"
     return (
         Actor(
             user_id=str(user["id"]),
             email=str(user["email"]),
             role=str(user["role"]),
             via="session",
+            mfa=mfa,
         ),
         token,
     )
-
-
-def login_owner() -> tuple[Actor, str]:
-    """Turn the owner bearer token into a session cookie for the dashboard."""
-    store = require_store()
-    store.ensure_owner(owner_email())
-    token = _issue_session(store, "owner")
-    return _owner_actor("session"), token
 
 
 def logout(request: Request) -> None:

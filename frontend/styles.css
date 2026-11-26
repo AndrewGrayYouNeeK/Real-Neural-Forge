@@ -360,10 +360,6 @@ body.sidebar-collapsed .sidebar-toggle {
   min-height: min(70vh, 720px);
 }
 
-body.has-chat .landing-block {
-  display: none;
-}
-
 .empty-copy {
   margin: 8px auto 0;
   max-width: 420px;
@@ -397,8 +393,7 @@ body.has-chat #suggestion-chips {
   display: none;
 }
 
-#main-stage[data-view]:not([data-view="chat"]) .chat-stage,
-#main-stage[data-view]:not([data-view="chat"]) .landing-block {
+#main-stage[data-view]:not([data-view="chat"]) .chat-stage {
   display: none;
 }
 
@@ -1501,5 +1496,489 @@ select {
   .sim-form fieldset.sim-scenario input[type="text"],
   .sim-form fieldset.sim-scenario select {
     flex: 1 1 100%;
+  }
+}
+
+/* ------------------------------------------------------------------ Nous */
+
+/* Auth state: landing for visitors, a gate before the app, the app after. */
+body.auth-pending .app-shell,
+body.auth-pending .landing,
+body.auth-out .app-shell,
+body.gate-open .app-shell,
+body.gate-open .landing,
+body.auth-in .landing,
+body.auth-in .auth-gate {
+  display: none !important;
+}
+
+body.auth-out:not(.gate-open) .auth-gate {
+  display: none !important;
+}
+
+body.gate-open .auth-gate {
+  display: flex !important;
+}
+
+body.auth-out #talk-start-overlay,
+body.gate-open #talk-start-overlay,
+body.auth-pending #talk-start-overlay {
+  display: none !important;
+}
+
+.logo-mark {
+  display: inline-grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #f2f3f5, #a8b4c8);
+  color: #0b0c0f;
+  font-weight: 700;
+  font-family: var(--display);
+  font-size: 1.15rem;
+}
+
+.logo-mark-big {
+  width: 56px;
+  height: 56px;
+  border-radius: 18px;
+  font-size: 2rem;
+}
+
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--text);
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.brand-center {
+  justify-content: center;
+}
+
+/* Landing */
+.landing {
+  position: relative;
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  padding: 18px clamp(16px, 4vw, 40px);
+}
+
+.landing-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.landing-links {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.landing-links a {
+  color: var(--muted);
+  text-decoration: none;
+  font-size: 0.95rem;
+}
+
+.landing-links a.btn {
+  color: var(--text);
+}
+
+.landing-hero {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: 14px;
+  padding: 40px 0;
+}
+
+.landing-hero h1 {
+  margin: 0;
+  font-family: var(--display);
+  font-weight: 400;
+  font-size: clamp(3rem, 10vw, 5.5rem);
+  letter-spacing: -0.03em;
+  line-height: 1;
+}
+
+.landing-tag {
+  margin: 0;
+  color: var(--muted);
+  font-size: clamp(1.05rem, 2.4vw, 1.3rem);
+}
+
+.landing-cta {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: center;
+  margin-top: 8px;
+}
+
+.landing-cta .btn {
+  min-width: 140px;
+  min-height: 46px;
+  font-size: 1rem;
+}
+
+.landing-pills {
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  padding: 0;
+  margin: 18px 0 0;
+}
+
+.landing-pills li {
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 6px 12px;
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+
+.landing-more {
+  text-align: center;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.landing-more p {
+  margin: 4px 0;
+}
+
+.landing-more a {
+  color: var(--text);
+}
+
+/* Gate */
+.auth-gate {
+  position: relative;
+  min-height: 100vh;
+  min-height: 100dvh;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 16px;
+}
+
+.auth-card {
+  width: min(380px, 100%);
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 14px;
+  text-align: center;
+}
+
+.gate-title {
+  margin: 4px 0 6px;
+  font-family: var(--display);
+  font-weight: 400;
+  font-size: 2rem;
+}
+
+.gate-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.gate-form form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.gate-form input {
+  width: 100%;
+  min-height: 48px;
+  border-radius: 14px;
+  border: 1px solid var(--border-strong);
+  background: var(--composer);
+  color: var(--text);
+  padding: 0 14px;
+  font: inherit;
+  font-size: 1rem;
+}
+
+.gate-btn {
+  min-height: 48px;
+  border-radius: 14px;
+  font-size: 1rem;
+  width: 100%;
+}
+
+.gate-hint,
+.gate-switch {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.gate-error {
+  margin: 0;
+  color: var(--danger);
+  font-size: 0.92rem;
+}
+
+.gate-secret {
+  display: block;
+  word-break: break-all;
+  padding: 10px;
+  border-radius: 10px;
+  background: var(--panel-solid);
+  font-size: 0.95rem;
+  letter-spacing: 0.06em;
+  user-select: all;
+}
+
+.gate-codes {
+  text-align: left;
+  columns: 2;
+  margin: 0;
+  padding-left: 22px;
+  font-family: ui-monospace, monospace;
+  font-size: 0.95rem;
+  user-select: all;
+}
+
+.gate-signout {
+  align-self: center;
+  color: var(--muted);
+}
+
+/* Minimal opening screen */
+.empty-greeting {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  padding-top: clamp(40px, 16vh, 160px);
+}
+
+body:not(.has-chat) .empty-greeting {
+  display: flex;
+}
+
+.action-chips {
+  justify-content: center;
+  gap: 8px;
+  margin: 14px auto 0;
+  max-width: 640px;
+  order: 3;
+}
+
+.action-chips .chip {
+  min-height: 40px;
+  padding: 8px 14px;
+  border-radius: 999px;
+}
+
+body:not(.has-chat) .chat-stage {
+  justify-content: flex-start;
+}
+
+/* Grok/ChatGPT-style single composer box: text on top, tools below. */
+.chat-form.composer {
+  gap: 0;
+  padding: 10px 12px 8px;
+  border-radius: 26px;
+  border: 1px solid var(--border-strong);
+  background: var(--composer);
+  box-shadow: var(--shadow);
+  position: sticky;
+  bottom: 12px;
+  margin-top: 12px;
+}
+
+body:not(.has-chat) .chat-form.composer {
+  position: relative;
+  bottom: auto;
+  order: 2;
+  margin-top: 22px;
+}
+
+body:not(.has-chat) #chat-log {
+  order: 4;
+}
+
+.chat-form.composer .composer-row {
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  padding: 2px 4px;
+  border-radius: 0;
+}
+
+.composer-toolbar {
+  justify-content: space-between;
+  flex-wrap: nowrap;
+}
+
+.composer-left,
+.composer-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.composer-left {
+  flex-wrap: wrap;
+}
+
+.composer-toolbar .icon-btn {
+  width: 36px;
+  height: 36px;
+  font-size: 1rem;
+}
+
+.chat-form .send-btn {
+  width: 38px;
+  height: 38px;
+  min-width: 38px;
+  border-radius: 999px;
+  border: 0;
+  background: var(--text);
+  color: #0b0c0f;
+  font-size: 1.2rem;
+  font-weight: 700;
+  cursor: pointer;
+  display: inline-grid;
+  place-items: center;
+  padding: 0;
+}
+
+.chat-form .send-btn:hover {
+  opacity: 0.9;
+}
+
+.sidebar-foot-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+}
+
+.sidebar-foot-links .linklike {
+  padding: 0;
+  font-size: inherit;
+}
+
+.about-view .hero,
+.about-view .capabilities,
+.about-view .pricing,
+.about-view .tools-roadmap,
+.about-view .contact {
+  text-align: left;
+  margin: 18px 0;
+}
+
+@media (max-width: 900px) {
+  .empty-greeting {
+    padding-top: clamp(24px, 10vh, 90px);
+  }
+
+  .chat-form.composer {
+    border-radius: 22px;
+    bottom: 8px;
+  }
+
+  .composer-toolbar .mode-pill {
+    padding: 6px 10px;
+    font-size: 0.85rem;
+  }
+
+  .landing-links a:not(.btn) {
+    display: none;
+  }
+}
+
+/* Brand images */
+.brand-wordmark {
+  display: block;
+  height: 30px;
+  width: auto;
+}
+
+.brand-mark {
+  display: block;
+  width: 56px;
+  height: 56px;
+  border-radius: 14px;
+}
+
+.landing-wordmark {
+  margin: 0;
+  line-height: 0;
+}
+
+.landing-wordmark img {
+  width: min(520px, 82vw);
+  height: auto;
+}
+
+.gate-wordmark {
+  width: 180px;
+  height: auto;
+  margin: 0 auto;
+  display: block;
+}
+
+.sidebar-logo .brand-wordmark {
+  height: 26px;
+}
+
+.tool-nav-more > summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 0.85rem;
+  padding: 8px 10px;
+  list-style: none;
+}
+
+.tool-nav-more > summary::before {
+  content: "▸ ";
+}
+
+.tool-nav-more[open] > summary::before {
+  content: "▾ ";
+}
+
+/* Pinned tools fit without scrolling; the "All tools" group scrolls inside. */
+.tool-nav {
+  max-height: none;
+  overflow: visible;
+  flex: 0 0 auto;
+}
+
+.tool-nav-more[open] {
+  max-height: 34vh;
+  overflow-y: auto;
+}
+
+.tool-nav-btn {
+  min-height: 38px;
+}
+
+@media (max-width: 900px) {
+  body.sidebar-open .sidebar-toggle {
+    display: none !important;
+  }
+
+  .sidebar {
+    overflow-y: auto;
   }
 }

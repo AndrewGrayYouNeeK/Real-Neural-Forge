@@ -16,7 +16,7 @@ from src.workspace.service import resolve_actor
 
 router = APIRouter()
 
-_SIGN_UP_PROMPT = "Create a free account to hear GQ. Text on Neural Forge stays free."
+_SIGN_UP_PROMPT = "Create a free account to hear GQ. Text on Nous stays free."
 
 
 class SpeakRequest(BaseModel):

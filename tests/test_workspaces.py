@@ -20,6 +20,7 @@ from src.workspace.runner import execute_member_job
 from src.workspace.runtime import runtime
 from src.workspace.service import watch_authorized
 from src.workspace.store import open_workspace
+from tests.owner_session import owner_headers
 
 STARTER_IDS = ("weather", "stocks", "crypto", "near-earth", "lunar")
 
@@ -110,7 +111,7 @@ def test_public_routes_stay_open_and_private_routes_do_not(workspace_client):
     assert client.get("/series/recent", params={"points": 16}).status_code == 200
     private = client.get("/experiments")
     assert private.status_code == 401
-    assert "token" in private.json()["detail"].lower()
+    assert "sign in" in private.json()["detail"].lower()
     watched = client.get(
         "/training/status",
         headers={"X-Neural-Forge-Watch": "owner-secret"},
@@ -132,7 +133,7 @@ def test_accounts_are_isolated_and_starters_are_copy_on_write(workspace_client):
     cookie = secure.headers["set-cookie"]
     assert "nf_session=" in cookie
     assert "HttpOnly" in cookie
-    assert "SameSite=lax" in cookie
+    assert "SameSite=strict" in cookie
     assert "Secure" in cookie
     assert "Domain=" not in cookie
     # A Secure cookie is not stored for this HTTP test client. Sign in again.
@@ -244,21 +245,21 @@ def test_accounts_are_isolated_and_starters_are_copy_on_write(workspace_client):
     client.cookies.clear()
     owner_list = client.get(
         "/experiments",
-        headers={"Authorization": "Bearer owner-secret"},
+        headers=owner_headers(),
     )
     assert owner_list.status_code == 200
     assert any(row["name"] == "owner-only" for row in owner_list.json()["experiments"])
     assert (
         client.get(
             "/workspace/datasets",
-            headers={"Authorization": "Bearer owner-secret"},
+            headers=owner_headers(),
         ).json()["datasets"]
         == []
     )
     assert (
         client.get(
             "/workspace/starters",
-            headers={"Authorization": "Bearer owner-secret"},
+            headers=owner_headers(),
         ).json()["starters"]
         == []
     )
@@ -559,3 +560,50 @@ def test_workspace_model_metrics_compare_with_simple_baselines(workspace_client)
     assert "than the best simple baseline" in body["comparison"]
     assert body["metrics"]["mae"] >= 0
     assert "lottery" not in response.text.lower()
+
+
+def test_owner_is_a_normal_account_claimed_once_and_locked_until_mfa(
+    workspace_client,
+):
+    client, _root = workspace_client
+    client.cookies.clear()
+    # The shared owner token login is gone.
+    assert client.post("/auth/owner").status_code in (404, 405)
+    retired = client.get(
+        "/experiments", headers={"Authorization": "Bearer owner-secret"}
+    )
+    assert retired.status_code == 401
+
+    claimed = client.post(
+        "/auth/signup",
+        json={"email": "andrewgray@youneek.xyz", "password": "owner-pass-ok-1"},
+    )
+    assert claimed.status_code == 201, claimed.text
+    body = claimed.json()
+    assert body["role"] == "owner"
+    assert body["mfa"] == "setup"
+    assert body["owner_powers"] == "no"
+    me = client.get("/auth/me")
+    assert me.status_code == 200
+    assert me.json()["mfa"] == "setup"
+    # Owner powers stay locked until a second factor is enrolled and passed.
+    assert client.get("/experiments").status_code == 403
+
+    client.cookies.clear()
+    second = client.post(
+        "/auth/signup",
+        json={"email": "andrewgray@youneek.xyz", "password": "attacker-pass-2"},
+    )
+    assert second.status_code == 409
+    bad = client.post(
+        "/auth/login",
+        json={"email": "andrewgray@youneek.xyz", "password": "attacker-pass-2"},
+    )
+    assert bad.status_code == 401
+    good = client.post(
+        "/auth/login",
+        json={"email": "andrewgray@youneek.xyz", "password": "owner-pass-ok-1"},
+    )
+    assert good.status_code == 200
+    assert good.json()["owner_powers"] == "no"
+    client.cookies.clear()

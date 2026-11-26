@@ -51,6 +51,8 @@ def test_youneek_xyz_build_publishes_a_different_worker(tmp_path):
         "www.youneek.xyz",
         "forge.youneek.xyz",
         "forge.youneek.dev",
+        "nous.youneek.xyz",
+        "nous.youneek.dev",
     ):
         assert host not in text
 

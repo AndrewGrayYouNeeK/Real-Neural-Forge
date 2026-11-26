@@ -1,10 +1,11 @@
 /**
  * Per-user memory for agent chat (preferences / facts in D1).
- * Scope: user:<id> for signed-in (incl. owner role), "owner" for API-token owner,
+ * Scope: user:<id> for signed-in accounts (incl. the owner),
  * or the same ip:<hash> used by AI quotas for anonymous visitors.
  */
 
 import { ipScope, type D1Like } from "../live/ai";
+import { resolveSession } from "../auth/session";
 
 export const MAX_MEMORY_FACTS = 32;
 export const MAX_MEMORY_KEY_LEN = 40;
@@ -18,40 +19,6 @@ export type MemoryIdentity = {
   owner: boolean;
   signedIn: boolean;
 };
-
-const SESSION_COOKIE = "nf_session";
-
-function cookieValue(request: Request, name: string): string | null {
-  const header = request.headers.get("Cookie") || "";
-  for (const part of header.split(";")) {
-    const trimmed = part.trim();
-    if (!trimmed) continue;
-    const index = trimmed.indexOf("=");
-    if (index < 0) continue;
-    if (trimmed.slice(0, index) === name) return decodeURIComponent(trimmed.slice(index + 1));
-  }
-  return null;
-}
-
-function bearerToken(request: Request): string | null {
-  const header = request.headers.get("Authorization") || "";
-  const match = header.match(/^Bearer\s+(.+)$/i);
-  return match ? match[1].trim() : null;
-}
-
-function timingEqual(left: string, right: string): boolean {
-  if (left.length !== right.length) return false;
-  let diff = 0;
-  for (let index = 0; index < left.length; index += 1) {
-    diff |= left.charCodeAt(index) ^ right.charCodeAt(index);
-  }
-  return diff === 0;
-}
-
-async function sha256Hex(value: string): Promise<string> {
-  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
-  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
-}
 
 export function normalizeMemoryKey(raw: string): string | null {
   const key = raw.trim().toLowerCase().replace(/[\s-]+/g, "_");
@@ -68,40 +35,18 @@ export function normalizeMemoryValue(raw: string): string | null {
 
 export async function resolveMemoryIdentity(
   request: Request,
-  options: { apiToken?: string; db?: D1Like; ip: string | null },
+  options: { db?: D1Like; ip: string | null },
 ): Promise<MemoryIdentity> {
-  const bearer = bearerToken(request);
-  if (bearer && options.apiToken && timingEqual(bearer, options.apiToken)) {
-    return { scope: "owner", userId: null, owner: true, signedIn: true };
-  }
-  const token = bearer || cookieValue(request, SESSION_COOKIE);
-  if (token && options.db) {
-    try {
-      const hash = await sha256Hex(token);
-      const now = new Date().toISOString();
-      const result = await options.db
-        .prepare(
-          `SELECT users.id AS id, users.role AS role
-           FROM sessions
-           JOIN users ON users.id = sessions.user_id
-           WHERE sessions.token_hash = ? AND sessions.expires_at > ?
-           LIMIT 1`,
-        )
-        .bind(hash, now)
-        .all();
-      const row = result.results?.[0] as { id?: unknown; role?: unknown } | undefined;
-      if (row && typeof row.id === "string" && row.id.trim()) {
-        const owner = row.role === "owner";
-        return {
-          scope: `user:${row.id.trim()}`,
-          userId: row.id.trim(),
-          owner,
-          signedIn: true,
-        };
-      }
-    } catch {
-      // Fall through to IP scope.
-    }
+  // The shared owner token is no longer accepted. Owner = role=owner in D1
+  // plus a second factor on this session (see auth/session.ts).
+  const session = await resolveSession(request, options.db);
+  if (session) {
+    return {
+      scope: `user:${session.userId}`,
+      userId: session.userId,
+      owner: session.owner,
+      signedIn: true,
+    };
   }
   const scope = await ipScope(options.ip);
   return { scope, userId: null, owner: false, signedIn: false };
