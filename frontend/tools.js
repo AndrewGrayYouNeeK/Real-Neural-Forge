@@ -161,9 +161,9 @@
       id: "simulator",
       name: "Simulator",
       icon: "⟳",
-      description: "Roll forward multi-step scenarios interactively.",
-      status: "coming-soon",
-      view: "coming-soon",
+      description: "Learned world model: roll scenarios forward step by step.",
+      status: "in-progress",
+      view: "simulator",
     },
   ];
 
@@ -310,11 +310,16 @@
     {
       id: "phase-5",
       title: "Phase 5 — World Model / Simulator",
-      status: "coming-soon",
+      status: "in-progress",
       items: [
         {
-          name: "Simulator",
-          description: "Roll forward multi-step scenarios interactively.",
+          name: "World model simulator",
+          description: "A learned model of your series rolls 128 futures forward, step by step.",
+          toolId: "simulator",
+        },
+        {
+          name: "Scenario events",
+          description: "Shocks, drifts, volatility, or forced values, compared to the baseline.",
           toolId: "simulator",
         },
       ],

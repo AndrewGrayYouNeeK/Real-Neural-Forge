@@ -14,6 +14,7 @@ from src.analysis.pca import analyze_csv_bytes, analyze_matrix
 from src.analysis.report import build_starter_report
 from src.analysis.synthetic import generate_synthetic_series
 from src.analysis.why import build_why_explanation
+from src.analysis.world_model import simulate_series, starter_simulation
 from src.workspace.errors import WorkspaceError
 from src.workspace.starter_forecast import starter_what_if
 
@@ -79,6 +80,36 @@ class SyntheticRequest(BaseModel):
     length: int = Field(default=256, ge=32, le=2048)
     noise: float = Field(default=0.05, ge=0.0, le=1.0)
     seed: int = Field(default=0)
+
+
+class SimEvent(BaseModel):
+    """One scenario event applied at a simulated step."""
+
+    kind: Literal["shock", "drift", "volatility", "set"] = "shock"
+    step: int = Field(default=1, ge=1, le=60)
+    value: float = 0.0
+    mode: Literal["abs", "pct"] = "abs"
+
+
+class SimScenario(BaseModel):
+    """A named set of events rolled forward against the shared baseline."""
+
+    name: str | None = Field(default=None, max_length=40)
+    events: list[SimEvent] = Field(default_factory=list, max_length=4)
+
+
+class SimulateRequest(BaseModel):
+    """Phase 5 world model: a starter id or your own numbers, plus scenarios."""
+
+    starter_id: str | None = None
+    values: list[float] | None = Field(default=None, min_length=24, max_length=2000)
+    dates: list[str] | None = Field(default=None, max_length=2000)
+    unit: str | None = Field(default=None, max_length=32)
+    display_unit: Literal["°F"] | None = None
+    horizon: int = Field(default=14, ge=1, le=60)
+    n_paths: int = Field(default=128, ge=16, le=256)
+    seed: int = Field(default=0, ge=0, le=1_000_000)
+    scenarios: list[SimScenario] = Field(default_factory=list, max_length=3)
 
 
 @router.post("/analysis/pca")
@@ -233,3 +264,45 @@ def run_synthetic(body: SyntheticRequest) -> dict[str, Any]:
         )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.post("/analysis/simulate")
+def run_simulation(body: SimulateRequest) -> dict[str, Any]:
+    """Fit the latent world model and roll baseline + scenarios forward.
+
+    Pass ``starter_id`` for a shipped sample, or ``values`` (24-2000 numbers)
+    for your own series. Weather samples are stored in °C; send
+    ``display_unit: "°F"`` to get every number (and give event values) in °F.
+    """
+    scenarios = [scenario.model_dump() for scenario in body.scenarios]
+    if body.starter_id:
+        try:
+            return starter_simulation(
+                body.starter_id,
+                horizon=body.horizon,
+                n_paths=body.n_paths,
+                scenarios=scenarios,
+                seed=body.seed,
+                display_unit=body.display_unit,
+            )
+        except WorkspaceError as exc:
+            raise HTTPException(status_code=exc.status, detail=exc.detail) from exc
+    if not body.values:
+        raise HTTPException(
+            status_code=422, detail="Send starter_id or at least 24 values."
+        )
+    try:
+        result = simulate_series(
+            body.values,
+            horizon=body.horizon,
+            n_paths=body.n_paths,
+            scenarios=scenarios,
+            seed=body.seed,
+            unit=body.unit,
+            dates=body.dates,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    result["series"] = "custom"
+    result["name"] = "Your series"
+    return result

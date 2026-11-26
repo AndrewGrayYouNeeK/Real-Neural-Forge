@@ -1657,6 +1657,12 @@ async function handleImageQuestion(question, dataUrl) {
             ),
         ]);
       }
+      if (data.display_series.values.length >= 24) {
+        buttons.push([
+          "Simulate scenarios",
+          () => openSimulatorWithValues(data.display_series.values, data.display_series.unit),
+        ]);
+      }
       attachReplyActions(replyMessage, buttons);
     }
     const allowance = data && data.allowance;
@@ -3033,6 +3039,267 @@ async function runDiffusionDemo() {
   }
 }
 
+// ---- Phase 5: world model simulator ----------------------------------------
+
+const SIM_COLORS = ["#ffb86b", "#8ab4ff", "#ff7aa8"];
+const simState = { payload: null, step: 0, timer: null };
+
+function simFormat(value, unit) {
+  const number = asNumber(value);
+  if (number == null) return "—";
+  const text = Math.abs(number) >= 1 ? number.toFixed(1) : String(Number(number.toPrecision(3)));
+  if (!unit) return text;
+  return unit === "°F" || unit === "°C" ? `${text}${unit}` : `${text} ${unit}`;
+}
+
+function simChart(payload, upTo) {
+  // Keep the last ~5 weeks so the rolled-forward steps stay readable.
+  const history = Array.isArray(payload.history) ? payload.history.slice(-36) : [];
+  const base = payload.baseline || {};
+  const horizon = Array.isArray(base.p50) ? base.p50.length : 0;
+  const shown = Math.max(1, Math.min(upTo || horizon, horizon));
+  const labels = history.map((point) => point.date || String(point.index));
+  const actual = history.map((point) => asNumber(point.value));
+  const pad = () => new Array(history.length).fill(null);
+  const lastActual = actual.length ? actual[actual.length - 1] : null;
+  const future = (list) => {
+    const values = pad();
+    if (lastActual != null) values[history.length - 1] = lastActual;
+    for (let i = 0; i < horizon; i += 1) {
+      values.push(i < shown && Array.isArray(list) ? asNumber(list[i]) : null);
+    }
+    return values;
+  };
+  for (let i = 1; i <= horizon; i += 1) {
+    labels.push(`+${i}`);
+    actual.push(null);
+  }
+  const low = pad();
+  const high = pad();
+  for (let i = 0; i < horizon; i += 1) {
+    low.push(i < shown ? asNumber(base.p10 && base.p10[i]) : null);
+    high.push(i < shown ? asNumber(base.p90 && base.p90[i]) : null);
+  }
+  const series = [
+    { name: "Recent", color: "#e8eaed", values: actual },
+    { name: "Baseline (median)", color: "#7cffd6", markers: true, values: future(base.p50) },
+  ];
+  (payload.scenarios || []).forEach((scenario, index) => {
+    series.push({
+      name: scenario.name || `Scenario ${index + 1}`,
+      color: SIM_COLORS[index % SIM_COLORS.length],
+      dashed: true,
+      values: future(scenario.p50),
+    });
+  });
+  return {
+    ariaLabel: "World model simulation: baseline band and scenario medians",
+    labels,
+    series,
+    bands: horizon ? [{ name: "Baseline 80% range", color: "#7cffd6", low, high }] : [],
+    empty: "Run a simulation to roll the world forward.",
+  };
+}
+
+function renderSimStep(step) {
+  const payload = simState.payload;
+  if (!payload) return;
+  const base = payload.baseline || {};
+  const horizon = Array.isArray(base.p50) ? base.p50.length : 0;
+  const k = Math.max(1, Math.min(step, horizon));
+  simState.step = k;
+  const unit = payload.unit || "";
+  const host = document.getElementById("sim-chart");
+  const label = document.getElementById("sim-step-label");
+  const slider = document.getElementById("sim-step");
+  const readout = document.getElementById("sim-readout");
+  if (host) charts.renderLineChart(host, simChart(payload, k));
+  if (label) label.textContent = `${k} of ${horizon}`;
+  if (slider) slider.value = String(k);
+  if (!readout) return;
+  readout.replaceChildren();
+  const i = k - 1;
+  const regime = Array.isArray(base.regime) ? base.regime[i] : null;
+  const baseItem = document.createElement("li");
+  baseItem.textContent =
+    `Baseline: ${simFormat(base.p50 && base.p50[i], unit)} ` +
+    `(80% range ${simFormat(base.p10 && base.p10[i], unit)} to ${simFormat(base.p90 && base.p90[i], unit)})` +
+    (regime ? ` · regime: ${regime}` : "");
+  readout.appendChild(baseItem);
+  (payload.scenarios || []).forEach((scenario) => {
+    const item = document.createElement("li");
+    const delta = asNumber(scenario.delta_p50 && scenario.delta_p50[i]);
+    const sign = delta != null && delta > 0 ? "+" : "";
+    item.textContent =
+      `${scenario.name}: ${simFormat(scenario.p50 && scenario.p50[i], unit)} ` +
+      `(${simFormat(scenario.p10 && scenario.p10[i], unit)} to ${simFormat(scenario.p90 && scenario.p90[i], unit)}), ` +
+      `${delta == null ? "" : `${sign}${simFormat(delta, unit)} vs baseline`}`;
+    readout.appendChild(item);
+  });
+}
+
+function stopSimPlayback() {
+  if (simState.timer) {
+    clearInterval(simState.timer);
+    simState.timer = null;
+  }
+  const play = document.getElementById("sim-play");
+  if (play) play.textContent = "▶ Play";
+}
+
+function toggleSimPlayback() {
+  const payload = simState.payload;
+  if (!payload) return;
+  if (simState.timer) {
+    stopSimPlayback();
+    return;
+  }
+  const horizon = (payload.baseline && payload.baseline.p50 || []).length;
+  let step = simState.step >= horizon ? 1 : simState.step + 1;
+  const play = document.getElementById("sim-play");
+  if (play) play.textContent = "❚❚ Pause";
+  renderSimStep(step);
+  simState.timer = setInterval(() => {
+    step += 1;
+    if (step > horizon) {
+      stopSimPlayback();
+      return;
+    }
+    renderSimStep(step);
+  }, 450);
+}
+
+function renderSimulation(payload) {
+  const result = document.getElementById("sim-result");
+  const summary = document.getElementById("sim-summary");
+  const model = document.getElementById("sim-model");
+  const slider = document.getElementById("sim-step");
+  if (!result || !payload || !payload.baseline) return;
+  stopSimPlayback();
+  simState.payload = payload;
+  result.hidden = false;
+  if (summary) summary.textContent = payload.summary || "Simulation ready.";
+  const horizon = (payload.baseline.p50 || []).length;
+  if (slider) {
+    slider.max = String(Math.max(1, horizon));
+  }
+  if (model) {
+    const info = payload.model || {};
+    const regimes = Array.isArray(info.regimes)
+      ? info.regimes.map((r) => `${r.label} ${Math.round(Number(r.share) * 100)}%`).join(", ")
+      : "";
+    const bt = payload.backtest || {};
+    const trust = bt.holdout
+      ? bt.beats_persistence
+        ? "It beat the persistence baseline on held-out data."
+        : "It did not beat persistence on held-out data here, so treat runs as scenarios, not forecasts."
+      : "";
+    model.textContent =
+      `${info.description || ""} ${regimes ? `Regimes: ${regimes}.` : ""} ${trust}`.trim();
+  }
+  renderSimStep(horizon);
+}
+
+function parseSimValues(text) {
+  return String(text || "")
+    .split(/[\s,;]+/)
+    .map((part) => Number(part.replace(/[^0-9eE+.-]/g, "")))
+    .filter((value) => Number.isFinite(value));
+}
+
+function simScenarioFromForm(form, suffix) {
+  const kind = form[`kind${suffix}`] ? form[`kind${suffix}`].value : "";
+  if (!kind) return null;
+  const value = Number(form[`value${suffix}`].value);
+  const step = Number(form[`step${suffix}`].value) || 1;
+  const name = (form[`name${suffix}`].value || `Scenario ${suffix}`).trim().slice(0, 40);
+  return {
+    name,
+    events: [{ kind, step, value: Number.isFinite(value) ? value : 0, mode: "abs" }],
+  };
+}
+
+function syncSimForm() {
+  const form = document.getElementById("sim-form");
+  if (!form) return;
+  const series = form.series.value;
+  const custom = document.getElementById("sim-custom");
+  if (custom) custom.hidden = series !== "custom";
+  const hint = document.getElementById("sim-unit-hint");
+  if (hint) {
+    hint.textContent =
+      series === "weather"
+        ? "Weather values are °F. Volatility × multiplies the day-to-day noise."
+        : "Values are in the series’ own units. Volatility × multiplies the noise.";
+  }
+}
+
+async function submitSimForm(event) {
+  if (event) event.preventDefault();
+  const form = document.getElementById("sim-form");
+  const status = document.getElementById("sim-status");
+  const button = document.getElementById("sim-run");
+  if (!form) return;
+  const series = form.series.value || "weather";
+  const horizon = Math.min(60, Math.max(1, Math.floor(Number(form.horizon.value) || 14)));
+  const scenarios = ["A", "B"]
+    .map((suffix) => simScenarioFromForm(form, suffix))
+    .filter(Boolean)
+    .map((scenario) => ({
+      ...scenario,
+      events: scenario.events.map((ev) => ({ ...ev, step: Math.min(horizon, Math.max(1, ev.step)) })),
+    }));
+  const body = { horizon, n_paths: 128, scenarios };
+  if (series === "custom") {
+    const values = parseSimValues(form.values.value);
+    if (values.length < 24) {
+      if (status) {
+        status.hidden = false;
+        status.textContent = `Paste at least 24 numbers (you have ${values.length}).`;
+      }
+      return;
+    }
+    body.values = values.slice(-2000);
+    const unit = (form.unit.value || "").trim();
+    if (unit) body.unit = unit.slice(0, 32);
+  } else {
+    body.starter_id = series;
+    if (series === "weather") body.display_unit = "°F";
+  }
+  if (status) {
+    status.hidden = false;
+    status.textContent = "Rolling 128 futures forward…";
+  }
+  if (button) button.disabled = true;
+  try {
+    const payload = await fetchJson("/analysis/simulate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    if (status) status.hidden = true;
+    renderSimulation(payload);
+  } catch (error) {
+    if (status) {
+      status.hidden = false;
+      status.textContent = error.message || "Could not run the simulation.";
+    }
+  } finally {
+    if (button) button.disabled = false;
+  }
+}
+
+function openSimulatorWithValues(values, unit) {
+  const form = document.getElementById("sim-form");
+  if (!form) return;
+  form.series.value = "custom";
+  form.values.value = values.join(", ");
+  form.unit.value = unit || "";
+  syncSimForm();
+  showToolView("simulator", { id: "simulator", name: "Simulator" });
+  void submitSimForm();
+}
+
 function isWeatherPayload(payload) {
   return Boolean(payload) && (payload.starter_id === "weather" || payload.unit === "°C");
 }
@@ -3140,6 +3407,7 @@ function showToolView(viewId, toolMeta) {
   if (next === "jepa") {
     renderJepaReport(state.lastJepa);
   }
+  if (next !== "simulator") stopSimPlayback();
   document.querySelectorAll(".tool-nav-btn").forEach((button) => {
     const current = button.dataset.toolId === (toolMeta && toolMeta.id);
     button.setAttribute("aria-current", current || (next === "chat" && button.dataset.toolId === "chat") ? "page" : "false");
@@ -4162,6 +4430,21 @@ document.querySelectorAll(".back-to-chat").forEach((button) => {
   button.addEventListener("click", () => showToolView("chat"));
 });
 
+const simForm = document.getElementById("sim-form");
+if (simForm) {
+  simForm.addEventListener("submit", (event) => void submitSimForm(event));
+  simForm.series.addEventListener("change", () => syncSimForm());
+  syncSimForm();
+}
+const simPlay = document.getElementById("sim-play");
+if (simPlay) simPlay.addEventListener("click", () => toggleSimPlayback());
+const simStep = document.getElementById("sim-step");
+if (simStep) {
+  simStep.addEventListener("input", () => {
+    stopSimPlayback();
+    renderSimStep(Number(simStep.value) || 1);
+  });
+}
 const diffusionRunBtn = document.getElementById("diffusion-run-btn");
 if (diffusionRunBtn) {
   diffusionRunBtn.addEventListener("click", () => {

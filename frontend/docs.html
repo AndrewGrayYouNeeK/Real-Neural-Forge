@@ -126,6 +126,11 @@ curl -sS -X POST https://forge.youneek.dev/agent/vision \
   -H "Content-Type: application/json" \
   -d "{\"question\":\"Where is this heading?\",\"image\":\"data:image/png;base64,$(base64 -w0 chart.png)\"}"
 
+# Phase 5: world model simulator. Baseline vs scenarios, 14 days, weather in °F.
+curl -sS -X POST https://forge.youneek.dev/analysis/simulate \
+  -H "Content-Type: application/json" \
+  -d '{"starter_id":"weather","display_unit":"°F","horizon":14,"scenarios":[{"name":"Cold snap","events":[{"kind":"shock","step":1,"value":-15}]}]}'
+
 # Fallback without tools (unchanged):
 curl -sS -X POST https://forge.youneek.dev/live/ask \
   -H "Content-Type: application/json" \

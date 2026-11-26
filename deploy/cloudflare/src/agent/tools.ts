@@ -547,6 +547,70 @@ export const TOOL_DEFINITIONS = [
       additionalProperties: false,
     },
   },
+  {
+    type: "function" as const,
+    name: "simulate_world",
+    description:
+      "Phase 5 world model / simulator. Fits a small learned latent model (PCA state + ridge dynamics + K-Means regime noise; weather also gets an annual seasonal baseline) to a series and rolls a baseline plus up to 3 scenarios forward many steps with p10/p50/p90 ranges and an honest backtest vs persistence. Use for multi-step 'what happens over the next N days if…' questions: a one-off shock, a sustained drift per step, a volatility change, or forcing a value at a step. Pass series (starter id) or values (24+ numbers, e.g. from a chart the user attached). Weather numbers, event values, and results are °F — quote them as °F and never convert.",
+    parameters: {
+      type: "object",
+      properties: {
+        series: {
+          type: "string",
+          description: "Starter id: weather, stocks, crypto, lunar, near-earth. Default weather.",
+        },
+        values: {
+          type: "array",
+          items: { type: "number" },
+          description: "Optional: the user's own series (24-2000 numbers, oldest first) instead of a starter.",
+        },
+        unit: {
+          type: "string",
+          description: "Unit label for values (only with values).",
+        },
+        horizon: {
+          type: "integer",
+          description: "Steps to roll forward (1-60). Default 14.",
+        },
+        scenarios: {
+          type: "array",
+          description: "Up to 3 scenarios compared against the baseline.",
+          items: {
+            type: "object",
+            properties: {
+              name: { type: "string", description: "Short label, e.g. 'Cold snap'." },
+              events: {
+                type: "array",
+                description: "Up to 4 events.",
+                items: {
+                  type: "object",
+                  properties: {
+                    kind: {
+                      type: "string",
+                      enum: ["shock", "drift", "volatility", "set"],
+                      description:
+                        "shock = one-off jump at step; drift = add value every step from step on; volatility = multiply noise by value from step on; set = force the value at step.",
+                    },
+                    step: { type: "integer", description: "1-based step the event starts." },
+                    value: { type: "number", description: "Event size (°F for weather)." },
+                    mode: {
+                      type: "string",
+                      enum: ["abs", "pct"],
+                      description: "For shock: abs (default) adds value; pct changes by value %.",
+                    },
+                  },
+                  required: ["kind", "value"],
+                  additionalProperties: false,
+                },
+              },
+            },
+            additionalProperties: false,
+          },
+        },
+      },
+      additionalProperties: false,
+    },
+  },
 ];
 
 export function toolsForResponsesApi(): Array<Record<string, unknown>> {
@@ -1699,6 +1763,122 @@ async function runWhatIf(ctx: ToolContext, args: Record<string, unknown>): Promi
   };
 }
 
+const SIM_EVENT_KINDS = new Set(["shock", "drift", "volatility", "set"]);
+
+function finiteNumber(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+/** Clamp model-supplied scenarios to what /analysis/simulate accepts. */
+export function sanitizeSimScenarios(raw: unknown, horizon: number): Array<Record<string, unknown>> {
+  if (!Array.isArray(raw)) return [];
+  return raw.slice(0, 3).map((item, index) => {
+    const rec = item && typeof item === "object" ? (item as Record<string, unknown>) : {};
+    const name =
+      typeof rec.name === "string" && rec.name.trim()
+        ? rec.name.trim().slice(0, 40)
+        : `Scenario ${String.fromCharCode(65 + index)}`;
+    const events = (Array.isArray(rec.events) ? rec.events : [])
+      .slice(0, 4)
+      .map((ev) => (ev && typeof ev === "object" ? (ev as Record<string, unknown>) : {}))
+      .filter((ev) => typeof ev.kind === "string" && SIM_EVENT_KINDS.has(ev.kind))
+      .map((ev) => {
+        const stepRaw = finiteNumber(ev.step);
+        const step = Math.min(horizon, Math.max(1, Math.floor(stepRaw ?? 1)));
+        let value = finiteNumber(ev.value) ?? 0;
+        if (ev.kind === "volatility") value = Math.min(10, Math.max(0, value));
+        return { kind: ev.kind, step, value, mode: ev.mode === "pct" ? "pct" : "abs" };
+      });
+    return { name, events };
+  });
+}
+
+async function runSimulateWorld(
+  ctx: ToolContext,
+  args: Record<string, unknown>,
+): Promise<ToolResult["data"]> {
+  const horizon = intArg(args, "horizon", 14, 1, 60);
+  const scenarios = sanitizeSimScenarios(args.scenarios, horizon);
+  const rawValues = Array.isArray(args.values)
+    ? args.values.filter((v): v is number => typeof v === "number" && Number.isFinite(v))
+    : [];
+  let body: Record<string, unknown>;
+  let series = stringArg(args, "series", "weather").toLowerCase() || "weather";
+  if (rawValues.length >= 24) {
+    series = "custom";
+    const unit = stringArg(args, "unit").slice(0, 32);
+    body = {
+      values: rawValues.slice(-2000),
+      ...(unit ? { unit } : {}),
+      horizon,
+      n_paths: 128,
+      scenarios,
+    };
+  } else {
+    if (!STARTER_IDS.has(series)) {
+      return {
+        ok: false,
+        text: "The simulator runs on the sample series (weather, stocks, crypto, lunar, near-earth) or on 24+ numbers you paste or attach.",
+      };
+    }
+    body = {
+      starter_id: series,
+      horizon,
+      n_paths: 128,
+      scenarios,
+      ...(isWeatherSeries(series) ? { display_unit: "°F" } : {}),
+    };
+  }
+  const result = await ctx.fetchContainer(
+    "/analysis/simulate",
+    containerInit(ctx, {
+      method: "POST",
+      headers: { ...ctx.authHeaders, "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    }),
+  );
+  throwIfContainerStatusError(result.status, "Simulator");
+  const payload = (result.json ?? {}) as Record<string, unknown>;
+  const baseline = (payload.baseline ?? {}) as Record<string, unknown>;
+  const steps = Number(payload.horizon) || horizon;
+  // Loop tool results are capped at 3500 chars: lead with the summary and keep
+  // only checkpoint steps (first, middle, last) instead of full paths.
+  const checkpoints = [...new Set([1, Math.ceil(steps / 2), steps])];
+  const pick = (list: unknown): Record<string, unknown> => {
+    const out: Record<string, unknown> = {};
+    if (!Array.isArray(list)) return out;
+    for (const step of checkpoints) {
+      if (step - 1 < list.length) out[`step_${step}`] = list[step - 1];
+    }
+    return out;
+  };
+  const compactScenarios = Array.isArray(payload.scenarios)
+    ? (payload.scenarios as Array<Record<string, unknown>>).map((sc) => ({
+        summary: sc.summary,
+        name: sc.name,
+        p50: pick(sc.p50),
+        p10: pick(sc.p10),
+        p90: pick(sc.p90),
+        end_delta: sc.end_delta,
+        end_regime: sc.end_regime,
+      }))
+    : [];
+  const model = (payload.model ?? {}) as Record<string, unknown>;
+  const summary = typeof payload.summary === "string" ? payload.summary : "";
+  return {
+    ok: true,
+    text: summary || `Simulated ${steps} steps on ${series}.`,
+    series: payload.series ?? series,
+    name: payload.name,
+    unit: payload.unit,
+    horizon: steps,
+    baseline: { p50: pick(baseline.p50), p10: pick(baseline.p10), p90: pick(baseline.p90) },
+    scenarios: compactScenarios,
+    backtest: payload.backtest,
+    model: model.description,
+  };
+}
+
 async function runGenerateSynthetic(
   ctx: ToolContext,
   args: Record<string, unknown>,
@@ -2041,6 +2221,8 @@ export async function dispatchTool(
         return runCheckAlerts(keyed, args);
       case "generate_synthetic_series":
         return runGenerateSynthetic(keyed, args);
+      case "simulate_world":
+        return runSimulateWorld(keyed, args);
       default: {
         const unexpected: never = toolName;
         throw new Error(`Unhandled tool: ${String(unexpected)}`);
