@@ -10,7 +10,7 @@
   "icons": [
     { "src": "/assets/brand/icon-192.png", "sizes": "192x192", "type": "image/png" },
     { "src": "/assets/brand/icon-512.png", "sizes": "512x512", "type": "image/png" },
-    { "src": "/assets/brand/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
-    { "src": "/assets/brand/nous-mark.svg", "sizes": "any", "type": "image/svg+xml" }
+    { "src": "/assets/brand/icon-512.webp", "sizes": "512x512", "type": "image/webp" },
+    { "src": "/assets/brand/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
   ]
 }

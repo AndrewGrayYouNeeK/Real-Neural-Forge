@@ -919,12 +919,15 @@ class TestForecastDashboard:
         assert 'id="gate-recovery"' in html
         assert "<title>Nous" in html
         assert 'rel="manifest"' in html
-        assert "/assets/brand/nous-wordmark.svg" in html
+        assert "/assets/brand/nous-s.webp" in html
+        assert ">NOU</span>" in html
         assert "andrewgray@youneek.xyz" in html
         assert 'data-tool-view="about"' in html
         assert client.get("/app").status_code == 200
         assert client.get("/manifest.webmanifest").json()["name"] == "Nous"
-        assert client.get("/assets/brand/nous-mark.svg").status_code == 200
+        for size in (16, 32, 180, 192, 512):
+            icon = client.get(f"/assets/brand/icon-{size}.png")
+            assert icon.status_code == 200
         assert 'id="api-token"' not in html
         assert 'id="sidebar"' in html
         assert 'id="workspace-panel"' in html

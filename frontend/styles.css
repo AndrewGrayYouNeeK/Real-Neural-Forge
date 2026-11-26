@@ -1906,11 +1906,28 @@ body:not(.has-chat) #chat-log {
   }
 }
 
-/* Brand images */
-.brand-wordmark {
-  display: block;
-  height: 30px;
+/* Brand: HTML "NOU" + the cosmos S image. Size it with font-size. */
+.nous-wordmark {
+  display: inline-flex;
+  align-items: center;
+  font-size: 22px;
+  line-height: 1;
+  color: #fff;
+  white-space: nowrap;
+}
+
+.nous-wordmark .nou {
+  font-family: "Montserrat", "Futura", "Century Gothic", "Avenir Next", sans-serif;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+}
+
+.nous-wordmark .nous-s {
+  /* Measured from the source art: the S (with glow) is 1.48x the cap height. */
+  height: 1.06em;
   width: auto;
+  margin-left: 0.02em;
+  display: block;
 }
 
 .brand-mark {
@@ -1922,23 +1939,20 @@ body:not(.has-chat) #chat-log {
 
 .landing-wordmark {
   margin: 0;
-  line-height: 0;
+  font-weight: inherit;
 }
 
-.landing-wordmark img {
-  width: min(520px, 82vw);
-  height: auto;
+.landing-wordmark .nous-wordmark {
+  font-size: clamp(56px, 11vw, 112px);
 }
 
 .gate-wordmark {
-  width: 180px;
-  height: auto;
+  font-size: 40px;
   margin: 0 auto;
-  display: block;
 }
 
-.sidebar-logo .brand-wordmark {
-  height: 26px;
+.sidebar-logo .nous-wordmark {
+  font-size: 20px;
 }
 
 .tool-nav-more > summary {
