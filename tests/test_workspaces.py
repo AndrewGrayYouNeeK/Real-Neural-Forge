@@ -574,9 +574,35 @@ def test_owner_is_a_normal_account_claimed_once_and_locked_until_mfa(
     )
     assert retired.status_code == 401
 
+    # Without the one-time setup link nobody can claim the owner email.
+    no_link = client.post(
+        "/auth/signup",
+        json={"email": "andrewgray@youneek.xyz", "password": "attacker-pass-1"},
+    )
+    assert no_link.status_code == 409
+    bad_link = client.post(
+        "/auth/signup",
+        json={
+            "email": "andrewgray@youneek.xyz",
+            "password": "attacker-pass-1",
+            "setup_token": "guess",
+        },
+    )
+    assert bad_link.status_code == 409
+    store = runtime.store
+    assert store is not None
+    setup_token = "test-setup-token-123"
+    store.add_owner_setup(
+        hashlib.sha256(setup_token.encode("utf-8")).hexdigest(),
+        "2999-01-01T00:00:00+00:00",
+    )
     claimed = client.post(
         "/auth/signup",
-        json={"email": "andrewgray@youneek.xyz", "password": "owner-pass-ok-1"},
+        json={
+            "email": "andrewgray@youneek.xyz",
+            "password": "owner-pass-ok-1",
+            "setup_token": setup_token,
+        },
     )
     assert claimed.status_code == 201, claimed.text
     body = claimed.json()
@@ -592,7 +618,11 @@ def test_owner_is_a_normal_account_claimed_once_and_locked_until_mfa(
     client.cookies.clear()
     second = client.post(
         "/auth/signup",
-        json={"email": "andrewgray@youneek.xyz", "password": "attacker-pass-2"},
+        json={
+            "email": "andrewgray@youneek.xyz",
+            "password": "attacker-pass-2",
+            "setup_token": setup_token,
+        },
     )
     assert second.status_code == 409
     bad = client.post(

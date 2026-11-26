@@ -4688,7 +4688,19 @@ syncHasChatClass();
 /* ------------------------------------------------------------- auth gate */
 
 const HAS_ACCOUNT_KEY = "nousHasAccount";
-const gate = { mode: "signup", step: "email", started: false, afterRecovery: null };
+const gate = { mode: "signup", step: "email", started: false, afterRecovery: null, setupToken: null };
+
+// One-time owner setup link: /app?setup=<token>. Kept in memory only and
+// stripped from the address bar right away.
+(function readSetupLink() {
+  const params = new URLSearchParams(window.location.search);
+  const token = params.get("setup");
+  if (!token) return;
+  gate.setupToken = token;
+  params.delete("setup");
+  const rest = params.toString();
+  window.history.replaceState({}, "", window.location.pathname + (rest ? `?${rest}` : ""));
+})();
 
 function setAuthView(view) {
   const body = document.body;
@@ -4747,6 +4759,11 @@ function openGate(mode) {
   if (row) row.hidden = true;
   gateError("");
   showGatePanel("sign-in-form");
+  if (gate.setupToken) {
+    gate.mode = "signup";
+    const title = document.getElementById("gate-title");
+    if (title) title.textContent = "Set up the owner account";
+  }
   syncGateMode();
   setAuthView("gate");
   if (window.location.pathname !== "/app") window.history.pushState({}, "", "/app");
@@ -4971,7 +4988,10 @@ document.getElementById("sign-in-form").addEventListener(
       return;
     }
     const url = gate.mode === "signup" ? "/auth/signup" : "/auth/login";
-    const account = await postJson(url, { email, password });
+    const payload = { email, password };
+    if (gate.mode === "signup" && gate.setupToken) payload.setup_token = gate.setupToken;
+    const account = await postJson(url, payload);
+    gate.setupToken = null;
     form.password.value = "";
     afterSignIn(account);
   })

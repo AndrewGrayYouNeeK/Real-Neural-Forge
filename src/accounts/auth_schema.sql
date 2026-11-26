@@ -50,3 +50,11 @@ CREATE TABLE IF NOT EXISTS auth_attempts (
     first_at TEXT NOT NULL,
     locked_until TEXT
 );
+
+-- One-time owner setup link. Only the sha256 of the token is stored; the
+-- link itself is written to a file on the operator's machine.
+CREATE TABLE IF NOT EXISTS owner_setup (
+    token_hash TEXT PRIMARY KEY,
+    expires_at TEXT NOT NULL,
+    used_at TEXT
+);
