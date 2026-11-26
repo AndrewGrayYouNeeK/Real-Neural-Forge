@@ -53,7 +53,7 @@ Charts, images, and text in one workflow.
    the owner; every image also counts toward the 25k neuron/day safety cap.
    Landing **Live**.
 
-## Phase 5 — World model / simulator (in progress)
+## Phase 5 — World model / simulator (shipped)
 
 Interactive multi-step simulator for rolling scenarios forward.
 
@@ -71,3 +71,4 @@ Interactive multi-step simulator for rolling scenarios forward.
 4. **Where** — Simulator panel (Play / step scrubber), agent tool
    `simulate_world` (weather in °F), and **Simulate scenarios** on chart-to-series
    replies. No new Workers AI calls, no D1 migration, no container change.
+   Landing **Live**.
