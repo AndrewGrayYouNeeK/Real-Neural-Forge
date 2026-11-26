@@ -1,4 +1,4 @@
-# Real-Neural-Forge roadmap
+# Nous roadmap
 
 Shipped and planned product phases. Constraints that stay fixed across phases:
 GPT-OSS 120B primary, Unhinged mode unchanged, Talk / GQ voice, hidden thinking
