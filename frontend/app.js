@@ -4987,10 +4987,30 @@ document.getElementById("sign-in-form").addEventListener(
       gateError("Enter your password.");
       return;
     }
-    const url = gate.mode === "signup" ? "/auth/signup" : "/auth/login";
     const payload = { email, password };
-    if (gate.mode === "signup" && gate.setupToken) payload.setup_token = gate.setupToken;
-    const account = await postJson(url, payload);
+    let account;
+    if (gate.mode === "signup") {
+      if (gate.setupToken) payload.setup_token = gate.setupToken;
+      try {
+        account = await postJson("/auth/signup", payload);
+      } catch (error) {
+        // Someone who already has an account often taps "Create account".
+        // Try their password as a log-in before showing an error.
+        if (!error || error.status !== 409 || !/already exists/i.test(error.message || "")) throw error;
+        gate.mode = "login";
+        syncGateMode();
+        try {
+          account = await postJson("/auth/login", { email, password });
+        } catch (loginError) {
+          if (loginError && loginError.status === 401 && /invalid email or password/i.test(loginError.message || "")) {
+            throw new Error("That email already has an account. Enter its password and tap Log in.");
+          }
+          throw loginError;
+        }
+      }
+    } else {
+      account = await postJson("/auth/login", payload);
+    }
     gate.setupToken = null;
     form.password.value = "";
     afterSignIn(account);

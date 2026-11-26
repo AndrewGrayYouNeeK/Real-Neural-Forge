@@ -580,6 +580,13 @@ def test_owner_is_a_normal_account_claimed_once_and_locked_until_mfa(
         json={"email": "andrewgray@youneek.xyz", "password": "attacker-pass-1"},
     )
     assert no_link.status_code == 409
+    assert "setup link" in no_link.json()["detail"]
+    owner_login = client.post(
+        "/auth/login",
+        json={"email": "andrewgray@youneek.xyz", "password": "attacker-pass-1"},
+    )
+    assert owner_login.status_code == 401
+    assert "setup link" in owner_login.json()["detail"]
     bad_link = client.post(
         "/auth/signup",
         json={
@@ -589,6 +596,7 @@ def test_owner_is_a_normal_account_claimed_once_and_locked_until_mfa(
         },
     )
     assert bad_link.status_code == 409
+    assert "used or expired" in bad_link.json()["detail"]
     store = runtime.store
     assert store is not None
     setup_token = "test-setup-token-123"

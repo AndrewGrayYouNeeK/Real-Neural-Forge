@@ -1,12 +1,13 @@
 """Build the Nous raster brand assets from the source artwork.
 
-Sources (committed): frontend/brand/source/nous-wordmark-cosmos-s.jpg and
-frontend/brand/source/nous-cosmos-s-mark.jpg. The wordmark on the site is
-HTML text "NOU" plus the cosmos S as an image, so the letters stay crisp.
+Source (committed): frontend/brand/source/nous-blackhole-o-cosmos-s-v4.jpg
+(white N and U, black hole O, nebula S). On the site N and U are HTML text,
+so they stay crisp; the O and S are images cut from the artwork.
 
 Outputs in frontend/brand/:
-  nous-s.png / nous-s.webp       the S, black keyed to transparency
-  icon-16/32/180/192/512.png     app icon sizes cropped from the mark
+  nous-o.png / nous-o.webp       the black hole O, black keyed to transparency
+  nous-s.png / nous-s.webp       the nebula S, black keyed to transparency
+  icon-16/32/180/192/512.png     app icons: the black hole O on black
   icon-512.webp, apple-touch-icon.png
   ../favicon.ico                 16/32/48
 nous-og.png (1200x630) is a browser screenshot of the HTML wordmark + tagline.
@@ -15,7 +16,6 @@ Run with any Python that has Pillow: python3 scripts/build_brand.py
 
 from __future__ import annotations
 
-import colorsys
 from pathlib import Path
 
 from PIL import Image
@@ -23,22 +23,6 @@ from PIL import Image
 ROOT = Path(__file__).resolve().parent.parent / "frontend"
 BRAND = ROOT / "brand"
 SOURCE = BRAND / "source"
-
-
-def _s_box(image: Image.Image) -> tuple[int, int, int, int]:
-    """Bounding box of the coloured S (the only saturated pixels)."""
-    pixels = image.load()
-    xs: list[int] = []
-    ys: list[int] = []
-    for y in range(0, image.height, 2):
-        for x in range(0, image.width, 2):
-            r, g, b = pixels[x, y]
-            _, sat, val = colorsys.rgb_to_hsv(r / 255, g / 255, b / 255)
-            if sat > 0.4 and val > 0.25:
-                xs.append(x)
-                ys.append(y)
-    pad = 6
-    return (min(xs) - pad, min(ys) - pad, max(xs) + pad, max(ys) + pad)
 
 
 def key_black(image: Image.Image) -> Image.Image:
@@ -49,11 +33,12 @@ def key_black(image: Image.Image) -> Image.Image:
     for y in range(image.height):
         for x in range(image.width):
             r, g, b = src[x, y]
-            alpha = max(r, g, b)
+            # Ramp from a small floor so JPEG noise in the black goes fully clear.
+            alpha = max(0, round((max(r, g, b) - 14) * 255 / 241))
             if alpha < 6:
                 out[x, y] = (0, 0, 0, 0)
                 continue
-            scale = 255 / alpha
+            scale = 255 / max(r, g, b)
             out[x, y] = (
                 min(255, round(r * scale)),
                 min(255, round(g * scale)),
@@ -63,18 +48,28 @@ def key_black(image: Image.Image) -> Image.Image:
     return rgba
 
 
-def build_s() -> None:
-    wordmark = Image.open(SOURCE / "nous-wordmark-cosmos-s.jpg").convert("RGB")
-    crop = wordmark.crop(_s_box(wordmark))
-    keyed = key_black(crop)
-    keyed.save(BRAND / "nous-s.png", optimize=True)
-    keyed.save(BRAND / "nous-s.webp", quality=90, method=6)
+# Boxes in the 1280x720 source. Each crop is vertically centred on the cap
+# centre of the white N/U (y 281-429), so CSS can line them up with the text.
+SOURCE_FILE = "nous-blackhole-o-cosmos-s-v4.jpg"
+CAP_TOP, CAP_BOTTOM = 281, 429
+O_BOX = (424, 237, 708, 473)
+S_BOX = (858, 176, 1110, 534)
+ICON_CENTER, ICON_SIDE = (566, 352), 300
+
+
+def build_letters() -> None:
+    art = Image.open(SOURCE / SOURCE_FILE).convert("RGB")
+    for name, box in (("nous-o", O_BOX), ("nous-s", S_BOX)):
+        keyed = key_black(art.crop(box))
+        keyed.save(BRAND / f"{name}.png", optimize=True)
+        keyed.save(BRAND / f"{name}.webp", quality=90, method=6)
 
 
 def build_icons() -> None:
-    mark = Image.open(SOURCE / "nous-cosmos-s-mark.jpg").convert("RGB")
-    side = min(mark.size)
-    mark = mark.crop((0, 0, side, side))
+    art = Image.open(SOURCE / SOURCE_FILE).convert("RGB")
+    cx, cy = ICON_CENTER
+    half = ICON_SIDE // 2
+    mark = art.crop((cx - half, cy - half, cx + half, cy + half))
     for size in (16, 32, 180, 192, 512):
         mark.resize((size, size), Image.LANCZOS).save(
             BRAND / f"icon-{size}.png", optimize=True
@@ -91,6 +86,6 @@ def build_icons() -> None:
 
 if __name__ == "__main__":
     BRAND.mkdir(parents=True, exist_ok=True)
-    build_s()
+    build_letters()
     build_icons()
     print("Built Nous brand assets in", BRAND)
