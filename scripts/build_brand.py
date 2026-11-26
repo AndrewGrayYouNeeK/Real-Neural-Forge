@@ -1,12 +1,12 @@
 """Build the Nous raster brand assets from the source artwork.
 
-Source (committed): frontend/brand/source/nous-blackhole-o-cosmos-s-v4.jpg
-(white N and U, black hole O, nebula S). On the site N and U are HTML text,
+Source (committed): frontend/brand/source/nous-final-blackhole-o-swirl-s.jpg
+(white N and U, black hole O, purple-cyan swirl S). On the site N and U are HTML text,
 so they stay crisp; the O and S are images cut from the artwork.
 
 Outputs in frontend/brand/:
   nous-o.png / nous-o.webp       the black hole O, black keyed to transparency
-  nous-s.png / nous-s.webp       the nebula S, black keyed to transparency
+  nous-s.png / nous-s.webp       the swirl S, black keyed to transparency
   icon-16/32/180/192/512.png     app icons: the black hole O on black
   icon-512.webp, apple-touch-icon.png
   ../favicon.ico                 16/32/48
@@ -50,11 +50,11 @@ def key_black(image: Image.Image) -> Image.Image:
 
 # Boxes in the 1280x720 source. Each crop is vertically centred on the cap
 # centre of the white N/U (y 281-429), so CSS can line them up with the text.
-SOURCE_FILE = "nous-blackhole-o-cosmos-s-v4.jpg"
-CAP_TOP, CAP_BOTTOM = 281, 429
-O_BOX = (424, 237, 708, 473)
-S_BOX = (858, 176, 1110, 534)
-ICON_CENTER, ICON_SIDE = (566, 352), 282
+SOURCE_FILE = "nous-final-blackhole-o-swirl-s.jpg"
+CAP_TOP, CAP_BOTTOM = 282, 429
+O_BOX = (424, 235, 711, 476)
+S_BOX = (862, 228, 1110, 483)
+ICON_CENTER, ICON_SIDE = (567, 353), 282
 
 
 def build_letters() -> None:
