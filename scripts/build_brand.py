@@ -54,7 +54,7 @@ SOURCE_FILE = "nous-blackhole-o-cosmos-s-v4.jpg"
 CAP_TOP, CAP_BOTTOM = 281, 429
 O_BOX = (424, 237, 708, 473)
 S_BOX = (858, 176, 1110, 534)
-ICON_CENTER, ICON_SIDE = (566, 352), 300
+ICON_CENTER, ICON_SIDE = (566, 352), 282
 
 
 def build_letters() -> None:
