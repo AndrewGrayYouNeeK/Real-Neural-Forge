@@ -35,6 +35,7 @@ export const AGENT_TOOL_NAMES = [
   "check_alerts",
   "generate_synthetic_series",
   "simulate_world",
+  "weather_history",
 ] as const;
 
 export type AgentToolName = (typeof AGENT_TOOL_NAMES)[number];
@@ -47,7 +48,7 @@ export type ParsedToolCall = {
 
 const TOOL_NAME_SET = new Set<string>(AGENT_TOOL_NAMES);
 const TOOL_NAME_HINT =
-  /\b(forecast|fetch_live_data|get_evaluation_metrics|compare_horizons|explain_prediction|list_user_series|remember_fact|recall_memory|forget_memory|save_scenario|list_scenarios|run_scenario|rename_user_series|delete_user_series|retrain_user_series|analyze_pca|analyze_regimes|what_if|create_report|create_alert|list_alerts|check_alerts|generate_synthetic_series|simulate_world)\b/;
+  /\b(forecast|fetch_live_data|get_evaluation_metrics|compare_horizons|explain_prediction|list_user_series|remember_fact|recall_memory|forget_memory|save_scenario|list_scenarios|run_scenario|rename_user_series|delete_user_series|retrain_user_series|analyze_pca|analyze_regimes|what_if|create_report|create_alert|list_alerts|check_alerts|generate_synthetic_series|simulate_world|weather_history)\b/;
 
 function asToolName(value: unknown): AgentToolName | null {
   if (typeof value !== "string") return null;
@@ -256,14 +257,23 @@ export function tryParseToolJson(text: string): ParsedToolCall[] {
     if (calls.length) return calls;
   }
 
-  // Prefer later slices (models often put prose first, JSON last).
+  // Several top-level tool objects in one reply ({...}\n{...}) are several
+  // calls: keep every one in order (dropping exact repeats) instead of only
+  // the last, which used to silently lose the earlier steps.
   const slices = extractBalancedJsonSlices(cleaned);
-  for (let i = slices.length - 1; i >= 0; i--) {
-    const parsed = safeJsonParse(slices[i]);
+  const collected: ParsedToolCall[] = [];
+  const seen = new Set<string>();
+  for (const slice of slices) {
+    const parsed = safeJsonParse(slice);
     if (parsed === null) continue;
-    const calls = callsFromParsed(parsed);
-    if (calls.length) return calls;
+    for (const call of callsFromParsed(parsed)) {
+      const key = `${call.name}:${JSON.stringify(call.args)}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      collected.push({ ...call, id: call.id.startsWith("call_") ? `call_${call.name}_${collected.length}` : call.id });
+    }
   }
+  if (collected.length) return collected;
 
   const start = cleaned.indexOf("{");
   const end = cleaned.lastIndexOf("}");

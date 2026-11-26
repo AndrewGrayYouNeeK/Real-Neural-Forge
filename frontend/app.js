@@ -1331,6 +1331,7 @@ function normalizeAskResult(result, facts) {
       voiceResting: Boolean(result && result.voice_resting),
       voiceMessage: typeof result.voice_message === "string" ? result.voice_message : "",
       toolsUsed,
+      ...agentReplyExtras(result),
     };
   }
   return null;
@@ -1374,7 +1375,42 @@ async function askLive(question, options) {
   return { text: ASK_UNAVAILABLE, failed: true };
 }
 
+// Multi-step asks ("get X, forecast it, chart it, then explain") go straight to
+// the agent so every step runs; the quick local intents only do one thing.
+function isMultiStepAsk(question) {
+  const text = String(question || "");
+  if (/\b(then|and then|after that)\b/i.test(text)) return true;
+  const steps = [
+    /\b(forecast|predict)/i,
+    /\b(chart|graph|plot)\b/i,
+    /\b(csv|spreadsheet|export)\b/i,
+    /\b(explain|why)\b/i,
+    /\b(simulat\w*|what[\s-]if|scenario|cold snap|heat wave)\b/i,
+    /\b(back-?test|accuracy)\b/i,
+    /\b(compar\w*|versus|vs\.?)\b/i,
+    /\b(last|past)\s+\d+\s+(days?|weeks?)\b/i,
+    /\btrain\b/i,
+  ];
+  return steps.filter((pattern) => pattern.test(text)).length >= 2;
+}
+
+function agentReplyExtras(result) {
+  const extras = {};
+  if (result && result.chart && Array.isArray(result.chart.labels) && Array.isArray(result.chart.series)) {
+    extras.chart = result.chart;
+  }
+  const csv = result && result.csv;
+  if (csv && typeof csv.text === "string" && csv.text) {
+    const filename = typeof csv.filename === "string" && csv.filename ? csv.filename : "neural-forge-data.csv";
+    extras.actions = [
+      ["⬇ Download CSV", () => downloadText(csv.text, filename, "text/csv;charset=utf-8")],
+    ];
+  }
+  return extras;
+}
+
 async function answer(question) {
+  if (isMultiStepAsk(question)) return askLive(question);
   const intent = matchIntent(question);
   if (!intent) return askLive(question);
   if (chatMode() !== "unhinged") return intent.handler(question);
