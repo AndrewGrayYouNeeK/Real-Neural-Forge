@@ -1,12 +1,12 @@
-# Real-Neural-Forge
+# Nous
 
-[![CI](https://github.com/AndrewGrayYouNeeK/Real-Neural-Forge/actions/workflows/ci.yml/badge.svg)](https://github.com/AndrewGrayYouNeeK/Real-Neural-Forge/actions/workflows/ci.yml)
-[![Publish image](https://github.com/AndrewGrayYouNeeK/Real-Neural-Forge/actions/workflows/publish.yml/badge.svg)](https://github.com/AndrewGrayYouNeeK/Real-Neural-Forge/actions/workflows/publish.yml)
+[![CI](https://github.com/AndrewGrayYouNeeK/Nous/actions/workflows/ci.yml/badge.svg)](https://github.com/AndrewGrayYouNeeK/Nous/actions/workflows/ci.yml)
+[![Publish image](https://github.com/AndrewGrayYouNeeK/Nous/actions/workflows/publish.yml/badge.svg)](https://github.com/AndrewGrayYouNeeK/Nous/actions/workflows/publish.yml)
 
 A production-ready transformer pipeline for time-series prediction, built with PyTorch, CUDA, and FastAPI. Source of truth is this GitHub repository — no Vercel, no vendor-hosted backend.
 
-**GitHub:** <https://github.com/AndrewGrayYouNeeK/Real-Neural-Forge>  
-**Image:** `ghcr.io/andrewgrayyouneek/real-neural-forge`
+**GitHub:** <https://github.com/AndrewGrayYouNeeK/Nous>  
+**Image:** `ghcr.io/andrewgrayyouneek/nous`
 
 ## Features
 
@@ -16,7 +16,7 @@ A production-ready transformer pipeline for time-series prediction, built with P
 - **Forecast dashboard** – recent history, the next forecast (with a p10–p90 band when the API provides one), past predictions against actuals, and experiment metrics, served at `/`
 - **SQLite experiment store** – local persistence for training runs and metrics
 - **Modular Python package** – models, data, training, evaluation, inference, and storage layers
-- **Docker & GitHub Container Registry** – `docker compose up --build` locally, or pull `ghcr.io/andrewgrayyouneek/real-neural-forge`
+- **Docker & GitHub Container Registry** – `docker compose up --build` locally, or pull `ghcr.io/andrewgrayyouneek/nous`
 - **Configurable via YAML** – all hyper-parameters in `config/config.yaml`
 - **GQ voice read-aloud** – Andrew's ElevenLabs voice clone reads forecasts and results aloud; text stays free and audio is metered per account. Credit-pack checkout is in test mode and will not charge a real card.
 
@@ -78,16 +78,16 @@ A production-ready transformer pipeline for time-series prediction, built with P
 ### Clone from GitHub
 
 ```bash
-git clone https://github.com/AndrewGrayYouNeeK/Real-Neural-Forge.git
-cd Real-Neural-Forge
+git clone https://github.com/AndrewGrayYouNeeK/Nous.git
+cd Nous
 ```
 
 ### GitHub Container Registry (recommended)
 
-After CI succeeds on `main`, the [Publish image](https://github.com/AndrewGrayYouNeeK/Real-Neural-Forge/actions/workflows/publish.yml) workflow pushes `:latest`, `sha-<sha>`, and `main-<sha>` (the first 7 characters of that commit):
+After CI succeeds on `main`, the [Publish image](https://github.com/AndrewGrayYouNeeK/Nous/actions/workflows/publish.yml) workflow pushes `:latest`, `sha-<sha>`, and `main-<sha>` (the first 7 characters of that commit):
 
 ```bash
-docker pull ghcr.io/andrewgrayyouneek/real-neural-forge:latest
+docker pull ghcr.io/andrewgrayyouneek/nous:latest
 docker compose -f docker-compose.ghcr.yml up
 ```
 
@@ -630,9 +630,9 @@ GitHub is the home for this project:
 
 | Surface | Where |
 | --- | --- |
-| Source, issues, pull requests | [github.com/AndrewGrayYouNeeK/Real-Neural-Forge](https://github.com/AndrewGrayYouNeeK/Real-Neural-Forge) |
-| CI (test, lint, typecheck, Docker build) | [GitHub Actions CI](https://github.com/AndrewGrayYouNeeK/Real-Neural-Forge/actions/workflows/ci.yml) |
-| Published image | `ghcr.io/andrewgrayyouneek/real-neural-forge` |
+| Source, issues, pull requests | [github.com/AndrewGrayYouNeeK/Nous](https://github.com/AndrewGrayYouNeeK/Nous) |
+| CI (test, lint, typecheck, Docker build) | [GitHub Actions CI](https://github.com/AndrewGrayYouNeeK/Nous/actions/workflows/ci.yml) |
+| Published image | `ghcr.io/andrewgrayyouneek/nous` |
 | Run the published image | `docker compose -f docker-compose.ghcr.yml up` |
 | Cloudflare Workers | `real-neural-forge` and `real-neural-forge-frontend` |
 
@@ -660,10 +660,10 @@ The release is anchored by a git tag named `champions`. That tag is not a softwa
 Public URLs, after the first successful run:
 
 ```text
-https://github.com/AndrewGrayYouNeeK/Real-Neural-Forge/releases/download/champions/forecast-default.json
-https://github.com/AndrewGrayYouNeeK/Real-Neural-Forge/releases/download/champions/forecasts-index.json
-https://github.com/AndrewGrayYouNeeK/Real-Neural-Forge/releases/download/champions/champion-default.pt
-https://github.com/AndrewGrayYouNeeK/Real-Neural-Forge/releases/download/champions/metrics-history.json
+https://github.com/AndrewGrayYouNeeK/Nous/releases/download/champions/forecast-default.json
+https://github.com/AndrewGrayYouNeeK/Nous/releases/download/champions/forecasts-index.json
+https://github.com/AndrewGrayYouNeeK/Nous/releases/download/champions/champion-default.pt
+https://github.com/AndrewGrayYouNeeK/Nous/releases/download/champions/metrics-history.json
 ```
 
 Replace `default` with the dataset id. The same JSON is uploaded as the `latest-forecasts` workflow artifact (kept 90 days). A private repository needs a token with contents read to download the release.
@@ -701,14 +701,14 @@ To serve a dataset other than `default`, change `vars.NEURAL_FORGE_CONFIG` and `
 
 ### Redeploy
 
-Wait until [Publish image](https://github.com/AndrewGrayYouNeeK/Real-Neural-Forge/actions/workflows/publish.yml) succeeds for the commit you want. On a push to `main` it pushes three GHCR tags for that commit: `:latest`, `sha-<sha>`, and `main-<sha>`. `<sha>` is the first 7 characters of the commit. Tagged releases and manual runs push the same commit tags.
+Wait until [Publish image](https://github.com/AndrewGrayYouNeeK/Nous/actions/workflows/publish.yml) succeeds for the commit you want. On a push to `main` it pushes three GHCR tags for that commit: `:latest`, `sha-<sha>`, and `main-<sha>`. `<sha>` is the first 7 characters of the commit. Tagged releases and manual runs push the same commit tags.
 
 Copy that image into Cloudflare's registry and point the Worker at the new tag. From a machine that can pull GHCR and is logged into the same Cloudflare account:
 
 ```bash
 SHA=b49247b
-docker pull ghcr.io/andrewgrayyouneek/real-neural-forge:main-$SHA
-docker tag ghcr.io/andrewgrayyouneek/real-neural-forge:main-$SHA real-neural-forge:main-$SHA
+docker pull ghcr.io/andrewgrayyouneek/nous:main-$SHA
+docker tag ghcr.io/andrewgrayyouneek/nous:main-$SHA real-neural-forge:main-$SHA
 cd deploy/cloudflare
 npm install
 npx wrangler login
@@ -821,7 +821,7 @@ fly auth login
 fly launch --copy-config --ha=false --yes --no-deploy \
   && fly secrets set \
        NEURAL_FORGE_API_TOKEN="replace-with-a-long-random-string" \
-       NEURAL_FORGE_CHECKPOINT_URL="https://github.com/AndrewGrayYouNeeK/Real-Neural-Forge/releases/download/champions/champion-default.pt" \
+       NEURAL_FORGE_CHECKPOINT_URL="https://github.com/AndrewGrayYouNeeK/Nous/releases/download/champions/champion-default.pt" \
        NEURAL_FORGE_CHECKPOINT_TOKEN="github-token-or-omit-this-line-when-the-release-is-public" \
   && fly deploy --ha=false
 ```

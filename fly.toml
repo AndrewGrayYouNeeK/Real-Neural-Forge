@@ -4,7 +4,7 @@ app = "real-neural-forge"
 primary_region = "iad"
 
 [build]
-  image = "ghcr.io/andrewgrayyouneek/real-neural-forge:latest"
+  image = "ghcr.io/andrewgrayyouneek/nous:latest"
 
 [http_service]
   internal_port = 8000

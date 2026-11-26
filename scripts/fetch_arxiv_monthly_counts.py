@@ -26,7 +26,7 @@ from src.utils.paths import resolve_repo_path
 
 USER_AGENT = (
     "Nous/1.0 "
-    "(monthly category counts; https://github.com/AndrewGrayYouNeeK/Real-Neural-Forge)"
+    "(monthly category counts; https://github.com/AndrewGrayYouNeeK/Nous)"
 )
 _TOTAL = re.compile(r"<opensearch:totalResults>(\d+)</opensearch:totalResults>")
 DEFAULT_CATEGORIES = ("cs.AI", "cs.LG", "cs.CL", "quant-ph")

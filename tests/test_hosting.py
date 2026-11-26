@@ -116,7 +116,7 @@ def test_voice_migration_matches_the_schema():
 
 
 def test_fly_and_render_use_the_published_image_and_no_baked_secrets():
-    image = "ghcr.io/andrewgrayyouneek/real-neural-forge:latest"
+    image = "ghcr.io/andrewgrayyouneek/nous:latest"
     fly = (ROOT / "fly.toml").read_text(encoding="utf-8")
     render = (ROOT / "render.yaml").read_text(encoding="utf-8")
     assert image in fly

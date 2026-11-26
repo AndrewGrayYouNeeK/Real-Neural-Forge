@@ -1,4 +1,4 @@
-# Real-Neural-Forge
+# Nous
 
 A transformer pipeline for time-series prediction (PyTorch + FastAPI). See `README.md`
 for the full product overview, config reference, and API documentation.

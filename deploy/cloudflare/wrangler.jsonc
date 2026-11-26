@@ -81,7 +81,7 @@
   },
   "vars": {
     "NEURAL_FORGE_CONFIG": "config/config.yaml",
-    "NEURAL_FORGE_CHECKPOINT_URL": "https://github.com/AndrewGrayYouNeeK/Real-Neural-Forge/releases/download/champions/champion-default.pt",
+    "NEURAL_FORGE_CHECKPOINT_URL": "https://github.com/AndrewGrayYouNeeK/Nous/releases/download/champions/champion-default.pt",
     "NEURAL_FORGE_STORAGE": "cloudflare",
     "NEURAL_FORGE_BINDINGS_URL": "http://bindings.neuralforge",
     "NEURAL_FORGE_PUBLIC_URL": "https://nous.youneek.dev",
