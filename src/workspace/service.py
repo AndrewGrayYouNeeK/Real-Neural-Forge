@@ -257,14 +257,16 @@ def _issue_session(store: WorkspaceStore, user_id: str) -> str:
     return token
 
 
-def signup(email: str, password: str) -> tuple[Actor, str]:
+def signup(
+    email: str, password: str, setup_token: str | None = None
+) -> tuple[Actor, str]:
     store = require_store()
     cleaned = _normalize_email(email)
     problem = validate_password(password, cleaned)
     if problem:
         raise WorkspaceError(422, problem)
     if cleaned == owner_email():
-        return _claim_owner(store, cleaned, password)
+        return _claim_owner(store, cleaned, password, setup_token)
     user_id = new_id("usr_")
     try:
         store.create_user(user_id, cleaned, hash_password(password))
@@ -280,12 +282,19 @@ def signup(email: str, password: str) -> tuple[Actor, str]:
     return Actor(user_id=user_id, email=cleaned, role="member", via="session"), token
 
 
-def _claim_owner(store: WorkspaceStore, email: str, password: str) -> tuple[Actor, str]:
-    """One-time owner claim: sets the owner password while it is still unset.
+def _claim_owner(
+    store: WorkspaceStore, email: str, password: str, setup_token: str | None
+) -> tuple[Actor, str]:
+    """One-time owner claim through a one-time setup link.
 
-    The new session has no second factor yet, so owner powers stay locked until
-    a passkey or authenticator app is enrolled and verified.
+    Needs a valid, unused setup token (only its sha256 is stored) and an owner
+    row without a password. The new session has no second factor yet, so owner
+    powers stay locked until a passkey or authenticator app is enrolled.
     """
+    if not setup_token or store.owner_claimed():
+        raise WorkspaceError(409, "An account with that email already exists.")
+    if not store.consume_owner_setup(_token_hash(setup_token), utc_now()):
+        raise WorkspaceError(409, "An account with that email already exists.")
     store.ensure_owner(email)
     if not store.claim_owner(email, hash_password(password)):
         raise WorkspaceError(409, "An account with that email already exists.")

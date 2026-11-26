@@ -206,6 +206,26 @@ class WorkspaceStore:
         )
         return bool(rows) and rows[0].get("password_hash") == password_hash
 
+    def consume_owner_setup(self, token_hash: str, now: str) -> bool:
+        """Mark a one-time owner setup token used. True only the first time."""
+        self.sql.query(
+            """
+            UPDATE owner_setup SET used_at = ?
+            WHERE token_hash = ? AND used_at IS NULL AND expires_at > ?
+            """,
+            (now, token_hash, now),
+        )
+        rows = self.sql.query(
+            "SELECT used_at FROM owner_setup WHERE token_hash = ?", (token_hash,)
+        )
+        return bool(rows) and rows[0].get("used_at") == now
+
+    def add_owner_setup(self, token_hash: str, expires_at: str) -> None:
+        self.sql.query(
+            "INSERT INTO owner_setup (token_hash, expires_at, used_at) VALUES (?, ?, NULL)",
+            (token_hash, expires_at),
+        )
+
     def owner_claimed(self) -> bool:
         rows = self.sql.query("SELECT password_hash FROM users WHERE id = 'owner'", ())
         return bool(rows) and bool(rows[0].get("password_hash"))

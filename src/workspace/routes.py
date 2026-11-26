@@ -52,6 +52,7 @@ T = TypeVar("T")
 class SignupRequest(BaseModel):
     email: str
     password: str = Field(min_length=1)
+    setup_token: str | None = Field(default=None, max_length=200)
 
 
 class ConfigUpdate(BaseModel):
@@ -116,7 +117,7 @@ def auth_signup(
     body: SignupRequest, request: Request, response: Response
 ) -> dict[str, str]:
     try:
-        actor, token = signup(body.email, body.password)
+        actor, token = signup(body.email, body.password, body.setup_token)
     except WorkspaceError as exc:
         _raise(exc)
     apply_session_cookie(response, request, token)
