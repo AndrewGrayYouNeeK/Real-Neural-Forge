@@ -162,7 +162,7 @@
       name: "Simulator",
       icon: "⟳",
       description: "Learned world model: roll scenarios forward step by step.",
-      status: "in-progress",
+      status: "live",
       view: "simulator",
     },
   ];
@@ -310,7 +310,7 @@
     {
       id: "phase-5",
       title: "Phase 5 — World Model / Simulator",
-      status: "in-progress",
+      status: "live",
       items: [
         {
           name: "World model simulator",

@@ -940,7 +940,7 @@ class TestForecastDashboard:
         assert 'status: "live"' in phase4
         assert 'id: "phase-5"' in tools_js
         phase5 = tools_js.split('id: "phase-5"', 1)[1][:200]
-        assert 'status: "in-progress"' in phase5 or 'status: "live"' in phase5
+        assert 'status: "live"' in phase5
         assert 'view: "simulator"' in tools_js
         assert 'id: "why"' in tools_js
         why_tool = tools_js.split('id: "why"', 1)[1][:180]
