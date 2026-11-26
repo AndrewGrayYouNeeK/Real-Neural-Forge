@@ -864,6 +864,88 @@
             <p id="scenario-empty" class="hint" hidden>No saved scenarios yet.</p>
           </section>
 
+          <section class="tool-view" id="view-simulator" data-tool-view="simulator" hidden>
+            <header class="tool-view-head">
+              <h2>World model simulator</h2>
+              <button type="button" class="btn secondary back-to-chat" data-view="chat">Back to chat</button>
+            </header>
+            <p class="hint">
+              A small learned world model of one series: a PCA latent state, learned
+              dynamics, and K-Means regimes (weather also gets its yearly cycle). It rolls
+              128 futures forward and compares your scenarios to the baseline, using the
+              same random draws so the gap comes from your events, not luck. Every run
+              shows an honest backtest against “tomorrow looks like today.”
+            </p>
+            <form id="sim-form" class="side-panel-body sim-form">
+              <label for="sim-series">Series</label>
+              <select id="sim-series" name="series">
+                <option value="weather">Central Park high (°F)</option>
+                <option value="lunar">Moon illumination</option>
+                <option value="near-earth">Near-Earth approaches</option>
+                <option value="stocks">AAPL daily return</option>
+                <option value="crypto">Bitcoin daily return</option>
+                <option value="custom">My numbers</option>
+              </select>
+              <div id="sim-custom" class="sim-custom" hidden>
+                <label for="sim-values">Your numbers (24 or more, oldest first)</label>
+                <textarea id="sim-values" name="values" rows="3" placeholder="61, 63, 58, 57, …"></textarea>
+                <label for="sim-unit">Unit (optional)</label>
+                <input id="sim-unit" name="unit" type="text" maxlength="32" placeholder="°F, kWh, $" />
+              </div>
+              <label for="sim-horizon">Steps to roll forward</label>
+              <input id="sim-horizon" name="horizon" type="number" value="14" min="1" max="60" />
+              <fieldset class="sim-scenario">
+                <legend>Scenario A</legend>
+                <input name="nameA" type="text" maxlength="40" value="Cold snap" aria-label="Scenario A name" />
+                <select name="kindA" aria-label="Scenario A event">
+                  <option value="shock">One-off shock</option>
+                  <option value="drift">Sustained drift per step</option>
+                  <option value="volatility">Volatility ×</option>
+                  <option value="set">Force value</option>
+                  <option value="">None</option>
+                </select>
+                <label>Step <input name="stepA" type="number" value="1" min="1" max="60" /></label>
+                <label>Value <input name="valueA" type="number" value="-15" step="any" /></label>
+              </fieldset>
+              <fieldset class="sim-scenario">
+                <legend>Scenario B</legend>
+                <input name="nameB" type="text" maxlength="40" value="Warm drift" aria-label="Scenario B name" />
+                <select name="kindB" aria-label="Scenario B event">
+                  <option value="drift">Sustained drift per step</option>
+                  <option value="shock">One-off shock</option>
+                  <option value="volatility">Volatility ×</option>
+                  <option value="set">Force value</option>
+                  <option value="">None</option>
+                </select>
+                <label>Step <input name="stepB" type="number" value="3" min="1" max="60" /></label>
+                <label>Value <input name="valueB" type="number" value="1" step="any" /></label>
+              </fieldset>
+              <p id="sim-unit-hint" class="hint">Weather values are °F.</p>
+              <button id="sim-run" class="btn primary btn-small" type="submit">Run simulation</button>
+            </form>
+            <p id="sim-status" class="hint" aria-live="polite" hidden></p>
+            <div id="sim-result" hidden>
+              <p id="sim-summary" class="pca-summary"></p>
+              <div id="sim-chart" class="chart-host"></div>
+              <div class="sim-scrub">
+                <button id="sim-play" class="btn secondary btn-small" type="button">▶ Play</button>
+                <label for="sim-step">Step <span id="sim-step-label">1</span></label>
+                <input id="sim-step" type="range" min="1" max="14" value="14" />
+              </div>
+              <ul id="sim-readout" class="side-list sim-readout"></ul>
+              <p id="sim-model" class="hint"></p>
+            </div>
+            <div class="chip-row">
+              <button
+                class="chip"
+                type="button"
+                data-question="Simulate the next 14 days of Central Park highs with a 15°F cold snap on day 1 vs a 1°F-per-day warm drift."
+              >
+                Ask chat: cold snap vs warm drift
+              </button>
+            </div>
+          </section>
+
           <section class="tool-view" id="view-coming-soon" data-tool-view="coming-soon" hidden>
             <header class="tool-view-head">
               <h2 id="coming-soon-title">Coming soon</h2>

@@ -544,6 +544,15 @@ A chart read is about 400 input and 150 output tokens on Gemma 4 (9,091 / 27,273
 
 Image calls also count toward the per-visitor and 25,000/day global neuron caps above, so the ~$5/month ceiling does not change. `NEURAL_FORGE_VISION_MODEL` and `NEURAL_FORGE_VISION_FALLBACK_MODEL` select the model ids.
 
+## World model simulator (Phase 5)
+
+`POST /analysis/simulate` fits a small learned world model to one series and rolls a baseline plus up to 3 scenarios forward.
+Body: `{"starter_id": "weather"}` or `{"values": [24-2000 numbers], "unit": "optional", "dates": ["optional ISO dates"]}`, plus `horizon` (1-60, default 14), `n_paths` (16-256, default 128), `seed`, `display_unit` (`"°F"` for weather), and `scenarios`: `[{"name": "Cold snap", "events": [{"kind": "shock"|"drift"|"volatility"|"set", "step": 1, "value": -15, "mode": "abs"|"pct"}]}]` (up to 4 events each).
+
+The model: windows of the recent past are standardised and projected onto their top principal components (the latent state); a ridge regression learns the next value from that state; K-Means on the latent states finds calm vs volatile regimes, and rollout noise is bootstrapped from the current regime's residuals. Series with 1.5+ years of daily dates also get an annual seasonal baseline (two harmonics). Dynamics are damped until the implied AR process is stable; paths are clipped to the historical range ± 50%, and non-negative series stay non-negative. Baseline and scenarios share the same random draws.
+
+The response has `baseline` (`p10`/`p50`/`p90`/`regime` per step), `scenarios` (same bands plus `delta_p50` vs baseline), `history`, `model` (window, latent size, regimes), `backtest` (rolling-origin holdout vs persistence with 80% coverage), and a plain-English `summary`. Weather with `display_unit: "°F"` returns °F (and reads event values as °F); `storage_unit` stays `°C`. It runs on the container CPU and makes no Workers AI call; chat uses it through the `simulate_world` tool.
+
 ## GQ voice: metered read-aloud
 
 The dashboard can read forecasts and results aloud in **GQ**, Andrew's professional voice clone on ElevenLabs (voice id `QMnwdN2oOwNXPcl9oXIl`). The rules:

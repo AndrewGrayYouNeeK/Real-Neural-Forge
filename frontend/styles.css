@@ -1450,3 +1450,56 @@ select {
     border-radius: 18px;
   }
 }
+
+/* Phase 5 world model simulator */
+.sim-form fieldset.sim-scenario {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 10px;
+  padding: 8px 10px;
+  margin: 6px 0;
+}
+.sim-form fieldset.sim-scenario legend {
+  padding: 0 4px;
+  font-size: 0.85rem;
+  opacity: 0.8;
+}
+.sim-form fieldset.sim-scenario label {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.sim-form fieldset.sim-scenario input[type="number"] {
+  width: 5.5em;
+  background: rgba(255, 255, 255, 0.06);
+  color: inherit;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 6px;
+  padding: 4px 6px;
+}
+.sim-form textarea {
+  width: 100%;
+  box-sizing: border-box;
+}
+.sim-scrub {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin: 8px 0;
+}
+.sim-scrub input[type="range"] {
+  flex: 1;
+  min-width: 0;
+}
+.sim-readout li {
+  font-variant-numeric: tabular-nums;
+}
+@media (max-width: 720px) {
+  .sim-form fieldset.sim-scenario input[type="text"],
+  .sim-form fieldset.sim-scenario select {
+    flex: 1 1 100%;
+  }
+}

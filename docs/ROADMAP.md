@@ -53,6 +53,21 @@ Charts, images, and text in one workflow.
    the owner; every image also counts toward the 25k neuron/day safety cap.
    Landing **Live**.
 
-## Phase 5 — World model / simulator
+## Phase 5 — World model / simulator (in progress)
 
-- Interactive multi-step simulator for rolling scenarios forward
+Interactive multi-step simulator for rolling scenarios forward.
+
+1. **Learned latent world model** — `POST /analysis/simulate` fits a small
+   model to one series on the CPU container: PCA encoder over the recent window
+   (latent state), ridge dynamics, and K-Means regimes that shape the rollout
+   noise. Series with 1.5+ years of daily dates (weather) also get an annual
+   seasonal baseline. Rollouts are damped to stay stable and clipped to a
+   plausible range; counts and fractions stay non-negative.
+2. **Scenarios** — up to 3 scenarios × 4 events: one-off shock, sustained
+   drift per step, volatility multiplier, or forcing a value. Baseline and
+   scenarios share the same random draws, so deltas come from the events.
+3. **Honest backtest** — every run reports a rolling-origin holdout (up to 6
+   origins) against persistence, plus 80% range coverage.
+4. **Where** — Simulator panel (Play / step scrubber), agent tool
+   `simulate_world` (weather in °F), and **Simulate scenarios** on chart-to-series
+   replies. No new Workers AI calls, no D1 migration, no container change.

@@ -881,6 +881,10 @@ class TestForecastDashboard:
         app_js = client.get("/assets/app.js").text
         assert "/agent/vision" in app_js
         assert "handleImageQuestion" in app_js
+        assert 'data-tool-view="simulator"' in html
+        assert 'id="sim-form"' in html
+        assert "/analysis/simulate" in app_js
+        assert "/analysis/simulate" in client.get("/docs").text
         assert 'id="account-btn"' in html
         assert 'id="sign-in-modal"' in html
         assert 'id="owner-modal" hidden' in html
@@ -934,6 +938,10 @@ class TestForecastDashboard:
         assert 'id: "phase-4"' in tools_js
         phase4 = tools_js.split('id: "phase-4"', 1)[1][:200]
         assert 'status: "live"' in phase4
+        assert 'id: "phase-5"' in tools_js
+        phase5 = tools_js.split('id: "phase-5"', 1)[1][:200]
+        assert 'status: "in-progress"' in phase5 or 'status: "live"' in phase5
+        assert 'view: "simulator"' in tools_js
         assert 'id: "why"' in tools_js
         why_tool = tools_js.split('id: "why"', 1)[1][:180]
         assert 'status: "live"' in why_tool
