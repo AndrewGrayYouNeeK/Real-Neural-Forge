@@ -7,6 +7,7 @@ const MAX_VOICE_CHARS = 2000;
 const state = {
   account: null,
   voiceStatus: null,
+  checkoutSession: null,
   training: null,
   experiments: [],
   series: null,
@@ -268,6 +269,8 @@ function rememberVoiceBudget(result) {
 }
 
 async function voicePlaybackAllowed() {
+  // Subscribers pay for their own voice, so the free-tier rest day never blocks them.
+  if (state.voiceStatus && state.voiceStatus.subscribed) return true;
   if (state.voiceResting) return false;
   try {
     rememberVoiceBudget(await fetchJson("/live/budget"));
@@ -318,11 +321,14 @@ async function speakMessage(message, speakButton) {
       return;
     }
     if (response.status === 402) {
-      showHint(
-        message,
-        "You are out of GQ voice credit. Text stays free. Credit packs are listed under Voice & credits; checkout is in test mode and will not charge a real card.",
-        [["Voice & credits", openVoicePanel]]
-      );
+      let detail = "You are out of free GQ voice. Nous Plus includes voice. Text stays free.";
+      try {
+        const data = await response.json();
+        if (typeof data.detail === "string" && data.detail) detail = data.detail;
+      } catch {
+        // Keep the plain message when the body is not JSON.
+      }
+      showHint(message, detail, [["Subscribe", startSubscribe]]);
       return;
     }
     if (!response.ok) {
@@ -1164,7 +1170,7 @@ async function voiceReply() {
     if (!status.signed_in) {
       return {
         text:
-          "Every reply here has a small speaker button. Press it and my GQ voice reads the answer aloud. Reading text is always free; listening spends GQ voice credit, and a free account starts with a small allowance.",
+          "Every reply here has a small speaker button. Press it and my GQ voice reads the answer aloud. Reading text is always free; GQ voice comes with Nous Plus, and a free account starts with a small allowance.",
         actions: [["Sign in", openSignInModal]],
       };
     }
@@ -1174,12 +1180,19 @@ async function voiceReply() {
       };
     }
     const balance = status.balance || {};
+    if (status.subscribed) {
+      return {
+        text:
+          `Nous Plus includes GQ voice. You have ${Number(
+            balance.total || 0
+          ).toLocaleString()} characters left this month. Press any speaker button to listen.`,
+      };
+    }
     return {
       text:
-        `You have ${Number(balance.free || 0).toLocaleString()} free and ${Number(
-          balance.purchased || 0
-        ).toLocaleString()} purchased GQ characters left. ` +
-        "Press any speaker button to listen; packs live under Voice & credits in the Tools sidebar. Checkout is in test mode and will not charge a real card.",
+        `You have ${Number(balance.free || 0).toLocaleString()} free GQ characters left. ` +
+        "Nous Plus includes GQ voice every month, with no packs to buy. Press any speaker button to listen, or subscribe to keep going.",
+      actions: status.checkout_available ? [["Subscribe", startSubscribe]] : [],
     };
   } catch (error) {
     return { text: `I could not check GQ voice right now. ${error.message}` };
@@ -1195,7 +1208,7 @@ function helpReply() {
       "• Moon phase, near-Earth approaches, and the solar system\n" +
       "• Sample models — try the Central Park, AAPL, Bitcoin, near-Earth, or moon illumination starters. No account needed. These are historical samples, not live forecasts\n" +
       "• Training a small model on your CSV — use the Train on my CSV chip for the one-click flow\n" +
-      "• GQ voice — the speaker button on each reply, once you have an account. Listening uses credits; text stays free. Payments are not live\n" +
+      "• GQ voice — the speaker button on each reply, once you have an account. Voice comes with Nous Plus; text stays free\n" +
       "• General questions — a short AI answer, within a daily free allowance\n\n" +
       "If the AI allowance is used up, I will say so and still help with the live topics and sample models above.",
   };
@@ -1252,7 +1265,7 @@ const INTENTS = [
   },
   {
     name: "voice",
-    test: /\b(gq( voice)?|voice credit|read (it |this |that )?aloud|speaker button|text to speech)\b/i,
+    test: /\b(gq( voice)?|voice credit|nous plus|read (it |this |that )?aloud|speaker button|text to speech)\b/i,
     handler: voiceReply,
   },
   {
@@ -1737,7 +1750,7 @@ async function loadMultimodalAllowance() {
 const TALK_UNSUPPORTED =
   "This browser can't use hands-free speech recognition, so Talk mode stays off. You can still type, and the speaker button reads replies in GQ voice.";
 const TALK_NO_CREDIT =
-  "You are out of GQ voice credit, so Talk mode will keep answering in text. Reading stays free.";
+  "You are out of GQ voice for now, so Talk mode will keep answering in text. Nous Plus includes voice; reading stays free.";
 const TALK_MIC_BLOCKED = "The microphone is blocked. Allow it in the browser, or keep typing.";
 const TALK_SIGN_IN =
   "GQ voice needs a free account, so Talk mode will keep answering in text. Tap Account to sign in; reading stays free.";
@@ -2225,7 +2238,11 @@ async function speakTalkTurn(text) {
     talk.voiceOff = true;
     if (!talk.toldVoice) {
       talk.toldVoice = true;
-      addReply(response.status === 401 ? TALK_SIGN_IN : TALK_NO_CREDIT);
+      const reply = addReply(response.status === 401 ? TALK_SIGN_IN : TALK_NO_CREDIT);
+      const actions = reply.querySelector(".message-actions");
+      if (actions && response.status === 402) {
+        actions.append(makeButton("Subscribe", startSubscribe));
+      }
     }
     startListening();
     return;
@@ -2362,62 +2379,94 @@ function fillStatGrid(grid, cards) {
   );
 }
 
+function planPriceText(plan) {
+  return `$${Number(plan.price_usd).toFixed(Number(plan.price_usd) % 1 ? 2 : 0)}/month`;
+}
+
+function dateLabel(stamp) {
+  const date = new Date(stamp);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+}
+
 function renderVoicePanel() {
   const status = state.voiceStatus;
   const grid = document.getElementById("voice-status-grid");
-  const packs = document.getElementById("voice-packs");
+  const planBox = document.getElementById("voice-plan");
   const usage = document.getElementById("voice-usage-list");
   const message = document.getElementById("voice-message");
-  packs.replaceChildren();
+  planBox.replaceChildren();
   usage.replaceChildren();
   if (!status) {
     fillStatGrid(grid, [["GQ voice", "checking"]]);
     return;
   }
+  const plan = status.plan || { name: "Nous Plus", price_usd: 9, monthly_chars: 40000 };
+  const sub = status.subscription || null;
   const cards = [["Text on the site", "always free"]];
   if (!status.signed_in) {
     cards.push(["GQ voice", status.voice ? "sign in to listen" : "unavailable"]);
   } else if (status.owner_unlimited) {
     cards.push(["GQ voice", status.voice ? "unlimited (owner)" : "unavailable"]);
   } else {
-    const balance = status.balance || { free: 0, purchased: 0, spent: 0 };
+    const balance = status.balance || { free: 0, purchased: 0, plan: 0, spent: 0 };
+    if (status.subscribed && sub) {
+      cards.push([plan.name, sub.cancel_at_period_end ? "ends soon" : "active"]);
+      cards.push([
+        "Voice left this month",
+        `${Number(balance.plan).toLocaleString()} of ${Number(sub.allowance_total).toLocaleString()}`,
+      ]);
+      cards.push([
+        sub.cancel_at_period_end ? "Ends on" : "Renews on",
+        dateLabel(sub.period_end) || "—",
+      ]);
+    }
     cards.push(["Free GQ left", Number(balance.free).toLocaleString()]);
-    cards.push(["Purchased GQ left", Number(balance.purchased).toLocaleString()]);
-    cards.push(["GQ spent", Number(balance.spent).toLocaleString()]);
+    if (Number(balance.purchased) > 0) {
+      cards.push(["Bonus GQ left", Number(balance.purchased).toLocaleString()]);
+    }
   }
   fillStatGrid(grid, cards);
-  for (const pack of status.packs || []) {
+  if (!status.owner_unlimited) {
     const card = document.createElement("article");
     card.className = "starter-card";
     const title = document.createElement("h3");
-    title.textContent = pack.name;
+    title.textContent = `${plan.name} · ${planPriceText(plan)}`;
     const detail = document.createElement("p");
     detail.className = "hint";
-    detail.textContent = `${Number(pack.chars).toLocaleString()} characters — $${Number(
-      pack.price_usd
-    ).toFixed(2)} one-time`;
-    const buy = document.createElement("button");
-    buy.type = "button";
-    buy.className = "btn primary btn-small";
-    if (!status.checkout_available) {
-      buy.textContent = "Payments are not live";
-      buy.disabled = true;
-    } else if (status.checkout_test_mode) {
-      buy.textContent = status.signed_in
-        ? "Test checkout (no real charge)"
-        : "Sign in for test checkout";
+    const action = document.createElement("button");
+    action.type = "button";
+    action.className = "btn primary btn-small";
+    if (status.subscribed) {
+      detail.textContent =
+        "GQ voice is included. Talk mode and every speaker button just work. " +
+        "Cancel any time.";
+      action.textContent = "Manage subscription";
+      action.disabled = !(sub && sub.can_manage);
+      action.addEventListener("click", manageSubscription);
     } else {
-      buy.textContent = status.signed_in ? "Buy credit pack" : "Sign in to buy";
+      detail.textContent =
+        `Includes GQ voice: ${Number(plan.monthly_chars).toLocaleString()} characters ` +
+        "every month. No packs, no add-ons.";
+      if (!status.signed_in) {
+        action.textContent = "Sign up to subscribe";
+        action.addEventListener("click", openSignInModal);
+      } else if (!status.checkout_available) {
+        action.textContent = "Subscriptions are not live yet";
+        action.disabled = true;
+      } else {
+        action.textContent = `Subscribe · ${planPriceText(plan)}`;
+        action.addEventListener("click", startSubscribe);
+      }
     }
-    buy.addEventListener("click", () => buyVoicePack(pack.id, status.signed_in));
-    card.append(title, detail, buy);
-    packs.append(card);
-  }
-  if (!(status.packs || []).length) {
-    const item = document.createElement("p");
-    item.className = "hint";
-    item.textContent = "No credit packs are configured yet.";
-    packs.append(item);
+    card.append(title, detail, action);
+    if (status.checkout_test_mode && !status.subscribed) {
+      const note = document.createElement("p");
+      note.className = "hint";
+      note.textContent = "Checkout is in test mode and will not charge a real card.";
+      card.append(note);
+    }
+    planBox.append(card);
   }
   for (const row of status.usage || []) {
     const item = document.createElement("li");
@@ -2435,7 +2484,54 @@ function renderVoicePanel() {
   message.textContent = status.message || "";
 }
 
+// Stripe sends the buyer back to /?subscribed=<session id>#voice. Keep the id
+// in memory, clean the address bar, and confirm it once the app is open.
+(function readCheckoutReturn() {
+  const params = new URLSearchParams(window.location.search);
+  const session = params.get("subscribed");
+  if (!session) return;
+  state.checkoutSession = session;
+  params.delete("subscribed");
+  const rest = params.toString();
+  window.history.replaceState(
+    {},
+    "",
+    window.location.pathname + (rest ? `?${rest}` : "") + window.location.hash
+  );
+})();
+
+async function confirmCheckout(sessionId) {
+  const message = document.getElementById("voice-message");
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    try {
+      const status = await fetchJson("/voice/sync", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ session_id: sessionId }),
+      });
+      state.voiceStatus = status;
+      if (status.subscribed) {
+        state.checkoutSession = null;
+        renderVoicePanel();
+        showToolView("voice");
+        message.textContent = "You are subscribed. GQ voice is on.";
+        return true;
+      }
+    } catch (error) {
+      if (error.status === 401) return false;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 2500));
+  }
+  state.checkoutSession = null;
+  return false;
+}
+
 async function refreshVoiceStatus() {
+  if (state.checkoutSession && state.account) {
+    const sessionId = state.checkoutSession;
+    state.checkoutSession = null;
+    if (await confirmCheckout(sessionId)) return;
+  }
   try {
     state.voiceStatus = await fetchJson("/voice/status");
   } catch (error) {
@@ -2445,32 +2541,36 @@ async function refreshVoiceStatus() {
   renderVoicePanel();
 }
 
-async function buyVoicePack(packId, signedIn) {
+async function startSubscribe() {
   const message = document.getElementById("voice-message");
-  if (!signedIn) {
-    message.textContent =
-      "Create a free account first to try GQ credit checkout. Text stays free either way. Payments are not live; checkout is in test mode and will not charge a real card.";
+  if (!state.account) {
     openSignInModal();
     return;
   }
-  const status = state.voiceStatus || {};
-  if (!status.checkout_available) {
-    message.textContent = "Payments are not live yet. Text stays free.";
-    return;
-  }
   try {
-    const result = await fetchJson("/voice/checkout", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ pack_id: packId }),
-    });
+    const result = await fetchJson("/voice/checkout", { method: "POST" });
     if (result && result.available && result.url) {
       window.location.assign(result.url);
       return;
     }
     message.textContent =
-      (result && result.detail) ||
-      "Payments are not live yet. Text stays free.";
+      (result && result.detail) || "Subscriptions are not live yet. Text stays free.";
+  } catch (error) {
+    message.textContent = error.message;
+    if (error.status === 409) refreshVoiceStatus().catch(() => {});
+  }
+  showToolView("voice");
+}
+
+async function manageSubscription() {
+  const message = document.getElementById("voice-message");
+  try {
+    const result = await fetchJson("/voice/portal", { method: "POST" });
+    if (result && result.url) {
+      window.location.assign(result.url);
+      return;
+    }
+    message.textContent = "Subscription management is not available right now.";
   } catch (error) {
     message.textContent = error.message;
   }

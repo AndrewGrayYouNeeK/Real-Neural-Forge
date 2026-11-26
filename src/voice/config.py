@@ -15,6 +15,7 @@ FREE_CHARS_ENV = "NEURAL_FORGE_VOICE_FREE_CHARS"
 MAX_CHARS_ENV = "NEURAL_FORGE_VOICE_MAX_CHARS"
 DAILY_LIMIT_ENV = "NEURAL_FORGE_VOICE_DAILY_LIMIT"
 ENABLED_ENV = "NEURAL_FORGE_VOICE_ENABLED"
+PLAN_CHARS_ENV = "NEURAL_FORGE_VOICE_PLAN_CHARS"
 
 _API_KEY_ENV = "ELEVENLABS_API_KEY"
 _STRIPE_SECRET_ENV = "STRIPE_SECRET_KEY"
@@ -22,32 +23,32 @@ _STRIPE_WEBHOOK_SECRET_ENV = "STRIPE_WEBHOOK_SECRET"
 _PUBLIC_URL_ENV = "NEURAL_FORGE_PUBLIC_URL"
 
 
-# One-time packs. Prices sit well above the ElevenLabs API cost of about
-# $0.08 per 1,000 characters so the account stays comfortably profitable;
-# every value is configurable in config.yaml ``voice:`` or by environment.
+# The one paid plan. GQ voice is included with it: a monthly allowance of
+# characters, with no add-ons to buy. ElevenLabs costs about $0.08 per 1,000
+# characters, so the 40,000-character allowance costs at most about $3.20 a
+# month against a $9.00 subscription (Stripe fees take about $0.56). Replayed
+# clips come from the cache and cost nothing. Every value is configurable in
+# config.yaml ``voice.plan:`` or by environment.
 @dataclass(frozen=True)
-class VoicePack:
-    """A one-time bundle of GQ voice characters."""
+class VoicePlan:
+    """The subscription that includes GQ voice."""
 
-    id: str
-    name: str
-    chars: int
-    price_usd: float
+    id: str = "plus"
+    name: str = "Nous Plus"
+    monthly_chars: int = 40_000
+    price_usd: float = 9.0
 
     def as_dict(self) -> dict[str, Any]:
         return {
             "id": self.id,
             "name": self.name,
-            "chars": self.chars,
+            "monthly_chars": self.monthly_chars,
             "price_usd": self.price_usd,
+            "interval": "month",
         }
 
 
-DEFAULT_PACKS = (
-    VoicePack(id="starter", name="Starter pack", chars=25_000, price_usd=6.0),
-    VoicePack(id="standard", name="Standard pack", chars=100_000, price_usd=18.0),
-    VoicePack(id="studio", name="Studio pack", chars=500_000, price_usd=75.0),
-)
+DEFAULT_PLAN = VoicePlan()
 
 
 @dataclass(frozen=True)
@@ -86,7 +87,7 @@ class VoiceConfig:
     free_chars: int = 5_000
     max_chars_per_request: int = 2_000
     daily_char_limit: int = 300_000
-    packs: tuple[VoicePack, ...] = DEFAULT_PACKS
+    plan: VoicePlan = DEFAULT_PLAN
     settings: VoiceSettings = VoiceSettings()
     apply_text_normalization: str = "on"
 
@@ -96,7 +97,7 @@ class VoiceConfig:
             "free_chars": self.free_chars,
             "max_chars_per_request": self.max_chars_per_request,
             "daily_char_limit": self.daily_char_limit,
-            "packs": [pack.as_dict() for pack in self.packs],
+            "plan": self.plan.as_dict(),
         }
 
 
@@ -253,35 +254,32 @@ def _int_value(name: str, value: Any, minimum: int) -> int:
     return number
 
 
-def _packs(value: Any) -> tuple[VoicePack, ...]:
+def _plan(value: Any) -> VoicePlan:
     if value is None:
-        return DEFAULT_PACKS
-    if not isinstance(value, list) or not value:
-        raise ValueError("voice.packs must be a non-empty list.")
-    packs: list[VoicePack] = []
-    seen: set[str] = set()
-    for entry in value:
-        if not isinstance(entry, dict):
-            raise ValueError("voice.packs entries must be mappings.")
-        pack_id = str(entry.get("id", "")).strip()
-        name = str(entry.get("name", "")).strip()
-        chars = entry.get("chars")
-        price = entry.get("price_usd")
-        if not pack_id or not name:
-            raise ValueError("voice.packs entries need id and name.")
-        if pack_id in seen:
-            raise ValueError(f"voice.packs has a duplicate id {pack_id!r}.")
-        seen.add(pack_id)
-        if isinstance(chars, bool) or not isinstance(chars, int) or chars < 1:
-            raise ValueError(
-                f"voice.packs[{pack_id}].chars must be a positive integer."
-            )
-        if isinstance(price, bool) or not isinstance(price, int | float) or price <= 0:
-            raise ValueError(f"voice.packs[{pack_id}].price_usd must be positive.")
-        packs.append(
-            VoicePack(id=pack_id, name=name, chars=chars, price_usd=float(price))
-        )
-    return tuple(packs)
+        return DEFAULT_PLAN
+    if not isinstance(value, dict):
+        raise ValueError("voice.plan must be a mapping.")
+    name = str(value.get("name", DEFAULT_PLAN.name)).strip() or DEFAULT_PLAN.name
+    chars = value.get("monthly_chars", DEFAULT_PLAN.monthly_chars)
+    price = value.get("price_usd", DEFAULT_PLAN.price_usd)
+    if isinstance(chars, bool) or not isinstance(chars, int) or chars < 1:
+        raise ValueError("voice.plan.monthly_chars must be a positive integer.")
+    if isinstance(price, bool) or not isinstance(price, int | float) or price <= 0:
+        raise ValueError("voice.plan.price_usd must be positive.")
+    override = os.environ.get(PLAN_CHARS_ENV, "").strip()
+    if override:
+        try:
+            chars = int(override)
+        except ValueError as exc:
+            raise ValueError(f"{PLAN_CHARS_ENV} must be an integer.") from exc
+        if chars < 1:
+            raise ValueError(f"{PLAN_CHARS_ENV} must be at least 1.")
+    return VoicePlan(
+        id=DEFAULT_PLAN.id,
+        name=name,
+        monthly_chars=chars,
+        price_usd=float(price),
+    )
 
 
 def load_voice_config(config: dict[str, Any] | None = None) -> VoiceConfig:
@@ -311,7 +309,7 @@ def load_voice_config(config: dict[str, Any] | None = None) -> VoiceConfig:
         daily_char_limit=_int_value(
             "daily_char_limit", section.get("daily_char_limit", 300_000), 0
         ),
-        packs=_packs(section.get("packs")),
+        plan=_plan(section.get("plan")),
         settings=VoiceSettings(
             stability=_unit_float("stability", section.get("stability", 0.7)),
             similarity_boost=_unit_float(
@@ -325,10 +323,3 @@ def load_voice_config(config: dict[str, Any] | None = None) -> VoiceConfig:
         ),
         apply_text_normalization=normalization,
     )
-
-
-def pack_by_id(cfg: VoiceConfig, pack_id: str) -> VoicePack | None:
-    for pack in cfg.packs:
-        if pack.id == pack_id:
-            return pack
-    return None

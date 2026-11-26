@@ -491,10 +491,12 @@ YouNeeK Time is **100 units / 100 minutes / 100 seconds** (not App Store 10/10/1
 
 ### GQ voice
 
-- `GET /voice/status` — balance, today's site-wide voice usage, recent usage, and the pack catalogue. Open without a session; it then reports `signed_in: false` with a sign-up prompt.
-- `POST /voice/speak` — `{"text": "..."}` → `audio/mpeg`. `401` signed out, `402` out of credit, `422` empty or too long, `429` daily site cap reached, `502`/`503` voice unavailable. Identical text replays from cache without spending.
-- `POST /voice/checkout` — `{"pack_id": "..."}` → a Stripe Checkout URL, or `{"available": false}` ("coming soon") when Stripe is not configured.
-- `POST /voice/stripe/webhook` — Stripe webhook. The signature is verified before anything is credited, and each checkout session credits exactly once.
+- `GET /voice/status` — balance, the Nous Plus plan and subscription, today's site-wide voice usage, and recent usage. Reports `signed_in: false` with a sign-up prompt without a session.
+- `POST /voice/speak` — `{"text": "..."}` → `audio/mpeg`. `401` signed out, `402` out of voice, `422` empty or too long, `429` daily site cap reached (free tier only), `502`/`503` voice unavailable. Identical text replays from cache without spending.
+- `POST /voice/checkout` — no body → a Stripe Checkout URL for the one Nous Plus subscription, or `{"available": false}` ("coming soon") when Stripe is not configured. `409` when already subscribed.
+- `POST /voice/sync` — `{"session_id": "cs_..."}` → the new status. Confirms the buyer's own completed checkout so voice is on the moment they return.
+- `POST /voice/portal` — a Stripe customer-portal URL to update the card or cancel.
+- `POST /voice/stripe/webhook` — Stripe webhook. The signature is verified first. Handles `checkout.session.completed`, `invoice.paid`, and `customer.subscription.created|updated|deleted`; each billing period's allowance lands exactly once.
 
 ## Chat answers
 
@@ -569,21 +571,13 @@ The dashboard can read forecasts and results aloud in **GQ**, Andrew's professio
 
 - **Text is always free.** Every page, forecast, explanation, and workspace feature works in text with no account and no credit. Voice credit never gates text.
 - **Each account gets a free GQ allowance** — 5,000 characters, granted once, the first time the account opens the Voice & credits page or listens.
-- **After that, credit is bought.** One-time packs, priced to sit well above the ElevenLabs API cost of about **$0.08 per 1,000 characters**:
-
-| Pack | Characters | Price |
-| --- | --- | --- |
-| Starter | 25,000 | $6.00 |
-| Standard | 100,000 | $18.00 |
-| Studio | 500,000 | $75.00 |
-
-  The catalogue is configurable under `voice:` in `config/config.yaml` (ids, characters, prices); the numeric caps are configurable by environment.
-- **Metering is server-side.** `POST /voice/speak` checks the account balance before calling ElevenLabs, deducts the exact character count (free credit first, then purchased), and returns `402` when the balance is short. A request longer than `max_chars_per_request` (2,000 characters) is rejected with `422`.
+- **Voice comes with the subscription.** **Nous Plus** is **$9.00 a month** and includes **40,000 characters** of GQ every month (about 45 minutes of audio). There are no voice packs or add-ons to buy: one Subscribe button opens one Stripe Checkout, and voice works as soon as the buyer is back. The allowance resets each billing period and does not roll over. At about **$0.08 per 1,000 characters** from ElevenLabs the allowance costs at most about $3.20 a month, and cached replays cost nothing. The plan is configurable under `voice.plan` in `config/config.yaml` (name, price, `monthly_chars`; `NEURAL_FORGE_VOICE_PLAN_CHARS` overrides the allowance).
+- **Metering is server-side.** `POST /voice/speak` checks the account balance before calling ElevenLabs, deducts the exact character count (the monthly plan allowance first, then the free allowance), and returns `402` when the balance is short. A request longer than `max_chars_per_request` (2,000 characters) is rejected with `422`.
 - **Identical text is free to replay.** Audio is cached by a hash of voice id + text, so the same paragraph never spends credit twice.
-- **A global daily safety cap** (`daily_char_limit`, default 300,000 characters ≈ $24/day of ElevenLabs spend) stops the site-wide bill from running away; further member requests get `429` until the UTC day rolls over.
+- **A global daily safety cap** (`daily_char_limit`, default 300,000 characters ≈ $24/day of ElevenLabs spend) stops the free tier's bill from running away; further free requests get `429` until the UTC day rolls over. Subscribers are bounded by their own paid allowance instead.
 - **Signed-out visitors get no GQ.** `POST /voice/speak` returns `401` with a prompt to create a free account. Text stays open either way.
 - **The owner account is unlimited.** The API-token owner skips the allowance, balance, and daily-cap checks. The per-request length cap still applies, because it is an ElevenLabs API limit, not a billing rule.
-- **Payments degrade gracefully.** Without `STRIPE_SECRET_KEY` the buy buttons show "coming soon"; without `ELEVENLABS_API_KEY` the listen buttons say voice is unavailable. Neither affects text.
+- **Payments degrade gracefully.** Without `STRIPE_SECRET_KEY` the Subscribe button shows "coming soon"; without `ELEVENLABS_API_KEY` the listen buttons say voice is unavailable. Neither affects text.
 
 ### Secrets and setup
 
@@ -592,7 +586,7 @@ Secrets come only from the environment — never from git:
 | Secret | Purpose |
 | --- | --- |
 | `ELEVENLABS_API_KEY` | Calls ElevenLabs text-to-speech. Voice is unavailable (text unaffected) while it is unset. |
-| `STRIPE_SECRET_KEY` | Creates Checkout sessions. Buy buttons show "coming soon" while it is unset. |
+| `STRIPE_SECRET_KEY` | Creates the subscription Checkout session. The Subscribe button shows "coming soon" while it is unset. |
 | `STRIPE_WEBHOOK_SECRET` | Verifies the Stripe webhook signature. The webhook returns `503` while it is unset. |
 
 On Cloudflare, from `deploy/cloudflare/`:
@@ -614,11 +608,11 @@ minutes); secrets never reach an already-running instance.
 
 In the Stripe dashboard:
 
-1. **Developers → Webhooks → Add endpoint**: URL `https://forge.youneek.xyz/voice/stripe/webhook`, event `checkout.session.completed`.
+1. **Developers → Webhooks → Add endpoint**: URL `https://nous.youneek.xyz/voice/stripe/webhook`, events `checkout.session.completed`, `invoice.paid`, `customer.subscription.created`, `customer.subscription.updated`, and `customer.subscription.deleted`. (Voice still turns on after checkout through `/voice/sync` and renews through a lazy Stripe lookup if an event is missed.)
 2. Copy the endpoint's **Signing secret** and store it with `npx wrangler secret put STRIPE_WEBHOOK_SECRET`, then let the container restart so the secret is picked up.
-3. Buy one pack with a test account and check the Voice & credits page shows the credited characters.
+3. Subscribe with a test account and check the Voice page shows Nous Plus active with the monthly allowance. Turn on the **customer portal** (Settings → Billing → Customer portal) so Manage subscription can update cards and cancel.
 
-The voice tables ship as D1 migration `deploy/cloudflare/migrations/0002_voice.sql`; `npx wrangler d1 migrations apply neural-forge-workspaces --remote` applies it. Locally, `prepare_workspace` creates the same tables at startup.
+The voice tables ship as D1 migrations `0002_voice.sql` and `0014_voice_plan.sql` (the subscription tables); `npx wrangler d1 migrations apply neural-forge-workspaces --remote` applies them. Locally, `prepare_workspace` creates the same tables at startup.
 
 | Voice variable | Default |
 | --- | --- |
@@ -630,6 +624,7 @@ The voice tables ship as D1 migration `deploy/cloudflare/migrations/0002_voice.s
 | `NEURAL_FORGE_VOICE_FREE_CHARS` | `5000` |
 | `NEURAL_FORGE_VOICE_MAX_CHARS` | `2000` |
 | `NEURAL_FORGE_VOICE_DAILY_LIMIT` | `300000` |
+| `NEURAL_FORGE_VOICE_PLAN_CHARS` | `40000` (Nous Plus monthly allowance) |
 | `NEURAL_FORGE_PUBLIC_URL` | derived from the request host; base for the Checkout success/cancel return URLs |
 
 Cached audio lives beside workspace bytes (`voice/cache/<sha256>.mp3` in R2, files under the workspace directory locally), so the cache needs no extra storage service. The $5/month Cloudflare plan is untouched: no new Workers, routes, or bindings, and the cache reduces ElevenLabs spend.
@@ -753,8 +748,8 @@ npx wrangler secret put NEURAL_FORGE_CHECKPOINT_TOKEN
 | `NEURAL_FORGE_CHECKPOINT_PATH` | No | Where the file is saved. Default is `inference.checkpoint_path`. |
 | `NEURAL_FORGE_CHECKPOINT_MAX_BYTES` | No | Download cap. Default 256 MiB. |
 | `ELEVENLABS_API_KEY` | For GQ voice | ElevenLabs text-to-speech key. Voice is unavailable (text unaffected) while unset. See [GQ voice](#gq-voice-metered-read-aloud). |
-| `STRIPE_SECRET_KEY` | For GQ voice sales | Creates one-time Checkout sessions. Buy buttons show "coming soon" while unset. |
-| `STRIPE_WEBHOOK_SECRET` | For GQ voice sales | Verifies the Stripe webhook that credits purchased voice packs. |
+| `STRIPE_SECRET_KEY` | For GQ voice sales | Creates the Nous Plus subscription Checkout session. The Subscribe button shows "coming soon" while unset. |
+| `STRIPE_WEBHOOK_SECRET` | For GQ voice sales | Verifies the Stripe webhook that keeps Nous Plus subscriptions current. |
 | `FORGE_VOICE_ID` | No | Overrides the GQ voice id. A Worker secret with the pre-`NEURAL_FORGE_` name; the Worker forwards it into the container as `NEURAL_FORGE_VOICE_ID` (`deploy/cloudflare/src/containerEnv.ts`). Omit it to use the built-in voice. |
 
 The container needs outbound internet so it can download the champion. D1 and R2 calls stay inside the Worker: the container requests `http://bindings.neuralforge`, and `outboundByHost` serves those paths with the bindings.

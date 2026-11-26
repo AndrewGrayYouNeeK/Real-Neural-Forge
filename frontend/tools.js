@@ -65,7 +65,7 @@
       id: "talk",
       name: "Talk (GQ voice)",
       icon: "♫",
-      description: "Hands-free Talk mode and GQ voice credits.",
+      description: "Hands-free Talk mode in GQ voice, included with Nous Plus.",
       status: "live",
       view: "voice",
     },

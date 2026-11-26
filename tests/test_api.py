@@ -855,7 +855,8 @@ class TestForecastDashboard:
         assert "Try it free" in html
         assert 'id="hero-signup-btn"' in html
         assert "Text chat is free" in html
-        assert "Voice credits are sold on this website" in html
+        assert "Nous Plus" in html
+        assert "voice credit" not in html.lower()
         assert 'id="capabilities"' in html
         assert "What Nous can do" in html
         assert "Forecast any number series" in html
@@ -878,9 +879,9 @@ class TestForecastDashboard:
         assert "Moon phase" in html
         assert "Train on my CSV" in html
         assert 'id="pricing"' in html
-        assert "What's free, and what uses credits" in html
-        assert "Payments are not live." in html
-        assert "will not charge a real" in html
+        assert "What's free, and what's in Nous Plus" in html
+        assert "$9 a month" in html
+        assert "no packs or add-ons" in html.lower()
         assert 'id="tools-roadmap"' in html
         assert "Tools &amp; Roadmap" in html or "Tools & Roadmap" in html
         assert 'id="tools-roadmap-list"' in html
@@ -1144,7 +1145,7 @@ class TestLunarEndpoints:
         assert "Daily limit reached, back tomorrow." in html
         assert '"mode":"unhinged"' in html
         assert "/openapi.json" in html
-        assert "Payments are not live" in html
+        assert "Nous Plus subscription" in html
         assert "lottery" not in html.lower()
         schema = client.get("/openapi.json")
         assert schema.status_code == 200

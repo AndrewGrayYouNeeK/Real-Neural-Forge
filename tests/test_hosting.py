@@ -115,6 +115,14 @@ def test_voice_migration_matches_the_schema():
     assert schema == migration
 
 
+def test_voice_plan_migration_matches_the_schema():
+    schema = (ROOT / "src" / "voice" / "plan_schema.sql").read_text(encoding="utf-8")
+    migration = (
+        ROOT / "deploy" / "cloudflare" / "migrations" / "0014_voice_plan.sql"
+    ).read_text(encoding="utf-8")
+    assert schema == migration
+
+
 def test_fly_and_render_use_the_published_image_and_no_baked_secrets():
     image = "ghcr.io/andrewgrayyouneek/nous:latest"
     fly = (ROOT / "fly.toml").read_text(encoding="utf-8")
