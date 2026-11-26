@@ -9,6 +9,7 @@ from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 
 from src.analysis.alerts import evaluate_alert
+from src.analysis.jepa_world import JepaBusyError
 from src.analysis.kmeans import cluster_csv_bytes, cluster_matrix
 from src.analysis.pca import analyze_csv_bytes, analyze_matrix
 from src.analysis.report import build_starter_report
@@ -110,6 +111,7 @@ class SimulateRequest(BaseModel):
     n_paths: int = Field(default=128, ge=16, le=256)
     seed: int = Field(default=0, ge=0, le=1_000_000)
     scenarios: list[SimScenario] = Field(default_factory=list, max_length=3)
+    encoder: Literal["pca", "jepa", "auto"] = "pca"
 
 
 @router.post("/analysis/pca")
@@ -273,6 +275,8 @@ def run_simulation(body: SimulateRequest) -> dict[str, Any]:
     Pass ``starter_id`` for a shipped sample, or ``values`` (24-2000 numbers)
     for your own series. Weather samples are stored in °C; send
     ``display_unit: "°F"`` to get every number (and give event values) in °F.
+    ``encoder`` is ``pca`` (default), ``jepa`` (adds self-supervised JEPA
+    features), or ``auto`` (backtests both and uses the winner).
     """
     scenarios = [scenario.model_dump() for scenario in body.scenarios]
     if body.starter_id:
@@ -284,6 +288,7 @@ def run_simulation(body: SimulateRequest) -> dict[str, Any]:
                 scenarios=scenarios,
                 seed=body.seed,
                 display_unit=body.display_unit,
+                encoder=body.encoder,
             )
         except WorkspaceError as exc:
             raise HTTPException(status_code=exc.status, detail=exc.detail) from exc
@@ -300,7 +305,10 @@ def run_simulation(body: SimulateRequest) -> dict[str, Any]:
             seed=body.seed,
             unit=body.unit,
             dates=body.dates,
+            encoder=body.encoder,
         )
+    except JepaBusyError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     result["series"] = "custom"

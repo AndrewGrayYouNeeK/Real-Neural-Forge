@@ -165,6 +165,14 @@
       status: "live",
       view: "simulator",
     },
+    {
+      id: "world-encoder",
+      name: "JEPA world model",
+      icon: "✺",
+      description: "Self-supervised encoder vs PCA, backtested on your series.",
+      status: "live",
+      view: "world-encoder",
+    },
   ];
 
   /** Landing-page phases. Update status/items here; sidebar uses TOOL_REGISTRY. */
@@ -321,6 +329,11 @@
           name: "Scenario events",
           description: "Shocks, drifts, volatility, or forced values, compared to the baseline.",
           toolId: "simulator",
+        },
+        {
+          name: "Self-supervised world model (JEPA)",
+          description: "Nous learns its own latent state, then keeps it only if the backtest says it helps.",
+          toolId: "world-encoder",
         },
       ],
     },

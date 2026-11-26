@@ -34,11 +34,14 @@ import numpy as np
 import pandas as pd
 from sklearn.cluster import KMeans
 
+from src.analysis.jepa_world import JepaBusyError, JepaEncoder, train_jepa_encoder
 from src.workspace.errors import WorkspaceError
 from src.workspace.starter_forecast import STARTER_UNITS
 from src.workspace.starters import starter_by_id
 
 EventKind = Literal["shock", "drift", "volatility", "set"]
+EncoderKind = Literal["pca", "jepa", "auto"]
+ENCODERS = ("pca", "jepa", "auto")
 
 MIN_POINTS = 24
 MAX_POINTS = 2000
@@ -74,14 +77,27 @@ class _Fitted:
     low: float
     high: float
     floor: float | None = None
+    jepa: JepaEncoder | None = None
+
+    @property
+    def pca_dim(self) -> int:
+        return int(self.components.shape[0])
 
     @property
     def latent_dim(self) -> int:
-        return int(self.components.shape[0])
+        extra = self.jepa.latent_dim if self.jepa is not None else 0
+        return self.pca_dim + extra
+
+    @property
+    def encoder(self) -> str:
+        return "jepa" if self.jepa is not None else "pca"
 
     def encode(self, windows: np.ndarray) -> np.ndarray:
         scaled = (windows - self.mean) / self.std
-        return np.asarray(scaled @ self.components.T)
+        latent = np.asarray(scaled @ self.components.T)
+        if self.jepa is None:
+            return latent
+        return np.hstack([latent, self.jepa.encode(scaled)])
 
     def step(self, windows: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
         """Return (next mean value, regime id) for a batch of windows."""
@@ -107,7 +123,8 @@ def _make_windows(values: np.ndarray, window: int) -> tuple[np.ndarray, np.ndarr
 
 def _ar_coefficients(fitted: _Fitted, damping: float) -> np.ndarray:
     """Effective AR(window) coefficients on raw values (oldest first)."""
-    return np.asarray((fitted.components.T @ fitted.weights) / fitted.std * damping)
+    linear = fitted.weights[: fitted.pca_dim]
+    return np.asarray((fitted.components.T @ linear) / fitted.std * damping)
 
 
 def _spectral_radius(coeffs: np.ndarray) -> float:
@@ -139,9 +156,17 @@ def _regime_names(noise: list[float], levels: list[float]) -> list[str]:
 
 
 def fit_world_model(
-    values: np.ndarray, *, seed: int = 0, floor: float | None = None
+    values: np.ndarray,
+    *,
+    seed: int = 0,
+    floor: float | None = None,
+    encoder: str = "pca",
 ) -> _Fitted:
-    """Fit encoder, dynamics, and regime noise on a 1-D series."""
+    """Fit encoder, dynamics, and regime noise on a 1-D series.
+
+    ``encoder="jepa"`` adds self-supervised JEPA features (bounded, non-linear)
+    to the PCA state; the ridge dynamics then read both.
+    """
     values = np.asarray(values, dtype=np.float64)
     n = len(values)
     if n < MIN_POINTS:
@@ -160,8 +185,12 @@ def fit_world_model(
     dim = int(min(max(dim, 2), 6, window))
     components = vt[:dim]
     latent = scaled @ components.T
+    jepa: JepaEncoder | None = None
+    if encoder == "jepa":
+        jepa = train_jepa_encoder(scaled, seed=seed)
+        latent = np.hstack([latent, jepa.encode(scaled)])
     design = np.hstack([latent, np.ones((len(latent), 1))])
-    reg = _RIDGE * np.eye(design.shape[1])
+    reg = _RIDGE * (1.0 if jepa is None else 10.0) * np.eye(design.shape[1])
     reg[-1, -1] = 0.0
     coef = np.linalg.solve(design.T @ design + reg, design.T @ ys)
     weights = coef[:-1]
@@ -183,6 +212,7 @@ def fit_world_model(
         low=float(values.min()) - _RANGE_PAD * span,
         high=float(values.max()) + _RANGE_PAD * span,
         floor=floor,
+        jepa=jepa,
     )
     # Keep the rollout stable: shrink the dynamics until the AR companion
     # matrix sits inside the unit circle.
@@ -387,6 +417,7 @@ def _backtest(
     horizon: int,
     n_paths: int,
     seed: int,
+    encoder: str = "pca",
 ) -> dict[str, Any]:
     """Rolling-origin holdout: up to 6 origins, model p50 vs persistence."""
     hold = int(min(horizon, max(3, len(values) // 10), 14))
@@ -402,7 +433,9 @@ def _backtest(
             break
         train_dates = dates[:cut] if dates else None
         hist, clim, _ = _decompose(train, train_dates, hold)
-        fitted = fit_world_model(hist, seed=seed, floor=_floor_for(values))
+        fitted = fit_world_model(
+            hist, seed=seed, floor=_floor_for(values), encoder=encoder
+        )
         rng = np.random.default_rng(seed + 7 + k)
         uniforms = rng.random((n_paths, hold))
         paths, _ = _rollout(
@@ -418,6 +451,7 @@ def _backtest(
     mae_model = float(np.mean(model_err))
     mae_persist = float(np.mean(persist_err))
     return {
+        "encoder": encoder,
         "holdout": hold,
         "origins": origins,
         "mae_model": round(mae_model, 4),
@@ -425,6 +459,66 @@ def _backtest(
         "beats_persistence": bool(mae_model < mae_persist),
         "coverage_80": round(float(np.mean(inside)), 3),
     }
+
+
+_JEPA_MIN_GAIN_PCT = 2.0
+
+
+def _compare(pca_bt: dict[str, Any], jepa_bt: dict[str, Any] | None) -> dict[str, Any]:
+    """Head-to-head holdout numbers for the PCA and JEPA encoders."""
+    out: dict[str, Any] = {
+        "holdout": pca_bt.get("holdout", 0),
+        "origins": pca_bt.get("origins", 0),
+        "mae_persistence": pca_bt.get("mae_persistence"),
+        "pca": {
+            "mae": pca_bt.get("mae_model"),
+            "coverage_80": pca_bt.get("coverage_80"),
+            "beats_persistence": pca_bt.get("beats_persistence"),
+        },
+        "jepa": None,
+        "winner": "pca",
+        "improvement_pct": None,
+        "selection_note": (
+            "JEPA is only used when it beats PCA by at least "
+            f"{_JEPA_MIN_GAIN_PCT:g}% on these holdouts. The pick is made on the "
+            "same holdouts it is scored on, so small gaps are close to a tie."
+        ),
+    }
+    if jepa_bt is None or not jepa_bt.get("holdout") or not pca_bt.get("holdout"):
+        return out
+    out["jepa"] = {
+        "mae": jepa_bt.get("mae_model"),
+        "coverage_80": jepa_bt.get("coverage_80"),
+        "beats_persistence": jepa_bt.get("beats_persistence"),
+    }
+    pca_mae = float(pca_bt["mae_model"])
+    jepa_mae = float(jepa_bt["mae_model"])
+    if pca_mae > 0:
+        gain = (pca_mae - jepa_mae) / pca_mae * 100.0
+        out["improvement_pct"] = round(gain, 1)
+        if gain >= _JEPA_MIN_GAIN_PCT:
+            out["winner"] = "jepa"
+    return out
+
+
+def _comparison_text(comparison: dict[str, Any], unit: str | None) -> str:
+    jepa = comparison.get("jepa")
+    pca = comparison.get("pca") or {}
+    if not jepa:
+        note = comparison.get("note") or "JEPA could not be scored on this series."
+        return f"Encoder check: {note} Used PCA."
+    gain = comparison.get("improvement_pct")
+    chosen = comparison.get("chosen") or comparison.get("winner")
+    winner = "JEPA" if chosen == "jepa" else "PCA"
+    gap = ""
+    if gain is not None:
+        word = "better" if float(gain) > 0 else "worse"
+        gap = f" ({abs(float(gain)):.1f}% {word} for JEPA)"
+    return (
+        f"Encoder check: JEPA MAE {_fmt(float(jepa['mae']), unit)} vs PCA "
+        f"{_fmt(float(pca['mae']), unit)}{gap}; "
+        f"Nous uses {winner} here (JEPA needs a 2%+ win)."
+    )
 
 
 def _fmt(value: float, unit: str | None) -> str:
@@ -470,8 +564,14 @@ def simulate_series(
     seed: int = 0,
     unit: str | None = None,
     dates: list[str] | None = None,
+    encoder: str = "pca",
 ) -> dict[str, Any]:
-    """Fit the world model to ``values`` and roll baseline + scenarios forward."""
+    """Fit the world model to ``values`` and roll baseline + scenarios forward.
+
+    ``encoder`` picks the latent state: ``"pca"`` (linear, the default),
+    ``"jepa"`` (PCA + self-supervised JEPA features), or ``"auto"`` (backtest
+    both on this series and simulate with whichever has the lower holdout MAE).
+    """
     raw = np.asarray(values, dtype=np.float64)
     keep = np.isfinite(raw)
     series = raw[keep]
@@ -489,9 +589,50 @@ def simulate_series(
     if n_paths < 16 or n_paths > MAX_PATHS:
         raise ValueError(f"n_paths must be between 16 and {MAX_PATHS}.")
     scenarios = list(scenarios or [])[:MAX_SCENARIOS]
+    if encoder not in ENCODERS:
+        raise ValueError("encoder must be pca, jepa, or auto.")
+
+    bt_paths = min(n_paths, 128)
+    comparison: dict[str, Any] | None = None
+    chosen = "pca"
+    backtest: dict[str, Any] | None = None
+    busy_note = ""
+    if encoder in {"jepa", "auto"}:
+        pca_bt = _backtest(series, dates, horizon, bt_paths, seed, encoder="pca")
+        try:
+            jepa_bt: dict[str, Any] | None = _backtest(
+                series, dates, horizon, bt_paths, seed, encoder="jepa"
+            )
+        except JepaBusyError as exc:
+            if encoder == "jepa":
+                raise
+            jepa_bt = None
+            busy_note = str(exc)
+        comparison = _compare(pca_bt, jepa_bt)
+        if jepa_bt is None:
+            comparison["note"] = busy_note
+        if encoder == "jepa":
+            chosen = "jepa"
+        else:
+            chosen = str(comparison.get("winner") or "pca")
+            if chosen not in {"pca", "jepa"}:
+                chosen = "pca"
+        backtest = jepa_bt if chosen == "jepa" else pca_bt
+        comparison["chosen"] = chosen
 
     hist, clim, seasonal = _decompose(series, dates, horizon)
-    fitted = fit_world_model(hist, seed=seed, floor=_floor_for(series))
+    try:
+        fitted = fit_world_model(
+            hist, seed=seed, floor=_floor_for(series), encoder=chosen
+        )
+    except JepaBusyError as exc:
+        if encoder != "auto":
+            raise
+        fitted = fit_world_model(hist, seed=seed, floor=_floor_for(series))
+        backtest = None
+        if comparison is not None:
+            comparison["chosen"] = "pca"
+            comparison["note"] = str(exc)
     rng = np.random.default_rng(seed)
     uniforms = rng.random((n_paths, horizon))
     base_paths, base_regimes = _rollout(
@@ -535,7 +676,8 @@ def simulate_series(
             }
         )
 
-    backtest = _backtest(series, dates, horizon, min(n_paths, 128), seed)
+    if backtest is None:
+        backtest = _backtest(series, dates, horizon, bt_paths, seed)
     tail = series[-HISTORY_POINTS:]
     offset = len(series) - len(tail)
     tail_dates = (dates or [])[-len(tail) :] if dates else []
@@ -563,8 +705,9 @@ def simulate_series(
         )
     else:
         bt_text = str(backtest.get("text", ""))
+    enc_text = _comparison_text(comparison, unit) if comparison else ""
     summary = " ".join(
-        [base_text, *[s["summary"] for s in out_scenarios], bt_text]
+        [base_text, *[s["summary"] for s in out_scenarios], bt_text, enc_text]
     ).strip()
     return {
         "unit": unit,
@@ -576,10 +719,18 @@ def simulate_series(
             "kind": "latent_world_model",
             "description": (
                 ("Annual seasonal baseline + " if seasonal else "")
-                + "PCA encoder over the last "
-                f"{fitted.window} steps -> {fitted.latent_dim}-D latent state, "
+                + (
+                    "PCA + self-supervised JEPA encoder"
+                    if fitted.jepa is not None
+                    else "PCA encoder"
+                )
+                + f" over the last {fitted.window} steps -> "
+                f"{fitted.latent_dim}-D latent state, "
                 "ridge dynamics, K-Means regime noise."
             ),
+            "encoder": fitted.encoder,
+            "pca_dim": fitted.pca_dim,
+            **({"jepa": fitted.jepa.describe()} if fitted.jepa is not None else {}),
             "seasonal": seasonal,
             "window": fitted.window,
             "latent_dim": fitted.latent_dim,
@@ -600,6 +751,7 @@ def simulate_series(
         "sample_paths": sample_paths,
         "scenarios": out_scenarios,
         "backtest": backtest,
+        **({"encoder_comparison": comparison} if comparison else {}),
         "summary": summary,
     }
 
@@ -616,6 +768,7 @@ def starter_simulation(
     scenarios: list[dict[str, Any]] | None = None,
     seed: int = 0,
     display_unit: str | None = None,
+    encoder: str = "pca",
 ) -> dict[str, Any]:
     """Run the world model on a shipped starter series.
 
@@ -636,6 +789,7 @@ def starter_simulation(
             scenarios or [],
             seed,
             display_unit,
+            encoder,
         ],
         sort_keys=True,
         default=str,
@@ -667,7 +821,10 @@ def starter_simulation(
             seed=seed,
             unit=unit,
             dates=dates,
+            encoder=encoder,
         )
+    except JepaBusyError as exc:
+        raise WorkspaceError(503, str(exc)) from exc
     except ValueError as exc:
         raise WorkspaceError(422, str(exc)) from exc
     result["starter_id"] = starter.id

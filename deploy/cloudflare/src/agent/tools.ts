@@ -578,6 +578,12 @@ export const TOOL_DEFINITIONS = [
           type: "integer",
           description: "Steps to roll forward (1-60). Default 14.",
         },
+        encoder: {
+          type: "string",
+          enum: ["pca", "jepa", "auto"],
+          description:
+            "Latent encoder. pca (default, fastest). auto = backtest PCA vs the self-supervised JEPA encoder on this series and simulate with the winner; use it when the user asks for the JEPA / self-supervised / smartest world model or which encoder is better. jepa = force JEPA.",
+        },
         scenarios: {
           type: "array",
           description: "Up to 3 scenarios compared against the baseline.",
@@ -1784,6 +1790,7 @@ async function runWhatIf(ctx: ToolContext, args: Record<string, unknown>): Promi
 }
 
 const SIM_EVENT_KINDS = new Set(["shock", "drift", "volatility", "set"]);
+const SIM_ENCODERS = new Set(["pca", "jepa", "auto"]);
 
 function finiteNumber(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
@@ -1818,6 +1825,8 @@ async function runSimulateWorld(
   args: Record<string, unknown>,
 ): Promise<ToolResult["data"]> {
   const horizon = intArg(args, "horizon", 14, 1, 60);
+  const encoderArg = stringArg(args, "encoder", "pca").toLowerCase();
+  const encoder = SIM_ENCODERS.has(encoderArg) ? encoderArg : "pca";
   // Models sometimes send one `scenario` object instead of a `scenarios` list.
   const scenarioList =
     Array.isArray(args.scenarios) || !args.scenario || typeof args.scenario !== "object"
@@ -1844,6 +1853,7 @@ async function runSimulateWorld(
       horizon,
       n_paths: 128,
       scenarios,
+      ...(encoder !== "pca" ? { encoder } : {}),
     };
   } else {
     if (!STARTER_IDS.has(series)) {
@@ -1858,6 +1868,7 @@ async function runSimulateWorld(
       n_paths: 128,
       scenarios,
       ...(isWeatherSeries(series) ? { display_unit: "°F" } : {}),
+      ...(encoder !== "pca" ? { encoder } : {}),
     };
   }
   const result = await ctx.fetchContainer(
@@ -1907,6 +1918,7 @@ async function runSimulateWorld(
     scenarios: compactScenarios,
     backtest: payload.backtest,
     model: model.description,
+    ...(payload.encoder_comparison ? { encoder_comparison: payload.encoder_comparison } : {}),
     ...(fromHistory ? { from_history: true } : {}),
     // Full paths for charts / CSV; stripped before the model sees the result.
     _full: {

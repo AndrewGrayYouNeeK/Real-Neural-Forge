@@ -134,6 +134,11 @@ curl -sS -X POST https://nous.youneek.dev/analysis/simulate \
   -H "Content-Type: application/json" \
   -d '{"starter_id":"weather","display_unit":"°F","horizon":14,"scenarios":[{"name":"Cold snap","events":[{"kind":"shock","step":1,"value":-15}]}]}'
 
+# Self-supervised world model: backtest PCA vs JEPA encoders, simulate with the winner.
+curl -sS -X POST https://nous.youneek.dev/analysis/simulate \
+  -H "Content-Type: application/json" \
+  -d '{"starter_id":"lunar","horizon":14,"encoder":"auto"}'
+
 # Fallback without tools (unchanged):
 curl -sS -X POST https://nous.youneek.dev/live/ask \
   -H "Content-Type: application/json" \

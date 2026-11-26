@@ -553,6 +553,16 @@ The model: windows of the recent past are standardised and projected onto their 
 
 The response has `baseline` (`p10`/`p50`/`p90`/`regime` per step), `scenarios` (same bands plus `delta_p50` vs baseline), `history`, `model` (window, latent size, regimes), `backtest` (rolling-origin holdout vs persistence with 80% coverage), and a plain-English `summary`. Weather with `display_unit: "°F"` returns °F (and reads event values as °F); `storage_unit` stays `°C`. It runs on the container CPU and makes no Workers AI call; chat uses it through the `simulate_world` tool.
 
+### Self-supervised world model (JEPA encoder)
+
+Add `"encoder": "auto"` (or `"jepa"`) to the same request. `pca` stays the default and is unchanged.
+
+- **What it learns.** A small JEPA encoder (MLP, 6-D `tanh` output) reads a standardised window of the past and learns, with no labels, to predict the *embedding* that an EMA target encoder gives the window a few steps later (up to 7). A variance + covariance penalty keeps the embedding from collapsing. Those features are appended to the PCA state, and the ridge dynamics read both. Because the features are bounded, the rollout stays stable.
+- **`auto` = honest swap.** The rolling-origin backtest runs for both encoders on your series. JEPA is used only if its holdout MAE beats PCA by at least 2%. The response adds `encoder_comparison` (persistence, PCA, and JEPA MAE plus 80% coverage, `improvement_pct`, `winner`, `chosen`), and `model.jepa` gives the training stats (SSL loss start → end, steps, seconds).
+- **Cost caps.** CPU only: no Workers AI call, no D1, and no container change. One JEPA fit runs at a time (a request waits up to 25 s, then gets `503`), with up to 1,200 training windows × 240 Adam steps, and **600 JEPA fits per UTC day** for the whole process. When the cap is hit, `auto` falls back to PCA and says so, and `jepa` returns `503`.
+- **Where it shows up.** The **JEPA world model** tool panel, and chat's `simulate_world` tool with `encoder: "auto"`.
+- **Honest results (seed 0, 14-step holdouts, 6 origins).** JEPA wins on Moon illumination (about 27-29% lower MAE) and Bitcoin returns (about 4-5%). PCA wins on AAPL returns and near-Earth approaches. Weather is about a tie that flips with the seed. The winner is picked on the same holdouts it is scored on, so small gaps are close to a tie.
+
 ## GQ voice: metered read-aloud
 
 The dashboard can read forecasts and results aloud in **GQ**, Andrew's professional voice clone on ElevenLabs (voice id `QMnwdN2oOwNXPcl9oXIl`). The rules:

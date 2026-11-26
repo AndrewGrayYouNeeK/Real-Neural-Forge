@@ -114,6 +114,7 @@ const JSON_PROTOCOL =
   "do them in order (one tool reply per step, or an array for independent steps), and write the final answer only after every step is done. " +
   "Never stop after the first step, and never say you will do something later: do it now with a tool, or say plainly that it cannot be done. " +
   "For simulate / scenario / cold snap / heat wave asks, use simulate_world with a named scenario (it rolls many days and compares against the baseline) rather than a one-step what_if. " +
+  "If they ask for the JEPA / self-supervised world model, or which encoder works best, pass encoder: \"auto\" to simulate_world and report the PCA vs JEPA backtest numbers it returns. " +
   "Do not stall on missing details: with no place given, weather tools use the visitor's location; with no series given, use the weather sample. " +
   "Charts and CSV downloads are attached to your reply automatically from the tool data, so never claim you cannot draw a chart or make a file; just make sure the data tool ran. " +
   "\nAfter tool results are provided, answer the user in plain language. " +
