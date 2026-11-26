@@ -1269,12 +1269,13 @@ function matchIntent(question) {
   return null;
 }
 
+// Unhinged is never on by default. It lives in memory for this page only and
+// starts off on every load, every new chat, and every opened chat. Nothing
+// saved (storage, URL, history) turns it on; only the user flipping the switch.
+let unhingedOn = false;
+
 function chatMode() {
-  try {
-    return localStorage.getItem(MODE_KEY) === "unhinged" ? "unhinged" : "normal";
-  } catch {
-    return "normal";
-  }
+  return unhingedOn ? "unhinged" : "normal";
 }
 
 const NORMAL_PLACEHOLDER = "Ask anything";
@@ -1284,18 +1285,15 @@ const ASK_UNAVAILABLE =
   "I could not reach the general-answer model right now. I can still help with live weather, market prices, the moon, near-Earth space, and training.";
 
 function setChatMode(mode) {
-  const next = mode === "unhinged" ? "unhinged" : "normal";
-  try {
-    localStorage.setItem(MODE_KEY, next);
-  } catch {
-    // The toggle still works for this page when storage is blocked.
-  }
-  const on = next === "unhinged";
+  unhingedOn = mode === "unhinged";
+  const on = unhingedOn;
   const button = document.getElementById("unhinged-toggle");
   if (button) {
-    button.setAttribute("aria-pressed", on ? "true" : "false");
-    button.textContent = on ? "🔥 Unhinged ON" : "Unhinged";
-    button.setAttribute("aria-label", on ? "Unhinged mode is on" : "Unhinged mode");
+    button.setAttribute("aria-checked", on ? "true" : "false");
+    button.classList.toggle("is-on", on);
+    const label = button.querySelector(".switch-label");
+    if (label) label.textContent = on ? "Unhinged on" : "Unhinged off";
+    button.title = on ? "Unhinged is on. Tap to turn it off." : "Unhinged is off. Tap to turn it on.";
   }
   const input = document.getElementById("chat-input");
   if (input) input.placeholder = on ? UNHINGED_PLACEHOLDER : NORMAL_PLACEHOLDER;
@@ -4266,6 +4264,7 @@ async function openSavedChat(entry) {
     const log = chatLog();
     if (log) log.replaceChildren();
     currentThreadId = entry.id;
+    setChatMode("normal");
     for (const message of messages) {
       if (!message || (message.role !== "user" && message.role !== "assistant")) continue;
       const text = String(message.content || "").trim();
@@ -4325,6 +4324,7 @@ function renderChatHistory(filterText) {
 }
 
 function startNewChat() {
+  setChatMode("normal");
   const log = chatLog();
   if (log) log.replaceChildren();
   currentThreadId = null;
@@ -4345,7 +4345,13 @@ function resizeComposer() {
 
 /* ------------------------------------------------------------------ wire-up */
 
-setChatMode(chatMode());
+// Older builds saved the mode; drop it so it can never switch Unhinged on.
+try {
+  localStorage.removeItem(MODE_KEY);
+} catch {
+  // Storage blocked: nothing saved to clear.
+}
+setChatMode("normal");
 renderToolNav();
 renderToolsMenu();
 renderRoadmap();

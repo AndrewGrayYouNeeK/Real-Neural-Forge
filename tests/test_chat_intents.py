@@ -155,7 +155,7 @@ def test_unhinged_mode_uses_the_model_for_canned_replies() -> None:
     assert "facts" in answer
     assert "rewritten.capped || rewritten.failed" in answer
     assert "text: rewritten.text" in answer
-    assert "🔥 Unhinged ON" in source
+    assert '"Unhinged on" : "Unhinged off"' in source
     assert "Unhinged is on. Ask anything." in source
     assert "payload.facts = facts" in source
 
@@ -176,3 +176,18 @@ def test_live_endpoints_are_wired_in_the_chat() -> None:
     assert "webkitSpeechRecognition" in source
     assert "/voice/speak" in source
     assert "speechPlainText" in source
+
+
+def test_unhinged_is_off_by_default_and_never_restored() -> None:
+    source = APP_JS.read_text(encoding="utf-8")
+    html = (APP_JS.parent / "index.html").read_text(encoding="utf-8")
+    assert "let unhingedOn = false;" in source
+    # Nothing saved can switch it on: the mode is never written to storage,
+    # the old saved value is cleared, and it resets on new or opened chats.
+    assert "localStorage.setItem(MODE_KEY" not in source
+    assert "localStorage.removeItem(MODE_KEY)" in source
+    assert 'setChatMode("normal");\n  const log = chatLog();' in source
+    assert "getItem(MODE_KEY)" not in source
+    toggle = html.split('id="unhinged-toggle"', 1)[1].split("</button>", 1)[0]
+    assert 'role="switch"' in toggle
+    assert 'aria-checked="false"' in toggle

@@ -2008,3 +2008,54 @@ body:not(.has-chat) #chat-log {
     overflow-y: auto;
   }
 }
+
+/* Unhinged switch: off by default, never restored from storage. */
+.unhinged-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 32px;
+  padding: 4px 10px 4px 6px;
+  border: 1px solid var(--line, #2a2f3a);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted, #9aa3b2);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.unhinged-switch .switch-track {
+  position: relative;
+  width: 30px;
+  height: 18px;
+  border-radius: 999px;
+  background: #3a4050;
+  transition: background 0.15s ease;
+  flex: none;
+}
+.unhinged-switch .switch-thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #fff;
+  transition: transform 0.15s ease;
+}
+.unhinged-switch.is-on {
+  color: #fff;
+  border-color: #ff5a36;
+}
+.unhinged-switch.is-on .switch-track {
+  background: #ff5a36;
+}
+.unhinged-switch.is-on .switch-thumb {
+  transform: translateX(12px);
+}
+.unhinged-switch:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 2px;
+}
