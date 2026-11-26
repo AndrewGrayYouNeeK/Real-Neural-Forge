@@ -7,7 +7,7 @@ store (files locally, R2 in production).
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -16,11 +16,20 @@ from src.workspace.service_ids import new_id
 from src.workspace.store import SqlError, utc_now
 
 _SCHEMA = Path(__file__).with_name("schema.sql")
+_PLAN_SCHEMA = Path(__file__).with_name("plan_schema.sql")
+
+# A paid period that Stripe has not renewed keeps working this long, so a late
+# webhook never cuts a subscriber off in the middle of a conversation.
+PERIOD_GRACE = timedelta(days=2)
+ACTIVE_STATUSES = frozenset({"active", "trialing"})
 
 
-def sql_statements(script: str | None = None) -> list[str]:
-    """Split the voice schema into individual statements."""
-    text = _SCHEMA.read_text(encoding="utf-8") if script is None else script
+def sql_statements(script: str | None = None, *, plan: bool = False) -> list[str]:
+    """Split the voice schema (or the Nous Plus schema) into statements."""
+    if script is None:
+        text = (_PLAN_SCHEMA if plan else _SCHEMA).read_text(encoding="utf-8")
+    else:
+        text = script
     uncommented = "\n".join(
         line for line in text.splitlines() if not line.strip().startswith("--")
     )
@@ -50,6 +59,7 @@ class VoiceStore:
 
     def migrate(self) -> None:
         self.sql.script(sql_statements())
+        self.sql.script(sql_statements(plan=True))
 
     def account(self, user_id: str) -> dict[str, int]:
         rows = self.sql.query(
@@ -104,30 +114,123 @@ class VoiceStore:
             "spent": int(row["spent"]),
         }
 
-    def credit_purchase(
-        self, user_id: str, pack_id: str, chars: int, session_id: str
+    def plan(self, user_id: str) -> dict[str, Any] | None:
+        """The subscriber row, with ``active`` worked out from status and period."""
+        rows = self.sql.query(
+            "SELECT * FROM voice_plans WHERE user_id = ?",
+            (user_id,),
+        )
+        if not rows:
+            return None
+        row = dict(rows[0])
+        row["cancel_at_period_end"] = bool(row.get("cancel_at_period_end"))
+        row["allowance_remaining"] = int(row.get("allowance_remaining") or 0)
+        row["allowance_total"] = int(row.get("allowance_total") or 0)
+        row["active"] = plan_is_active(row)
+        return row
+
+    def plan_by_subscription(self, subscription_id: str) -> dict[str, Any] | None:
+        rows = self.sql.query(
+            "SELECT user_id FROM voice_plans WHERE stripe_subscription_id = ?",
+            (subscription_id,),
+        )
+        return self.plan(str(rows[0]["user_id"])) if rows else None
+
+    def apply_subscription(
+        self,
+        user_id: str,
+        *,
+        customer_id: str | None,
+        subscription_id: str,
+        status: str,
+        period_start: str,
+        period_end: str,
+        cancel_at_period_end: bool,
+        monthly_chars: int,
     ) -> bool:
-        """Add purchased credit exactly once per Stripe session."""
+        """Record the subscription. Returns True when a new period's allowance landed.
+
+        The allowance is granted once per (subscription, period start), so
+        replayed webhooks, the checkout sync, and renewals can arrive in any
+        order without ever granting twice.
+        """
+        now = utc_now()
+        self.sql.query(
+            """
+            INSERT INTO voice_plans
+            (user_id, stripe_customer_id, stripe_subscription_id, status,
+             period_start, period_end, cancel_at_period_end,
+             allowance_total, allowance_remaining, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, 0, 0, ?)
+            ON CONFLICT(user_id) DO UPDATE SET
+                stripe_customer_id = COALESCE(excluded.stripe_customer_id,
+                                              voice_plans.stripe_customer_id),
+                stripe_subscription_id = excluded.stripe_subscription_id,
+                status = excluded.status,
+                period_start = excluded.period_start,
+                period_end = excluded.period_end,
+                cancel_at_period_end = excluded.cancel_at_period_end,
+                updated_at = excluded.updated_at
+            """,
+            (
+                user_id,
+                customer_id,
+                subscription_id,
+                status,
+                period_start,
+                period_end,
+                1 if cancel_at_period_end else 0,
+                now,
+            ),
+        )
+        if status not in ACTIVE_STATUSES:
+            return False
+        ref = f"{subscription_id}:{period_start}"
         try:
             self.sql.query(
-                """
-                INSERT INTO voice_purchases
-                (id, user_id, pack_id, chars, session_id, created_at)
-                VALUES (?, ?, ?, ?, ?, ?)
-                """,
-                (f"pur_{session_id}", user_id, pack_id, chars, session_id, utc_now()),
+                "INSERT INTO voice_grants (ref, user_id, chars, created_at)"
+                " VALUES (?, ?, ?, ?)",
+                (ref, user_id, monthly_chars, now),
             )
         except SqlError:
             return False
         self.sql.query(
             """
-            UPDATE voice_balances
-            SET purchased_remaining = purchased_remaining + ?, updated_at = ?
+            UPDATE voice_plans
+            SET allowance_total = ?, allowance_remaining = ?, updated_at = ?
             WHERE user_id = ?
             """,
-            (chars, utc_now(), user_id),
+            (monthly_chars, monthly_chars, now, user_id),
         )
         return True
+
+    def touch_plan(self, user_id: str) -> None:
+        self.sql.query(
+            "UPDATE voice_plans SET updated_at = ? WHERE user_id = ?",
+            (utc_now(), user_id),
+        )
+
+    def spend_plan(self, user_id: str, chars: int) -> int:
+        """Take up to ``chars`` from the monthly allowance. Returns how much it covered."""
+        rows = self.sql.query(
+            "SELECT allowance_remaining FROM voice_plans WHERE user_id = ?",
+            (user_id,),
+        )
+        if not rows:
+            return 0
+        take = min(int(rows[0]["allowance_remaining"]), chars)
+        if take <= 0:
+            return 0
+        updated = self.sql.query(
+            """
+            UPDATE voice_plans
+            SET allowance_remaining = allowance_remaining - ?, updated_at = ?
+            WHERE user_id = ? AND allowance_remaining >= ?
+            RETURNING allowance_remaining
+            """,
+            (take, utc_now(), user_id, take),
+        )
+        return take if updated else 0
 
     def record_usage(
         self,
@@ -195,6 +298,26 @@ class VoiceStore:
         if not valid_object_key(key):
             raise SqlError("Unsafe voice cache key.")
         self.blobs.put(key, audio)
+
+
+def plan_is_active(row: dict[str, Any]) -> bool:
+    """A subscriber is active while Stripe says so and the paid period is not long over."""
+    if str(row.get("status")) not in ACTIVE_STATUSES:
+        return False
+    end = parse_stamp(row.get("period_end"))
+    if end is None:
+        return False
+    return datetime.now(timezone.utc) <= end + PERIOD_GRACE
+
+
+def parse_stamp(value: Any) -> datetime | None:
+    if not isinstance(value, str) or not value:
+        return None
+    try:
+        stamp = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return stamp if stamp.tzinfo else stamp.replace(tzinfo=timezone.utc)
 
 
 def utc_day() -> str:

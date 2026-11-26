@@ -1,4 +1,4 @@
-"""HTTP routes for GQ voice status, playback, checkout, and the Stripe webhook."""
+"""HTTP routes for GQ voice status, playback, the subscription, and the Stripe webhook."""
 
 from __future__ import annotations
 
@@ -9,7 +9,14 @@ from pydantic import BaseModel, Field
 
 from src.accounts.actor import Actor
 from src.voice.config import resolve_checkout_base_url
-from src.voice.service import create_checkout, handle_webhook, speak, voice_status
+from src.voice.service import (
+    create_checkout,
+    create_portal,
+    handle_webhook,
+    speak,
+    sync_checkout,
+    voice_status,
+)
 from src.workspace.errors import WorkspaceError
 from src.workspace.runtime import runtime
 from src.workspace.service import resolve_actor
@@ -23,8 +30,8 @@ class SpeakRequest(BaseModel):
     text: str = Field(min_length=1)
 
 
-class CheckoutRequest(BaseModel):
-    pack_id: str
+class SyncRequest(BaseModel):
+    session_id: str | None = Field(default=None, max_length=200)
 
 
 def _raise(exc: WorkspaceError) -> NoReturn:
@@ -86,20 +93,53 @@ def voice_speak(
     return Response(content=result["audio"], media_type="audio/mpeg", headers=headers)
 
 
+def _base_url(request: Request) -> str:
+    return (
+        resolve_checkout_base_url(
+            forwarded_proto=request.headers.get("x-forwarded-proto"),
+            forwarded_host=request.headers.get("x-forwarded-host"),
+            request_base_url=str(request.base_url).rstrip("/"),
+        )
+        or ""
+    )
+
+
 @router.post("/voice/checkout", tags=["voice"])
 def voice_checkout(
-    body: CheckoutRequest,
     request: Request,
     authorization: str | None = Header(default=None),
 ) -> dict[str, Any]:
+    """Start the one Nous Plus checkout. GQ voice comes with the subscription."""
     actor = _voice_actor(request, authorization)
-    base = resolve_checkout_base_url(
-        forwarded_proto=request.headers.get("x-forwarded-proto"),
-        forwarded_host=request.headers.get("x-forwarded-host"),
-        request_base_url=str(request.base_url).rstrip("/"),
-    )
     try:
-        return create_checkout(actor, body.pack_id, _app_config(), base or "")
+        return create_checkout(actor, _app_config(), _base_url(request))
+    except WorkspaceError as exc:
+        _raise(exc)
+
+
+@router.post("/voice/portal", tags=["voice"])
+def voice_portal(
+    request: Request,
+    authorization: str | None = Header(default=None),
+) -> dict[str, Any]:
+    """Stripe's customer portal, to update the card or cancel."""
+    actor = _voice_actor(request, authorization)
+    try:
+        return create_portal(actor, _app_config(), _base_url(request))
+    except WorkspaceError as exc:
+        _raise(exc)
+
+
+@router.post("/voice/sync", tags=["voice"])
+def voice_sync(
+    body: SyncRequest,
+    request: Request,
+    authorization: str | None = Header(default=None),
+) -> dict[str, Any]:
+    """Confirm a finished checkout so voice works the moment the buyer is back."""
+    actor = _voice_actor(request, authorization)
+    try:
+        return sync_checkout(actor, body.session_id, _app_config())
     except WorkspaceError as exc:
         _raise(exc)
 
