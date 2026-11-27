@@ -22,6 +22,13 @@ describe("freshness", () => {
     expect(needsRevalidation("GET", "/agent/images/1", page("image/png"))).toBe(false);
   });
 
+  it("covers every file under /assets and labels webp images", () => {
+    expect(needsRevalidation("GET", "/assets/brand/nous-o.webp", page("application/octet-stream"))).toBe(true);
+    const out = withFreshness(new Request("https://nous.youneek.dev/assets/brand/nous-o.webp"), page("application/octet-stream"));
+    expect(out.headers.get("Content-Type")).toBe("image/webp");
+    expect(out.headers.get("Cache-Control")).toBe("no-cache");
+  });
+
   it("adds no-cache and keeps the rest of the reply", async () => {
     const out = withFreshness(new Request("https://nous.youneek.dev/"), page("text/html", { ETag: '"abc"' }));
     expect(out.headers.get("Cache-Control")).toBe("no-cache");
