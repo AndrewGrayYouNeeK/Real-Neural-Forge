@@ -333,3 +333,20 @@ describe("owner usage dashboard", () => {
     expect(db.rows("SELECT value FROM app_settings WHERE key = 'email_sending'")[0].value).toMatch(/^down:/);
   });
 });
+
+describe("shared email for other features (reminders)", () => {
+  it("emails only confirmed addresses, only while sending is on, and counts the send", async () => {
+    const { emailReminder } = await import("../src/abilities/reminders");
+    const db = new SqliteD1();
+    const mail = mailer();
+    const env = { WORKSPACES_DB: db, EMAIL: mail.binding, NOUS_EMAIL_FROM: "no-reply@youneek.dev" };
+    await addUser(db, "usr_a", "member@example.test");
+    expect(await emailReminder(db, env, "usr_a", "⏰ Reminder: Stretch.")).toBe(false);
+    db.exec("INSERT INTO app_settings (key, value, updated_at) VALUES ('email_sending', 'on', 'x')");
+    expect(await emailReminder(db, env, "usr_a", "⏰ Reminder: Stretch.")).toBe(false);
+    db.exec("INSERT INTO user_email_status (user_id, email, verified_at) VALUES ('usr_a', 'member@example.test', 'x')");
+    expect(await emailReminder(db, env, "usr_a", "⏰ Reminder: Stretch.")).toBe(true);
+    expect(mail.sent.map((m) => [m.to, m.subject])).toEqual([["member@example.test", "Reminder: Stretch."]]);
+    expect(db.rows("SELECT kind, sent FROM email_log")).toEqual([{ kind: "reminder", sent: 1 }]);
+  });
+});

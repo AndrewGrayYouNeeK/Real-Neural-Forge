@@ -93,7 +93,8 @@ export type SendResult = { ok: true } | { ok: false; code: string };
 export async function sendAccountEmail(
   db: D1Like,
   env: EmailEnv,
-  kind: "verify" | "reset" | "test",
+  /** Short label for the dashboard counts, e.g. "verify", "reset", "reminder". */
+  kind: string,
   to: string,
   message: { subject: string; text: string; html: string },
   options: { force?: boolean } = {},
@@ -182,4 +183,44 @@ export function testEmailMessage(): { subject: string; text: string; html: strin
 export function publicBase(env: EmailEnv): string {
   const raw = (env.NEURAL_FORGE_PUBLIC_URL || "").trim().replace(/\/+$/, "");
   return /^https:\/\/nous\.youneek\.(dev|xyz)$/.test(raw) ? raw : "https://nous.youneek.dev";
+}
+
+/**
+ * The address to email for an account, or null unless that address is
+ * confirmed (user_email_status matches the current users.email).
+ */
+export async function verifiedAddress(db: D1Like, userId: string): Promise<string | null> {
+  try {
+    const row = await db
+      .prepare(
+        `SELECT users.email AS email, user_email_status.email AS verified_email, user_email_status.verified_at AS verified_at
+         FROM users JOIN user_email_status ON user_email_status.user_id = users.id
+         WHERE users.id = ?`,
+      )
+      .bind(userId)
+      .first<{ email?: string; verified_email?: string; verified_at?: string | null }>();
+    const to = String(row?.email || "");
+    if (!row?.verified_at || !to || to.toLowerCase() !== String(row.verified_email || "").toLowerCase()) return null;
+    return to;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Shared way for any feature (reminders, alerts…) to email one account:
+ * only when sending is on and the address is confirmed. Counts toward the
+ * owner dashboard and switches sending off on setup errors, like account mail.
+ */
+export async function sendToVerifiedUser(
+  db: D1Like,
+  env: EmailEnv,
+  kind: string,
+  userId: string,
+  message: { subject: string; text: string; html: string },
+): Promise<SendResult> {
+  if ((await emailState(db, env)) !== "on") return { ok: false, code: "E_TURNED_OFF" };
+  const to = await verifiedAddress(db, userId);
+  if (!to) return { ok: false, code: "E_NOT_VERIFIED" };
+  return sendAccountEmail(db, env, kind, to, message);
 }

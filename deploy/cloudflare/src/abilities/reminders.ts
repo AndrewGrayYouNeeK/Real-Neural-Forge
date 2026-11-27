@@ -18,6 +18,7 @@
 
 import { tryReserve, type AiLike, type D1Like } from "../live/ai";
 import { abilityCaps, claimAbility, newAbilityId } from "./limits";
+import { publicBase, sendToVerifiedUser, type EmailEnv } from "../auth/email";
 
 export const DEFAULT_TZ = "America/New_York";
 export const MAX_ACTIVE_REMINDERS = 25;
@@ -529,16 +530,6 @@ export function reminderMessage(row: { text: unknown; kind?: unknown }): string 
   return `⏰ Reminder: ${text.charAt(0).toUpperCase()}${text.slice(1)}.`;
 }
 
-type EmailSender = {
-  send(message: {
-    to: string;
-    from: { email: string; name: string };
-    subject: string;
-    text: string;
-    html?: string;
-  }): Promise<unknown>;
-};
-
 function escapeHtml(value: string): string {
   return value.replace(/[&<>"']/g, (char) => `&#${char.charCodeAt(0)};`);
 }
@@ -554,31 +545,16 @@ export async function emailReminder(
   userId: string | null,
   message: string,
 ): Promise<boolean> {
-  const sender = env.EMAIL as EmailSender | undefined;
-  const from = String(env.NOUS_EMAIL_FROM || "").trim();
-  if (!userId || !sender || typeof sender.send !== "function" || !/^[^@\s]+@youneek\.(dev|xyz)$/i.test(from)) return false;
+  if (!userId) return false;
   try {
-    const setting = await db.prepare("SELECT value FROM app_settings WHERE key = ?").bind("email_sending").first<{ value?: string }>();
-    if (setting?.value !== "on") return false;
-    const row = await db
-      .prepare(
-        `SELECT users.email AS email, user_email_status.verified_at AS verified_at, user_email_status.email AS verified_email
-         FROM users JOIN user_email_status ON user_email_status.user_id = users.id
-         WHERE users.id = ?`,
-      )
-      .bind(userId)
-      .first<{ email?: string; verified_at?: string | null; verified_email?: string }>();
-    const to = String(row?.email || "");
-    if (!row?.verified_at || !to || to.toLowerCase() !== String(row.verified_email || "").toLowerCase()) return false;
-    const base = String(env.NEURAL_FORGE_PUBLIC_URL || "https://nous.youneek.dev");
-    await sender.send({
-      to,
-      from: { email: from, name: "Nous" },
+    const mailEnv = env as EmailEnv;
+    const base = publicBase(mailEnv);
+    const result = await sendToVerifiedUser(db, mailEnv, "reminder", userId, {
       subject: message.replace(/^\S+\s/, "").slice(0, 120),
       text: `${message}\n\nOpen Nous: ${base}\n\n— Nous · The architecture of understanding.`,
       html: `<!doctype html><html><body style="font-family:-apple-system,Segoe UI,Roboto,sans-serif;background:#0b0b10;color:#eee;margin:0"><div style="max-width:480px;margin:0 auto;padding:32px 24px"><p style="font-size:20px;font-weight:700;margin:0 0 20px">${escapeHtml(message)}</p><p><a href="${escapeHtml(base)}" style="display:inline-block;background:#fff;color:#000;text-decoration:none;font-weight:600;padding:12px 20px;border-radius:999px">Open Nous</a></p><p style="font-size:12px;color:#777;margin-top:24px">Nous · The architecture of understanding.</p></div></body></html>`,
     });
-    return true;
+    return result.ok;
   } catch {
     return false;
   }
