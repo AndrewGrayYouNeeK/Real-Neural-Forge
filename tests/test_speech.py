@@ -81,11 +81,11 @@ def test_config_yaml_uses_the_stable_voice_settings() -> None:
     cfg = load_voice_config(load_config("config/config.yaml"))
     assert cfg.model_id == "eleven_multilingual_v2"
     assert cfg.apply_text_normalization == "on"
-    assert cfg.settings.stability == 0.7
-    assert cfg.settings.similarity_boost == 0.75
+    assert cfg.settings.stability == 0.75
+    assert cfg.settings.similarity_boost == 0.9
     assert cfg.settings.style == 0.0
     assert cfg.settings.use_speaker_boost is True
-    assert cfg.settings.speed == 1.0
+    assert cfg.settings.speed == 1.1
 
 
 def test_synthesis_sends_settings_and_joins_chunks(
@@ -127,11 +127,11 @@ def test_synthesis_sends_settings_and_joins_chunks(
     assert first["model_id"] == "eleven_multilingual_v2"
     assert first["apply_text_normalization"] == "on"
     assert first["voice_settings"] == {
-        "stability": 0.7,
-        "similarity_boost": 0.75,
+        "stability": 0.75,
+        "similarity_boost": 0.9,
         "style": 0.0,
         "use_speaker_boost": True,
-        "speed": 1.0,
+        "speed": 1.1,
     }
     assert "previous_request_ids" not in first
     assert len(captured) > 1

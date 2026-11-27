@@ -766,7 +766,6 @@ body.has-chat #suggestion-chips {
   flex-wrap: wrap;
 }
 
-.speak-btn,
 .tool-used-chip {
   display: inline-flex;
   align-items: center;
@@ -779,17 +778,6 @@ body.has-chat #suggestion-chips {
   color: var(--muted);
   font-size: 0.82rem;
   cursor: pointer;
-}
-
-.speak-btn:hover,
-.speak-btn:focus-visible {
-  border-color: var(--border-strong);
-  color: var(--text);
-}
-
-.speak-btn[disabled] {
-  opacity: 0.55;
-  cursor: progress;
 }
 
 .inline-hint {
