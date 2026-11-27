@@ -262,7 +262,7 @@ export function buildAgentInputs(options: {
 
 /** Default-mode voice reminder appended to tool results (Unhinged keeps its own prompt). */
 export const NORMAL_TOOL_VOICE =
-  " Keep your usual witty voice: the facts first, then at most one short quip.";
+  " Keep your usual voice: warm and plain-spoken, the facts first, then at most one short quip.";
 
 function toolNote(
   call: ParsedToolCall,
