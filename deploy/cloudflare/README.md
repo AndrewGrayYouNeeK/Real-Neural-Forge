@@ -30,3 +30,14 @@ running), the class schedules `watchTraining` every three minutes. That
 callback renews the activity timeout and polls `GET /training/status` until
 the run is no longer `running`. Do not replace `Container.alarm()`; the base
 class uses it to apply `sleepAfter`.
+
+## Live knowledge and safety (chat)
+
+- `src/agent/knowledge.ts`: `web_search`, `wiki_summary`, `read_page` tools. Free, keyless
+  sources only: Wikipedia Action API search, Wikipedia REST summaries, and Wikipedia
+  "Portal:Current events" daily pages (news items link their outlet). Results are cached
+  (in-isolate LRU + Cache API). Daily lookups per user live in D1 `knowledge_usage`
+  (migration `0015_knowledge_usage.sql`): visitors 60, signed-in 200, owner 1000, global 6000.
+- `src/agent/safety.ts`: Llama Guard 3 (`@cf/meta/llama-guard-3-8b`) runs only when a keyword
+  prefilter sees a possibly dangerous ask, and only blocks S1/S4/S9/S11. Controversial,
+  political, conspiracy, medical and legal topics are never blocked.
