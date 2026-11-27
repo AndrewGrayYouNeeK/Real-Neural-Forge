@@ -24,10 +24,11 @@ series by the rolling-origin backtest, never assumed.
 
 from __future__ import annotations
 
+import math
 import threading
 import time
 from dataclasses import dataclass
-from typing import Any, cast
+from typing import Any
 
 import numpy as np
 
@@ -37,7 +38,7 @@ TRAIN_STEPS = 240
 BATCH = 128
 HIDDEN = 48
 LATENT = 6
-DAILY_FIT_CAP = 600  # process-wide JEPA fits per UTC day
+DAILY_FIT_CAP = 3000  # process-wide JEPA trainings per UTC day (~30 per auto run)
 _LOCK_WAIT_S = 25.0
 
 _FIT_LOCK = threading.Semaphore(1)
@@ -96,17 +97,22 @@ def fits_today() -> int:
         return int(_DAY_STATE["count"])
 
 
-def _take_budget() -> None:
+def jepa_fits_left() -> int:
+    """JEPA trainings still allowed today."""
+    return max(0, DAILY_FIT_CAP - fits_today())
+
+
+def _take_budget(count: int = 1) -> None:
     with _DAY_LOCK:
         day = _today()
         if _DAY_STATE["day"] != day:
             _DAY_STATE["day"] = day
             _DAY_STATE["count"] = 0
-        if int(_DAY_STATE["count"]) >= DAILY_FIT_CAP:
+        if int(_DAY_STATE["count"]) + count > DAILY_FIT_CAP:
             raise JepaBusyError(
                 "The JEPA encoder hit today's CPU cap. The PCA encoder still works."
             )
-        _DAY_STATE["count"] = int(_DAY_STATE["count"]) + 1
+        _DAY_STATE["count"] = int(_DAY_STATE["count"]) + count
 
 
 def reset_budget() -> None:
@@ -117,96 +123,117 @@ def reset_budget() -> None:
 
 
 def train_jepa_encoder(scaled: np.ndarray, *, seed: int = 0) -> JepaEncoder:
-    """Train the JEPA context encoder on standardised windows ``(N, window)``.
+    """Train one JEPA context encoder on standardised windows ``(N, window)``."""
+    return train_jepa_ensemble(scaled, seeds=[seed])[0]
 
-    Windows must be consecutive (row ``i + 1`` is row ``i`` shifted by one
-    step), which is how the world model builds them.
+
+def train_jepa_ensemble(scaled: np.ndarray, *, seeds: list[int]) -> list[JepaEncoder]:
+    """Train ``len(seeds)`` independent JEPA encoders in one batched loop.
+
+    Each member has its own seeded initialisation and batch order; the weights
+    live in stacked tensors and train with ``bmm``, so three members cost
+    little more than one (the loop is overhead-bound on a small CPU).
+    Windows must be consecutive (row ``i + 1`` is row ``i`` shifted one step),
+    which is how the world model builds them.
     """
     import torch
-    from torch import nn
 
     scaled = np.asarray(scaled, dtype=np.float32)
     count, window = scaled.shape
+    members = len(seeds)
     shift = int(max(1, min(window // 4, 7)))
     if count - shift < 16:
         raise ValueError("Series too short for the JEPA encoder.")
     if not _FIT_LOCK.acquire(timeout=_LOCK_WAIT_S):
         raise JepaBusyError("The JEPA encoder is busy. Try again in a moment.")
     try:
-        _take_budget()
+        _take_budget(members)
         started = time.perf_counter()
         prev_threads = torch.get_num_threads()
         torch.set_num_threads(1)
         try:
-            gen = torch.Generator().manual_seed(int(seed))
-            torch.manual_seed(int(seed))
             data = torch.from_numpy(scaled[-MAX_TRAIN_WINDOWS - shift :])
             context_x = data[:-shift]
             target_x = data[shift:]
             n = len(context_x)
+            batch = min(BATCH, n)
+            gens = [torch.Generator().manual_seed(int(sd)) for sd in seeds]
 
-            encoder = nn.Sequential(
-                nn.Linear(window, HIDDEN),
-                nn.ReLU(),
-                nn.Linear(HIDDEN, LATENT),
-                nn.Tanh(),
-            )
-            target = nn.Sequential(
-                nn.Linear(window, HIDDEN),
-                nn.ReLU(),
-                nn.Linear(HIDDEN, LATENT),
-                nn.Tanh(),
-            )
-            target.load_state_dict(encoder.state_dict())
-            for param in target.parameters():
-                param.requires_grad_(False)
-            predictor = nn.Sequential(
-                nn.Linear(LATENT, HIDDEN), nn.ReLU(), nn.Linear(HIDDEN, LATENT)
-            )
-            opt = torch.optim.Adam(
-                list(encoder.parameters()) + list(predictor.parameters()), lr=3e-3
-            )
+            def init(rows: int, cols: int) -> tuple[Any, Any]:
+                bound = 1.0 / math.sqrt(rows)
+                ws = [
+                    (torch.rand(rows, cols, generator=g) * 2 - 1) * bound for g in gens
+                ]
+                bs = [(torch.rand(1, cols, generator=g) * 2 - 1) * bound for g in gens]
+                return (
+                    torch.stack(ws).requires_grad_(True),
+                    torch.stack(bs).requires_grad_(True),
+                )
+
+            w1, b1 = init(window, HIDDEN)
+            w2, b2 = init(HIDDEN, LATENT)
+            p1, pb1 = init(LATENT, HIDDEN)
+            p2, pb2 = init(HIDDEN, LATENT)
+            tw1, tb1 = w1.detach().clone(), b1.detach().clone()
+            tw2, tb2 = w2.detach().clone(), b2.detach().clone()
+            params = [w1, b1, w2, b2, p1, pb1, p2, pb2]
+            opt = torch.optim.Adam(params, lr=3e-3)
+
+            def encode(x: Any, a1: Any, c1: Any, a2: Any, c2: Any) -> Any:
+                hidden = torch.relu(torch.baddbmm(c1, x, a1))
+                return torch.tanh(torch.baddbmm(c2, hidden, a2))
+
             momentum = 0.98
-            losses: list[float] = []
+            losses: list[Any] = []
             for _ in range(TRAIN_STEPS):
-                idx = torch.randint(0, n, (min(BATCH, n),), generator=gen)
-                ctx = encoder(context_x[idx])
+                idx = torch.stack(
+                    [torch.randint(0, n, (batch,), generator=g) for g in gens]
+                )
+                ctx = encode(context_x[idx], w1, b1, w2, b2)
                 with torch.no_grad():
-                    tgt = target(target_x[idx])
-                pred_loss = ((predictor(ctx) - tgt) ** 2).mean()
-                std = torch.sqrt(ctx.var(dim=0) + 1e-4)
-                var_loss = torch.relu(0.5 - std).mean()
-                centred = ctx - ctx.mean(dim=0)
-                cov = centred.T @ centred / max(len(ctx) - 1, 1)
-                off = cov - torch.diag(torch.diag(cov))
-                cov_loss = (off**2).sum() / LATENT
-                loss = pred_loss + 1.0 * var_loss + 0.05 * cov_loss
+                    tgt = encode(target_x[idx], tw1, tb1, tw2, tb2)
+                pred = torch.baddbmm(pb2, torch.relu(torch.baddbmm(pb1, ctx, p1)), p2)
+                pred_loss = ((pred - tgt) ** 2).mean(dim=(1, 2))
+                std = torch.sqrt(ctx.var(dim=1) + 1e-4)
+                var_loss = torch.relu(0.5 - std).mean(dim=1)
+                centred = ctx - ctx.mean(dim=1, keepdim=True)
+                cov = centred.transpose(1, 2) @ centred / max(batch - 1, 1)
+                eye = torch.eye(LATENT)
+                off = cov * (1 - eye)
+                cov_loss = (off**2).sum(dim=(1, 2)) / LATENT
+                loss = (pred_loss + 1.0 * var_loss + 0.05 * cov_loss).sum()
                 opt.zero_grad()
                 loss.backward()
                 opt.step()
                 with torch.no_grad():
-                    for t_param, s_param in zip(
-                        target.parameters(), encoder.parameters(), strict=True
-                    ):
-                        t_param.mul_(momentum).add_(s_param, alpha=1 - momentum)
-                losses.append(float(pred_loss.detach()))
+                    tw1.mul_(momentum).add_(w1, alpha=1 - momentum)
+                    tb1.mul_(momentum).add_(b1, alpha=1 - momentum)
+                    tw2.mul_(momentum).add_(w2, alpha=1 - momentum)
+                    tb2.mul_(momentum).add_(b2, alpha=1 - momentum)
+                losses.append(pred_loss.detach().numpy().copy())
             with torch.no_grad():
-                feats = encoder(data).numpy()
-            lin1 = cast(nn.Linear, encoder[0])
-            lin2 = cast(nn.Linear, encoder[2])
-            head = max(1, len(losses) // 10)
-            return JepaEncoder(
-                w1=lin1.weight.detach().numpy().T.astype(np.float64).copy(),
-                b1=lin1.bias.detach().numpy().astype(np.float64).copy(),
-                w2=lin2.weight.detach().numpy().T.astype(np.float64).copy(),
-                b2=lin2.bias.detach().numpy().astype(np.float64).copy(),
-                shift=shift,
-                steps=TRAIN_STEPS,
-                loss_start=float(np.mean(losses[:head])),
-                loss_end=float(np.mean(losses[-head:])),
-                feature_std=float(np.mean(np.std(feats, axis=0))),
-                seconds=time.perf_counter() - started,
-            )
+                full = data.unsqueeze(0).expand(members, -1, -1).contiguous()
+                feats = encode(full, w1, b1, w2, b2).numpy()
+            loss_arr = np.stack(losses)  # (steps, members)
+            head = max(1, len(loss_arr) // 10)
+            seconds = time.perf_counter() - started
+            out: list[JepaEncoder] = []
+            for m in range(members):
+                out.append(
+                    JepaEncoder(
+                        w1=w1[m].detach().numpy().astype(np.float64).copy(),
+                        b1=b1[m, 0].detach().numpy().astype(np.float64).copy(),
+                        w2=w2[m].detach().numpy().astype(np.float64).copy(),
+                        b2=b2[m, 0].detach().numpy().astype(np.float64).copy(),
+                        shift=shift,
+                        steps=TRAIN_STEPS,
+                        loss_start=float(np.mean(loss_arr[:head, m])),
+                        loss_end=float(np.mean(loss_arr[-head:, m])),
+                        feature_std=float(np.mean(np.std(feats[m], axis=0))),
+                        seconds=seconds / members,
+                    )
+                )
+            return out
         finally:
             torch.set_num_threads(prev_threads)
     finally:

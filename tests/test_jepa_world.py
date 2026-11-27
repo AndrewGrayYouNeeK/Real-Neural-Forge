@@ -7,7 +7,11 @@ import pytest
 from fastapi.testclient import TestClient
 
 from src.analysis import jepa_world
-from src.analysis.jepa_world import JepaBusyError, train_jepa_encoder
+from src.analysis.jepa_world import (
+    JepaBusyError,
+    train_jepa_encoder,
+    train_jepa_ensemble,
+)
 from src.analysis.world_model import (
     clear_simulation_cache,
     fit_world_model,
@@ -55,21 +59,76 @@ def test_fit_with_jepa_adds_latent_dims_and_stays_stable():
     assert 0.5 <= fitted.damping <= 1.0
 
 
-def test_auto_reports_both_encoders_and_picks_by_backtest():
+def test_auto_reports_both_encoders_and_picks_on_validation():
     result = simulate_series(_wave(), horizon=8, n_paths=32, encoder="auto")
     cmp = result["encoder_comparison"]
     assert cmp["pca"]["mae"] > 0
     assert cmp["jepa"]["mae"] > 0
     assert cmp["chosen"] in {"pca", "jepa"}
     assert result["model"]["encoder"] == cmp["chosen"]
+    # Picked on older validation windows, graded on separate newer holdouts.
+    assert cmp["validation_origins"] >= 2
+    assert cmp["pca"]["validation_mae"] is not None
     if cmp["chosen"] == "jepa":
-        assert cmp["improvement_pct"] >= 2.0
+        assert cmp["validation_improvement_pct"] >= 5.0
         assert result["backtest"]["mae_model"] == cmp["jepa"]["mae"]
     else:
         assert result["backtest"]["mae_model"] == cmp["pca"]["mae"]
     assert "Encoder check" in result["summary"]
     lo, mid, hi = (result["baseline"][k] for k in ("p10", "p50", "p90"))
     assert all(a <= b <= c for a, b, c in zip(lo, mid, hi, strict=True))
+
+
+def test_pick_and_forecast_do_not_depend_on_the_seed():
+    a = simulate_series(_wave(), horizon=6, n_paths=32, encoder="auto", seed=0)
+    b = simulate_series(_wave(), horizon=6, n_paths=32, encoder="auto", seed=7)
+    assert a["encoder_comparison"]["chosen"] == b["encoder_comparison"]["chosen"]
+    assert a["encoder_comparison"]["pca"] == b["encoder_comparison"]["pca"]
+    assert a["encoder_comparison"]["jepa"] == b["encoder_comparison"]["jepa"]
+    assert a["backtest"] == b["backtest"]
+
+
+def test_jepa_ensemble_members_differ_and_are_deterministic():
+    values = np.asarray(_wave(), dtype=np.float64)
+    window = 20
+    xs = np.stack([values[i : i + window] for i in range(len(values) - window)])
+    scaled = (xs - xs.mean(axis=0)) / xs.std(axis=0)
+    first = train_jepa_ensemble(scaled, seeds=[0, 1000, 2000])
+    again = train_jepa_ensemble(scaled, seeds=[0, 1000, 2000])
+    assert len(first) == 3
+    assert not np.allclose(first[0].w1, first[1].w1)
+    for a, b in zip(first, again, strict=True):
+        np.testing.assert_allclose(a.w1, b.w1, atol=1e-6)
+        assert a.loss_end < a.loss_start
+
+
+def test_calibration_moves_coverage_toward_80_and_is_reported():
+    t = np.arange(240, dtype=np.float64)
+    rng = np.random.default_rng(11)
+    noisy = list(30 + 6 * np.sin(2 * np.pi * t / 17) + rng.normal(0, 1.5, len(t)))
+    raw = simulate_series(noisy, horizon=10, n_paths=64, calibrate=False)
+    cal = simulate_series(noisy, horizon=10, n_paths=64)
+    bt = cal["backtest"]
+    assert bt["calibration"]["applied"] is True
+    assert bt["coverage_80_raw"] == raw["backtest"]["coverage_80_raw"]
+    # Graded leave-one-window-out: closer to 80% than the raw ranges.
+    assert abs(bt["coverage_80"] - 0.8) <= abs(bt["coverage_80_raw"] - 0.8) + 0.02
+    assert 0.65 <= bt["coverage_80"] <= 0.95
+    # Calibration only rescales the band around the median.
+    assert cal["baseline"]["p50"] == raw["baseline"]["p50"]
+    assert cal["model"]["calibration"]["scale"] == bt["calibration"]["scale"]
+    raw_w = np.asarray(raw["baseline"]["p90"]) - np.asarray(raw["baseline"]["p10"])
+    cal_w = np.asarray(cal["baseline"]["p90"]) - np.asarray(cal["baseline"]["p10"])
+    np.testing.assert_allclose(cal_w / raw_w, bt["calibration"]["scale"], rtol=0.05)
+
+
+def test_short_series_skips_calibration_and_keeps_pca_on_auto():
+    short = _wave(56)
+    result = simulate_series(short, horizon=3, n_paths=16, encoder="auto")
+    cmp = result["encoder_comparison"]
+    assert cmp["chosen"] == "pca"
+    assert result["model"]["encoder"] == "pca"
+    assert result["backtest"]["calibration"]["applied"] is False
 
 
 def test_default_stays_pca_without_comparison():

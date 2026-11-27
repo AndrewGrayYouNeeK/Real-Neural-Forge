@@ -1099,9 +1099,12 @@
               Nous can learn its own picture of a series without labels. A small JEPA
               encoder studies a window of the past and learns to predict the
               <em>embedding</em> of the window a few steps later, not the raw numbers.
-              Those learned features join the PCA state of the world model. Nous then
-              backtests both encoders on your series and only uses JEPA when it wins by
-              at least 2%. Runs on the CPU in a few seconds, with no extra AI calls.
+              Those learned features join the PCA state of the world model. Nous trains
+              three JEPA encoders and averages them, so one lucky seed can’t decide.
+              It then picks an encoder on older validation windows (JEPA must win by at
+              least 5%) and grades both on the newest holdouts the pick never saw. The
+              80% range is calibrated so it really covers about 80% in backtests. Runs on
+              the CPU in a few seconds, with no extra AI calls.
             </p>
             <form id="wenc-form" class="side-panel-body sim-form">
               <label for="wenc-series">Series</label>
@@ -1132,8 +1135,9 @@
                   <thead>
                     <tr>
                       <th scope="col">Encoder</th>
-                      <th scope="col">Holdout MAE</th>
-                      <th scope="col">In 80% range</th>
+                      <th scope="col">Validation MAE (picks)</th>
+                      <th scope="col">Holdout MAE (graded)</th>
+                      <th scope="col">In 80% range: raw → calibrated</th>
                     </tr>
                   </thead>
                   <tbody id="wenc-table"></tbody>
