@@ -840,7 +840,7 @@ function trainingOutcomeText(status, message) {
     return "Training started in the background. It takes about a minute on this server — ask me again in a moment and I will check on it.";
   }
   if (status === "queued") {
-    return "Your training run is queued. It will train in your own workspace, leaving the shared champion alone. Check Experiments in the Tools sidebar for progress.";
+    return "Your training run is queued. It will train in your own workspace, leaving the shared model alone. Ask me how it's going anytime.";
   }
   return message || "Training did not start.";
 }
@@ -992,7 +992,7 @@ async function startDatasetTrain(datasetId, column) {
     addReply(
       `Training is queued in your private workspace on the “${result.target_column}” column. ` +
         `${capLine(result.limits)} I’ll post the first forecast here when the run finishes. ` +
-        "Progress also shows under Experiments in the Tools sidebar."
+        "Ask me how the run is going anytime."
     );
     watchTraining();
     refreshExperiments().catch(() => {});
@@ -1082,7 +1082,7 @@ async function announceCsvTrainResult(status) {
   }
   const modelId = status.result && status.result.model_id;
   if (!modelId) {
-    addReply("Training finished. Check Experiments in the Tools sidebar for the run.");
+    addReply("Training finished. Ask me about the run if you want the results.");
     refreshWorkspace().catch(() => {});
     return;
   }
@@ -1115,7 +1115,7 @@ async function announceCsvTrainResult(status) {
   } catch (error) {
     addReply(
       `Training finished, but I could not build the first forecast. ${error.message} ` +
-        "The run is under Experiments in the Tools sidebar."
+        "Ask me about the run if you want the results."
     );
   }
 }
@@ -1127,7 +1127,7 @@ async function trainReply(question) {
   if (!isTrainStartRequest(question)) {
     return {
       text:
-        "I can train a small model on a CSV in your private workspace, and you can compare the runs under Experiments in the Tools sidebar. Use the Train on my CSV chip to upload a file and pick a column, or say “start training” when you want a run to begin. Until then, nothing is started.",
+        "I can train a small model on a CSV in your private workspace. Attach a CSV or say “train on my data” to start. Until then, nothing is started.",
     };
   }
   let current = null;
@@ -1451,9 +1451,13 @@ function showToolsUsed(message, toolsUsed) {
   }
 }
 
+let nousQuestionBusy = false;
+
 async function handleQuestion(question) {
   addMessage("user", question);
   const pending = addMessage("assistant", "One moment — checking…");
+  nousQuestionBusy = true;
+  setNousMotion("thinking");
   try {
     const reply = await answer(question);
     pending.remove();
@@ -1477,6 +1481,9 @@ async function handleQuestion(question) {
     addReply(`Something went wrong on my side. ${error.message || error}`);
     reportError(error);
     return "";
+  } finally {
+    nousQuestionBusy = false;
+    if (talk.state !== "speaking" && talk.state !== "thinking") setNousMotion("idle");
   }
 }
 
@@ -1793,8 +1800,86 @@ function speechPlainText(value) {
   return String(value || "").replace(/\s+/g, " ").trim();
 }
 
+
+function prefersReducedMotion() {
+  return Boolean(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
+}
+
+function setNousMotion(mode) {
+  const body = document.body;
+  if (prefersReducedMotion()) {
+    body.classList.remove("nous-thinking", "nous-talking", "nous-talk-pulse");
+    body.style.removeProperty("--nous-pulse");
+    return;
+  }
+  if (mode === "thinking") {
+    body.classList.add("nous-thinking");
+    body.classList.remove("nous-talking", "nous-talk-pulse");
+    body.style.removeProperty("--nous-pulse");
+  } else if (mode === "talking") {
+    body.classList.add("nous-talking");
+    body.classList.remove("nous-thinking");
+  } else {
+    body.classList.remove("nous-thinking", "nous-talking", "nous-talk-pulse");
+    body.style.removeProperty("--nous-pulse");
+    if (talk.pulseRaf) {
+      cancelAnimationFrame(talk.pulseRaf);
+      talk.pulseRaf = 0;
+    }
+  }
+}
+
+function setupTalkAmplitude(audio) {
+  if (talk.ampTried || prefersReducedMotion() || !audio) return;
+  talk.ampTried = true;
+  try {
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return;
+    talk.audioCtx = talk.audioCtx || new AC();
+    const src = talk.audioCtx.createMediaElementSource(audio);
+    const analyser = talk.audioCtx.createAnalyser();
+    analyser.fftSize = 256;
+    src.connect(analyser);
+    analyser.connect(talk.audioCtx.destination);
+    talk.analyser = analyser;
+    talk.ampData = new Uint8Array(analyser.fftSize);
+  } catch {
+    talk.analyser = null;
+  }
+}
+
+function startTalkPulse(audio) {
+  setupTalkAmplitude(audio);
+  if (talk.audioCtx && talk.audioCtx.state === "suspended") {
+    talk.audioCtx.resume().catch(() => {});
+  }
+  if (!talk.analyser || !talk.ampData) {
+    document.body.classList.add("nous-talk-pulse");
+    return;
+  }
+  document.body.classList.remove("nous-talk-pulse");
+  const data = talk.ampData;
+  const tick = () => {
+    if (talk.state !== "speaking" || !talk.analyser) return;
+    talk.analyser.getByteTimeDomainData(data);
+    let sum = 0;
+    for (let i = 0; i < data.length; i += 1) {
+      const d = (data[i] - 128) / 128;
+      sum += d * d;
+    }
+    const amp = Math.sqrt(sum / data.length);
+    document.body.style.setProperty("--nous-pulse", String(1 + Math.min(0.16, amp * 1.1)));
+    talk.pulseRaf = requestAnimationFrame(tick);
+  };
+  if (talk.pulseRaf) cancelAnimationFrame(talk.pulseRaf);
+  talk.pulseRaf = requestAnimationFrame(tick);
+}
+
 function setTalkState(state) {
   talk.state = state;
+  if (state === "thinking") setNousMotion("thinking");
+  else if (state === "speaking") setNousMotion("talking");
+  else if (!nousQuestionBusy) setNousMotion("idle");
   const button = document.getElementById("talk-toggle");
   if (!button) return;
   const labels = {
@@ -2194,6 +2279,7 @@ function waitForTalkPlayback(audio) {
     audio.addEventListener("error", onError);
     audio.addEventListener("loadedmetadata", onMeta);
     armTimeout(TALK_PLAYBACK_MAX_MS);
+    startTalkPulse(audio);
     audio.play().catch((err) => {
       const name = err && err.name;
       finish(name === "NotAllowedError" ? "blocked" : "error");
@@ -2604,8 +2690,9 @@ function refreshAuthModal() {
     signedIn.hidden = false;
     signedOut.hidden = true;
     const auth = state.account.auth === "local" ? "local owner" : state.account.role;
-    label.textContent = `${state.account.email} (${auth})`;
-    button.textContent = state.account.email;
+    label.textContent = state.account.email;
+    button.textContent = "Account";
+    renderOwnerTools();
     // Display only. The server decides what the account may do.
     if (security) {
       security.hidden = state.account.auth === "local";
@@ -2645,11 +2732,9 @@ async function refreshStatusLine() {
       fetchJson("/health"),
       fetchJson("/model/info"),
     ]);
-    document.getElementById("status-line").textContent = modelInfo.checkpoint_loaded
-      ? `Checkpoint loaded · ${modelInfo.architecture}`
-      : "No checkpoint loaded";
+    document.getElementById("status-line").textContent = "";
   } catch {
-    document.getElementById("status-line").textContent = "Model status unknown";
+    document.getElementById("status-line").textContent = "";
   }
 }
 
@@ -4181,27 +4266,37 @@ function toolNavButton(tool) {
 
 function renderToolNav() {
   const nav = document.getElementById("tool-nav");
-  if (!nav || !toolsApi.TOOL_REGISTRY) return;
+  if (!nav) return;
   nav.replaceChildren();
-  const label = document.createElement("p");
-  label.className = "sidebar-section-label";
-  label.textContent = "Tools";
-  nav.append(label);
-  const pinned = [];
-  const others = [];
-  for (const tool of toolsApi.TOOL_REGISTRY) {
-    (PINNED_TOOL_IDS.includes(tool.id) ? pinned : others).push(tool);
+  nav.hidden = true;
+}
+
+function isVerifiedOwner() {
+  return Boolean(state.account && state.account.owner_powers === "yes");
+}
+
+function renderOwnerTools() {
+  const box = document.getElementById("owner-settings");
+  const list = document.getElementById("owner-tool-list");
+  if (!box || !list) return;
+  list.replaceChildren();
+  if (!isVerifiedOwner() || !toolsApi.TOOL_REGISTRY) {
+    box.hidden = true;
+    return;
   }
-  pinned.sort((a, b) => PINNED_TOOL_IDS.indexOf(a.id) - PINNED_TOOL_IDS.indexOf(b.id));
-  pinned.forEach((tool) => nav.append(toolNavButton(tool)));
-  if (others.length) {
-    const more = document.createElement("details");
-    more.className = "tool-nav-more";
-    const summary = document.createElement("summary");
-    summary.textContent = `All tools (${others.length})`;
-    more.append(summary);
-    others.forEach((tool) => more.append(toolNavButton(tool)));
-    nav.append(more);
+  box.hidden = false;
+  for (const tool of toolsApi.TOOL_REGISTRY) {
+    if (tool.id === "chat") continue;
+    const item = document.createElement("button");
+    item.type = "button";
+    item.className = "btn secondary btn-small";
+    item.textContent = tool.name;
+    item.addEventListener("click", () => {
+      closeSignInModal();
+      closeProfileMenu();
+      activateTool(tool);
+    });
+    list.append(item);
   }
 }
 
@@ -4692,7 +4787,6 @@ if (forecastActions) {
   forecastActions.append(share);
 }
 
-document.getElementById("account-btn").addEventListener("click", openSignInModal);
 const heroSignup = document.getElementById("hero-signup-btn");
 if (heroSignup) {
   heroSignup.addEventListener("click", () => openGate("signup"));
@@ -4916,12 +5010,16 @@ function afterSignIn(account) {
 function enterApp() {
   setAuthView("in");
   if (window.location.pathname === "/app") window.history.replaceState({}, "", "/");
-  if (gate.started) return;
+  if (gate.started) {
+    consumeLandingIntent();
+    return;
+  }
   gate.started = true;
   loadDefaultDemos().catch(() => {});
   refreshAccountDependents().catch(() => {});
   refreshVoiceStatus().catch(() => {});
   armTalkForPhone();
+  consumeLandingIntent();
 }
 
 function passkeysAvailable() {
@@ -5211,4 +5309,128 @@ document.querySelectorAll("[data-view-open]").forEach((button) => {
   button.addEventListener("click", () => showToolView(button.dataset.viewOpen));
 });
 
+
+function closeProfileMenu() {
+  const menu = document.getElementById("profile-menu");
+  const btn = document.getElementById("account-btn");
+  if (menu) menu.hidden = true;
+  if (btn) btn.setAttribute("aria-expanded", "false");
+}
+
+function openProfileMenu() {
+  const menu = document.getElementById("profile-menu");
+  const btn = document.getElementById("account-btn");
+  if (!menu || !btn) return;
+  const open = menu.hidden;
+  menu.hidden = !open;
+  btn.setAttribute("aria-expanded", open ? "true" : "false");
+}
+
+function startFromLanding(question, action) {
+  if (question) {
+    try {
+      sessionStorage.setItem("nousLandingQuestion", question);
+    } catch {
+      // Storage blocked: the gate still opens.
+    }
+  }
+  if (action) {
+    try {
+      sessionStorage.setItem("nousLandingAction", action);
+    } catch {
+      // Storage blocked.
+    }
+  }
+  openGate("signup");
+}
+
+const landingForm = document.getElementById("landing-composer");
+if (landingForm) {
+  landingForm.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const input = document.getElementById("landing-input");
+    startFromLanding(input && input.value.trim(), null);
+  });
+  const landingInput = document.getElementById("landing-input");
+  if (landingInput) {
+    landingInput.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" && !event.shiftKey) {
+        event.preventDefault();
+        landingForm.requestSubmit();
+      }
+    });
+  }
+}
+document.querySelectorAll("[data-landing-q], [data-landing-action]").forEach((chip) => {
+  chip.addEventListener("click", () => {
+    startFromLanding(chip.dataset.landingQ || "", chip.dataset.landingAction || "");
+  });
+});
+
+document.getElementById("account-btn").addEventListener("click", (event) => {
+  event.stopPropagation();
+  if (!state.account) {
+    openSignInModal();
+    return;
+  }
+  openProfileMenu();
+});
+const profileSettings = document.getElementById("profile-settings");
+if (profileSettings) profileSettings.addEventListener("click", () => {
+  closeProfileMenu();
+  openSignInModal();
+});
+const profileAbout = document.getElementById("profile-about");
+if (profileAbout) profileAbout.addEventListener("click", () => {
+  closeProfileMenu();
+  closeSignInModal();
+  showToolView("about");
+});
+const profileSignOut = document.getElementById("profile-sign-out");
+if (profileSignOut) profileSignOut.addEventListener("click", () => {
+  closeProfileMenu();
+  document.getElementById("sign-out-btn").click();
+});
+const settingsVoice = document.getElementById("settings-voice-btn");
+if (settingsVoice) settingsVoice.addEventListener("click", () => {
+  closeSignInModal();
+  showToolView("voice");
+});
+const settingsAbout = document.getElementById("settings-about-btn");
+if (settingsAbout) settingsAbout.addEventListener("click", () => {
+  closeSignInModal();
+  showToolView("about");
+});
+document.addEventListener("click", (event) => {
+  const menu = document.getElementById("profile-menu");
+  if (!menu || menu.hidden) return;
+  if (menu.contains(event.target) || event.target.closest("#account-btn")) return;
+  closeProfileMenu();
+});
+
+function consumeLandingIntent() {
+  let question = "";
+  let action = "";
+  try {
+    question = sessionStorage.getItem("nousLandingQuestion") || "";
+    action = sessionStorage.getItem("nousLandingAction") || "";
+    sessionStorage.removeItem("nousLandingQuestion");
+    sessionStorage.removeItem("nousLandingAction");
+  } catch {
+    return;
+  }
+  if (action === "talk") {
+    const talkBtn = document.getElementById("talk-toggle");
+    if (talkBtn) talkBtn.click();
+  } else if (action === "image") {
+    const imgBtn = document.getElementById("attach-image-btn");
+    if (imgBtn) imgBtn.click();
+  } else if (question) {
+    const input = document.getElementById("chat-input");
+    if (input) input.value = question;
+    handleQuestion(question);
+  }
+}
+
 bootAuth();
+

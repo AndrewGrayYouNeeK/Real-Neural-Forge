@@ -9,7 +9,7 @@
       id: "chat",
       name: "Chat",
       icon: "◇",
-      description: "Plain-English agent with tools (GPT-OSS 120B).",
+      description: "Ask in plain English. Nous uses the right tool when it needs to.",
       status: "live",
       view: "chat",
     },
@@ -41,7 +41,7 @@
       id: "evaluation",
       name: "Accuracy / Evaluation",
       icon: "◎",
-      description: "Backtested MAE, RMSE, and baseline comparison.",
+      description: "How the forecasts have been doing, versus simple baselines.",
       status: "live",
       view: "evaluation",
     },
@@ -79,15 +79,15 @@
     },
     {
       id: "pca",
-      name: "PCA / eigenvectors",
+      name: "What moves together",
       icon: "⌖",
-      description: "Find the main drivers in your data.",
+      description: "Find the main things that move together in your data.",
       status: "live",
       view: "pca",
     },
     {
       id: "kmeans",
-      name: "K-Means clustering",
+      name: "Patterns and unusual points",
       icon: "⊛",
       description: "Spot regimes and unusual points for alerts.",
       status: "live",
@@ -103,9 +103,9 @@
     },
     {
       id: "jepa",
-      name: "JEPA pretraining",
+      name: "Learn from your series",
       icon: "⬡",
-      description: "Smarter learned representations for series.",
+      description: "A smarter learned picture of your series.",
       status: "live",
       view: "jepa",
     },
@@ -167,9 +167,9 @@
     },
     {
       id: "world-encoder",
-      name: "JEPA world model",
+      name: "Learn a picture of your series",
       icon: "✺",
-      description: "Self-supervised encoder vs PCA, backtested on your series.",
+      description: "Learn a picture of your series and compare it with a simpler one.",
       status: "live",
       view: "world-encoder",
     },
@@ -245,12 +245,12 @@
       status: "live",
       items: [
         {
-          name: "PCA / eigenvectors",
-          description: "Find the main drivers in your data.",
+          name: "What moves together",
+          description: "Find the main things that move together in your data.",
           toolId: "pca",
         },
         {
-          name: "K-Means clustering",
+          name: "Patterns and unusual points",
           description: "Find weather or market regimes and flag unusual points.",
           toolId: "kmeans",
         },
@@ -260,8 +260,8 @@
           toolId: "diffusion",
         },
         {
-          name: "JEPA pretraining",
-          description: "Smarter learned representations for your series.",
+          name: "Learn from your series",
+          description: "A smarter learned picture of your series.",
           toolId: "jepa",
         },
       ],
@@ -322,7 +322,7 @@
       items: [
         {
           name: "World model simulator",
-          description: "A learned model of your series rolls 128 futures forward, step by step.",
+          description: "A learned model of your series rolls possible futures forward, step by step.",
           toolId: "simulator",
         },
         {
