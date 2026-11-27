@@ -31,7 +31,7 @@ import {
   type D1Like,
 } from "../live/ai";
 import { routeClearIntent } from "./intent";
-import { KNOWLEDGE_NOTE, collectSources, isKnowledgeTool, wantsRecent } from "./knowledge";
+import { KNOWLEDGE_NOTE, collectSources, isKnowledgeTool, needsFactLookup, wantsRecent } from "./knowledge";
 import { checkInput, checkOutput, enforceCreatorAnswer } from "./safety";
 import {
   buildArtifacts,
@@ -1129,12 +1129,13 @@ export async function runAgentTurn(
       !calls.length &&
       !toolResults.length &&
       !lookupForced &&
-      wantsRecent(clean, deps.now ?? new Date()) &&
+      (wantsRecent(clean, deps.now ?? new Date()) || needsFactLookup(clean)) &&
       !routeClearIntent(clean)
     ) {
       lookupForced = true;
       answer = null;
-      calls = [{ id: "intent_search", name: "web_search", args: { query: clean.slice(0, 200), recent: true } }];
+      const recent = wantsRecent(clean, deps.now ?? new Date());
+      calls = [{ id: "intent_search", name: "web_search", args: { query: clean.slice(0, 200), recent } }];
     }
 
     if (calls.length) {
