@@ -36,6 +36,10 @@ _UNIT = re.compile(
 # "Nous" is said "noose" (rhymes with moose). The spoken text spells it that way
 # for every voice; the words on screen are never touched.
 _NOUS = re.compile(r"\bnous\b", flags=re.IGNORECASE)
+# "YouNeeK" (and its YNK brand short form) is said "unique". Screen text keeps
+# the spelling; only the spoken text changes. Voice names are not touched.
+_YOUNEEK = re.compile(r"\byouneek\b", flags=re.IGNORECASE)
+_YNK = re.compile(r"\bYNK\b")
 _TICKER = re.compile(r"\b[A-Z]{2,10}\b")
 _MARKDOWN = re.compile(r"[*_#~`|>]+")
 _SPACE = re.compile(r"\s+")
@@ -117,6 +121,8 @@ def speech_text(raw: str) -> str:
     text = _THOUSANDS.sub("", text)
     text = _UNIT.sub(_unit, text)
     text = _NOUS.sub("Noose", text)
+    text = _YOUNEEK.sub("unique", text)
+    text = _YNK.sub("unique", text)
     text = _TICKER.sub(_ticker, text)
     text = _MARKDOWN.sub(" ", text)
     return _SPACE.sub(" ", text).strip()

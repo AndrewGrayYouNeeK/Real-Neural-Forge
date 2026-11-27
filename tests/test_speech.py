@@ -157,3 +157,13 @@ def test_nous_is_spoken_as_noose_for_every_voice():
     assert speech_text("Ask Nous's team about nousy things") == (
         "Ask Noose's team about nousy things"
     )
+
+
+def test_youneek_is_spoken_as_unique():
+    from src.voice.text import speech_text
+
+    assert speech_text("Andrew Gray, founder, owner and CEO of YouNeeK.") == (
+        "Andrew Gray, founder, owner and C E O of unique."
+    )
+    assert speech_text("YNK and youneek and YOUNEEK") == "unique and unique and unique"
+    assert speech_text("Ask Ivy or GQ about Nous") == "Ask Ivy or GQ about Noose"

@@ -44,7 +44,7 @@ describe("default prompt: understanding, openness, creator", () => {
     expect(normal).toContain(UNDERSTANDING_STYLE);
     expect(normal).toContain("go exactly one layer deeper");
     expect(normal).toContain("never dodge or refuse mainstream, controversial, political, or conspiracy topics");
-    expect(normal).toContain("Andrew Gray (YouNeeK)");
+    expect(normal).toContain("Andrew Gray, founder, owner and CEO of YouNeeK");
     expect(normal).toContain("web_search");
     expect(agentSystemPrompt("normal", false)).toContain("Andrew Gray");
     expect(agentSystemPrompt("unhinged", true)).not.toContain(UNDERSTANDING_STYLE);

@@ -973,7 +973,7 @@ describe("agent turn caps and fallback", () => {
       "corporate help desk",
       "°f",
       "at most one light quip",
-      "andrew gray (youneek)",
+      "andrew gray, founder, owner and ceo of youneek",
     ]) {
       expect(normal).toContain(phrase);
     }
