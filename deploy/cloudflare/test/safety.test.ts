@@ -125,12 +125,10 @@ describe("creator honesty", () => {
   it("always credits Andrew Gray and never OpenAI/xAI as the maker", () => {
     expect(enforceCreatorAnswer("Who made you?", "I was created by OpenAI.")).toBe(CREATOR_ANSWER);
     expect(enforceCreatorAnswer("Who made you?", "I'm Grok, built by xAI.")).toContain("Andrew Gray");
-    const good = "Andrew Gray, founder, owner and CEO of YouNeeK (pronounced \"unique\") built me, running on GPT-OSS 120B.";
+    const good = 'Nous was created by and is owned by Andrew Gray, founder, owner and CEO of YouNeeK (pronounced "unique"). Ask him about it.';
     expect(enforceCreatorAnswer("who created you", good)).toBe(good);
-    // The short form is expanded to the full title.
-    expect(enforceCreatorAnswer("who created you", "Andrew Gray (YouNeeK) built me.")).toBe(
-      'Andrew Gray, founder, owner and CEO of YouNeeK (pronounced "unique") built me.',
-    );
+    // Anything that is not the canonical wording becomes the canonical answer.
+    expect(enforceCreatorAnswer("who created you", "Andrew Gray (YouNeeK) built me.")).toBe(CREATOR_ANSWER);
     expect(CREATOR_ANSWER).toContain("Andrew Gray");
     expect(CREATOR_ANSWER).toContain("GPT-OSS 120B");
     expect(enforceCreatorAnswer("why is the sky blue", "Rayleigh scattering.")).toBe("Rayleigh scattering.");
@@ -140,10 +138,10 @@ describe("creator honesty", () => {
 describe("creator honesty with model typography", () => {
   it("accepts an answer that names Andrew Gray with a non-breaking space", () => {
     const answer = "I was created by\u2014and am owned by\u2014Andrew\u00a0Gray (YouNeeK), and I run on GPT\u2011OSS 120B.";
-    const out = enforceCreatorAnswer("Who made you?", answer) as string;
-    expect(out).toContain("Andrew Gray, founder, owner and CEO of YouNeeK");
-    expect(out).toContain("GPT\u2011OSS 120B");
-    expect(out).not.toContain("(YouNeeK)");
+    expect(enforceCreatorAnswer("Who made you?", answer)).toBe(CREATOR_ANSWER);
+    const smart = "Nous was created by and is owned by Andrew\u00a0Gray, founder, owner and CEO of YouNeeK (pronounced \u201cunique\u201d).";
+    expect(enforceCreatorAnswer("Who made you?", smart)).toContain("created by and is owned by Andrew Gray, founder, owner and CEO of YouNeeK");
+    expect(enforceCreatorAnswer("Who made you?", smart)).not.toBe(CREATOR_ANSWER);
   });
 });
 
@@ -151,7 +149,7 @@ describe("creator answer wording", () => {
   it("names Andrew Gray as founder, owner and CEO of YouNeeK", async () => {
     const { CREATOR_ANSWER } = await import("../src/agent/safety");
     expect(CREATOR_ANSWER).toContain("Andrew Gray, founder, owner and CEO of YouNeeK");
-    expect(CREATOR_ANSWER).toContain("created by, and is owned by");
+    expect(CREATOR_ANSWER).toContain("created by and is owned by");
     expect(CREATOR_ANSWER).not.toMatch(/OpenAI made|xAI made/);
   });
 });
@@ -164,8 +162,7 @@ describe("creator title wording", () => {
     expect(normalizeCreatorTitle("Made by Andrew Gray (YouNeeK)")).toBe(`Made by ${title}`);
     expect(normalizeCreatorTitle(`Made by ${title}`)).toBe(`Made by ${title}`);
     expect(normalizeCreatorTitle("Andrew Gray the CEO of YouNeeK")).toBe(title);
-    const out = enforceCreatorAnswer("who created you?", "Created by Andrew Gray, founder and CEO of YouNeeK.");
-    expect(out).toBe(`Created by ${title} (pronounced "unique").`);
+    expect(enforceCreatorAnswer("who created you?", "Created by Andrew Gray, founder and CEO of YouNeeK.")).toBe(CREATOR_ANSWER);
     expect(enforceCreatorAnswer("what's your name?", "I'm Nous, built by Andrew Gray, founder and CEO of YouNeeK.")).toBe(`I'm Nous, built by ${title}.`);
   });
 });
