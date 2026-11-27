@@ -39,6 +39,7 @@ import {
   readStoredBacktest,
   type WaitUntil,
 } from "./toolCache";
+import { runReadPage, runWebSearch, runWikiSummary } from "./knowledge";
 
 /**
  * Build the weather lookup string from the user's original question and the
@@ -108,6 +109,8 @@ export type ToolContext = {
   waitUntil?: WaitUntil;
   /** D1 memory scope from resolveMemoryIdentity (user:/owner/ip:). */
   memoryScope?: string;
+  /** Owner session (higher daily knowledge-lookup allowance). */
+  owner?: boolean;
 };
 
 const STARTER_IDS = new Set(["weather", "stocks", "crypto", "near-earth", "lunar"]);
@@ -634,6 +637,49 @@ export const TOOL_DEFINITIONS = [
         place: { type: "string", description: "City/place name, e.g. 'Louisville, KY'. Omit to use the visitor's location." },
         days: { type: "integer", description: "How many past days (7-92). Default 30." },
       },
+      additionalProperties: false,
+    },
+  },
+  {
+    type: "function" as const,
+    name: "web_search",
+    description:
+      "Search live sources (Wikipedia plus recent news from Wikipedia's Current events, each item linking its news outlet). Use it BEFORE answering any question about current events, recent news, people, places, organizations, dates, statistics, or any fact you are not certain of. Set recent:true for news or anything from the last few weeks. Returns titles, URLs, and snippets to cite.",
+    parameters: {
+      type: "object",
+      properties: {
+        query: { type: "string", description: "Short search query (key names and terms, no filler)." },
+        recent: { type: "boolean", description: "True for news / current events." },
+      },
+      required: ["query"],
+      additionalProperties: false,
+    },
+  },
+  {
+    type: "function" as const,
+    name: "wiki_summary",
+    description:
+      "Plain-language Wikipedia summary of one topic (a person, place, thing, idea, or event), with its URL. Best first step for 'what is / who was / explain X'.",
+    parameters: {
+      type: "object",
+      properties: {
+        topic: { type: "string", description: "Article topic, e.g. 'Black hole' or 'Ada Lovelace'." },
+      },
+      required: ["topic"],
+      additionalProperties: false,
+    },
+  },
+  {
+    type: "function" as const,
+    name: "read_page",
+    description:
+      "Open one public web page (a URL from web_search results or one the user gave) and read its main text. Use when a snippet is not enough.",
+    parameters: {
+      type: "object",
+      properties: {
+        url: { type: "string", description: "Full http(s) URL." },
+      },
+      required: ["url"],
       additionalProperties: false,
     },
   },
@@ -2330,6 +2376,12 @@ export async function dispatchTool(
         return runSimulateWorld(keyed, args);
       case "weather_history":
         return runWeatherHistory(keyed, args);
+      case "web_search":
+        return runWebSearch(keyed, args);
+      case "wiki_summary":
+        return runWikiSummary(keyed, args);
+      case "read_page":
+        return runReadPage(keyed, args);
       default: {
         const unexpected: never = toolName;
         throw new Error(`Unhandled tool: ${String(unexpected)}`);

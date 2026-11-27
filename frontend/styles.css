@@ -2094,3 +2094,32 @@ body:not(.has-chat) #chat-log {
   outline: 2px solid #fff;
   outline-offset: 2px;
 }
+
+/* Live sources: inline links + a tiny "Searched N sources" line. */
+.bubble a.source-link {
+  color: inherit;
+  opacity: 0.75;
+  font-size: 0.9em;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.sources-line {
+  margin-top: 6px;
+  font-size: 0.78rem;
+  opacity: 0.65;
+}
+.sources-line summary {
+  cursor: pointer;
+  list-style: none;
+}
+.sources-line summary::-webkit-details-marker {
+  display: none;
+}
+.sources-line a {
+  display: block;
+  margin-top: 4px;
+  color: inherit;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
