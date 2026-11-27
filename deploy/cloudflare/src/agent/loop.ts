@@ -53,6 +53,7 @@ import {
   isDegenerateAnswer,
   looksLikeFailedToolAttempt,
   sanitizeAgentAnswer,
+  sayNous,
   summarizeArgs,
   type ParsedToolCall,
 } from "./protocol";
@@ -150,7 +151,7 @@ export function isSmallTalk(question: string): boolean {
  * actually understand, then go deeper only when asked.
  */
 export const UNDERSTANDING_STYLE =
-  "Understanding first: when someone asks what, why, or how, give the plain-language explanation first, in words a curious 12-year-old could follow, with one everyday analogy or concrete example. " +
+  "Understanding first: when someone asks what, why, or how, give the plain-language explanation first, in words a curious 12-year-old could follow, with one funny everyday analogy or concrete example, and land one real joke before you stop. " +
   "Stop there and let them pull for more. When they say 'why?', 'go deeper', 'explain more', or 'how does that work', go exactly one layer deeper than your last answer (the mechanism, then the evidence, then the math or edge cases) without repeating what you already said. " +
   "When numbers would make it clearer, use a data tool so a chart is attached. " +
   "Openness: never dodge or refuse mainstream, controversial, political, or conspiracy topics. Answer directly in this shape: the mainstream view; the alternative or conspiracy claims stated fairly at their strongest; what evidence supports or contradicts each side, with sources; then let the person decide. " +
@@ -224,7 +225,8 @@ function historyForModel(history: HistoryMessage[]): HistoryMessage[] {
     .slice(-8)
     .map((item) => ({
       role: item.role,
-      content: item.content.trim().slice(0, 500),
+      // Old replies saved under the old name must not teach the model to use it.
+      content: sayNous(item.content.trim().slice(0, 500)),
     }));
 }
 
@@ -829,6 +831,26 @@ const NO_MORE_TOOLS_NOTE =
 const FINISH_THE_JOB_NOTE =
   "You stopped before finishing the user's request. Do not answer yet and do not promise to do it later. Reply with ONLY the tool JSON for the next missing step now.";
 
+const NO_TOOL_NEEDED_NOTE =
+  "That question does not need live data or a tool. Answer it directly from what you know, in your usual funny voice. Do not call a tool.";
+
+/** Live space/moon/solar data only when the question is about those things. */
+const SPACE_DATA_ASK =
+  /\b(moon|lunar|space|asteroids?|near-?earth|neos?|solar|sun|flares?|geomagnetic|aurora|kp|cosmic|meteors?|comets?|satellites?|iss|orbit\w*)\b/i;
+
+export function toolFitsQuestion(call: ParsedToolCall, question: string): boolean {
+  const args = (call.args || {}) as Record<string, unknown>;
+  const series = String(args.series ?? args.model_id ?? args.starter ?? "").toLowerCase();
+  if (series === "near-earth" && !/\b(near-?earth|asteroids?|neos?)\b/i.test(question)) return false;
+  if (call.name !== "fetch_live_data") return true;
+  const kind = String(args.kind ?? "").toLowerCase();
+  if (kind === "moon" || kind === "space" || kind === "solar") return SPACE_DATA_ASK.test(question);
+  return true;
+}
+
+const LONG_ANSWER_NOTE =
+  "Your last reply ran out of room and was cut off. Write the whole answer now, finished, in your usual funny voice. Do not call a tool.";
+
 const WRITE_FULL_ANSWER_NOTE =
   "Every data step is done. Write the complete final answer now, covering every step the user asked for, including a short plain-words explanation. Do not promise further work.";
 
@@ -864,6 +886,9 @@ export async function runAgentTurn(
   let modelId = PRIMARY_MODEL;
   let voiceResting = false;
   let strictRetryUsed = false;
+  let longAnswerUsed = false;
+  let droppedTools = 0;
+  let truncatedProse: string | null = null;
   let intentRouted = false;
   let lastStepTruncated = false;
   let modelSteps = 0;
@@ -1082,6 +1107,18 @@ export async function runAgentTurn(
     }
 
     let calls = step.calls;
+    // General asks (lists, writing, explanations) must never trigger a space/moon/solar
+    // data dump. Drop a live-data call the question did not ask for and answer directly.
+    const fitting = calls.filter((item) => toolFitsQuestion(item, clean));
+    if (fitting.length < calls.length) {
+      calls = fitting;
+      if (!calls.length && droppedTools < 2) {
+        droppedTools += 1;
+        pendingExtra = NO_TOOL_NEEDED_NOTE;
+        answer = null;
+        continue;
+      }
+    }
 
     // One stricter retry when nothing parsed but the model clearly tried a tool,
     // or when the reply is empty/degenerate and a clear intent applies.
@@ -1174,7 +1211,18 @@ export async function runAgentTurn(
     // The model answered in prose. Before accepting it, check the plan.
     const prose: string | null = answer || proseFrom(step);
     answer = prose;
-    if (!multiStep) break;
+    if (!multiStep) {
+      // The short tool-picking budget includes hidden reasoning, so a long answer
+      // (a list, a how-to) can be cut off. Ask once more with the full answer budget.
+      if (prose && lastStepTruncated && !longAnswerUsed && !toolResults.length) {
+        longAnswerUsed = true;
+        truncatedProse = prose;
+        pendingExtra = LONG_ANSWER_NOTE;
+        answer = null;
+        continue;
+      }
+      break;
+    }
     const missingData = missingDeliverables(plan, toolResults, prose).filter((item) => item !== "explain");
     const explainMissing = plan.deliverables.includes("explain") && !deliverableDone("explain", toolResults, prose);
     const promised = promisesFutureWork(prose);
@@ -1204,6 +1252,8 @@ export async function runAgentTurn(
     }
     break;
   }
+
+  if (!answer && truncatedProse) answer = truncatedProse;
 
   // Out of steps / tools / time with no final answer: one tools-off wrap-up call.
   if (

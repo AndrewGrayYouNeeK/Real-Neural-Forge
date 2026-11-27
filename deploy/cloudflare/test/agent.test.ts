@@ -27,6 +27,7 @@ import {
   NORMAL_TOOL_VOICE,
   runAgentTurn,
   trimDanglingFragment,
+  toolFitsQuestion,
 } from "../src/agent/loop";
 import {
   collectToolCalls,
@@ -1104,6 +1105,81 @@ describe("agent turn caps and fallback", () => {
     expect(result.modelId).toBe(PRIMARY_MODEL);
     expect(result.toolsUsed).toEqual([]);
     expect(result.text.toLowerCase()).toContain("forge");
+  });
+
+  it("never shows the model the old name from saved chat history", async () => {
+    const db = new MemoryD1();
+    const seen: string[] = [];
+    const ai = {
+      async run(_model: string, inputs: Record<string, unknown>) {
+        seen.push(JSON.stringify(inputs));
+        return { response: "I'm Nous." };
+      },
+    };
+    await runAgentTurn(
+      "what's your name?",
+      "normal",
+      [
+        { role: "user", content: "who are you" },
+        { role: "assistant", content: "I'm Neural Forge, the Real Neural Forge bot." },
+      ],
+      { ai, db, ip: "8.8.8.8", owner: false, toolContext: toolContext(), models: { primary: PRIMARY_MODEL, fallback: FALLBACK_MODEL } },
+    );
+    const sent = JSON.parse(seen[0]) as { input: Array<{ role: string; content: string }> };
+    const assistant = sent.input.filter((item) => item.role === "assistant").map((item) => item.content);
+    expect(assistant).toEqual(["I'm Nous, the Nous bot."]);
+  });
+
+  it("does not dump space data for a general ask like listing planets", async () => {
+    expect(toolFitsQuestion({ id: "1", name: "fetch_live_data", args: { kind: "space" } }, "List three planets, each on its own line")).toBe(false);
+    expect(toolFitsQuestion({ id: "1", name: "fetch_live_data", args: { kind: "space" } }, "any asteroids near earth today?")).toBe(true);
+    expect(toolFitsQuestion({ id: "1", name: "forecast", args: { series: "near-earth" } }, "write me a poem")).toBe(false);
+    expect(toolFitsQuestion({ id: "1", name: "fetch_live_data", args: { kind: "weather" } }, "weather in Paris")).toBe(true);
+    const db = new MemoryD1();
+    let calls = 0;
+    const ai = {
+      async run() {
+        calls += 1;
+        if (calls === 1) return { response: '{"tool":"fetch_live_data","args":{"kind":"space"}}' };
+        return { response: "Mercury\nVenus\nMars" };
+      },
+    };
+    const result = await runAgentTurn("List three planets, each on its own line", "normal", [], {
+      ai,
+      db,
+      ip: "6.6.6.6",
+      owner: false,
+      toolContext: toolContext(),
+      models: { primary: PRIMARY_MODEL, fallback: FALLBACK_MODEL },
+    });
+    expect(result.toolsUsed).toEqual([]);
+    expect(result.text).toBe("Mercury\nVenus\nMars");
+  });
+
+  it("asks again with the full answer budget when a long answer was cut off", async () => {
+    const db = new MemoryD1();
+    const calls: Array<Record<string, unknown>> = [];
+    const ai = {
+      async run(_model: string, inputs: Record<string, unknown>) {
+        calls.push(inputs);
+        if (calls.length === 1) {
+          return { response: "Here's a quick list, y'all.", status: "incomplete", incomplete_details: { reason: "max_output_tokens" } };
+        }
+        return { response: "Here's a quick list, y'all.\n- Eggs\n- Milk\n- Hot sauce, because we have standards." };
+      },
+    };
+    const result = await runAgentTurn("help me write a grocery list", "normal", [], {
+      ai,
+      db,
+      ip: "7.7.7.7",
+      owner: false,
+      toolContext: toolContext(),
+      models: { primary: PRIMARY_MODEL, fallback: FALLBACK_MODEL },
+    });
+    expect(calls.length).toBe(2);
+    expect(Number(calls[1].max_output_tokens ?? calls[1].max_tokens)).toBeGreaterThan(Number(calls[0].max_output_tokens ?? calls[0].max_tokens));
+    expect(result.text).toContain("Hot sauce");
+    expect(result.text).toContain("- Eggs");
   });
 
   it("logs the 120B error reason when falling back to 8B", async () => {

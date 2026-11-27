@@ -64,7 +64,7 @@ class VoiceSettings:
     """ElevenLabs delivery settings.
 
     High stability and no style exaggeration keep every word crisp (no slur or
-    drift), high similarity keeps it sounding like Andrew, and speed 1.1 trims
+    drift), high similarity keeps it sounding like Andrew, and speed 1.15 trims
     the slow drawl without chipmunking the clone.
     """
 
@@ -72,7 +72,7 @@ class VoiceSettings:
     similarity_boost: float = 0.9
     style: float = 0.0
     use_speaker_boost: bool = True
-    speed: float = 1.1
+    speed: float = 1.15
 
     def as_dict(self) -> dict[str, Any]:
         return {

@@ -85,7 +85,7 @@ def test_config_yaml_uses_the_stable_voice_settings() -> None:
     assert cfg.settings.similarity_boost == 0.9
     assert cfg.settings.style == 0.0
     assert cfg.settings.use_speaker_boost is True
-    assert cfg.settings.speed == 1.1
+    assert cfg.settings.speed == 1.15
 
 
 def test_synthesis_sends_settings_and_joins_chunks(
@@ -131,7 +131,7 @@ def test_synthesis_sends_settings_and_joins_chunks(
         "similarity_boost": 0.9,
         "style": 0.0,
         "use_speaker_boost": True,
-        "speed": 1.1,
+        "speed": 1.15,
     }
     assert "previous_request_ids" not in first
     assert len(captured) > 1

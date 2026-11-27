@@ -1918,17 +1918,6 @@ function shouldAutoArmTalk() {
   return isPhoneSurface() && talkPreference() !== "off";
 }
 
-function talkGestureRequired() {
-  try {
-    if (navigator.userActivation) {
-      return !(navigator.userActivation.isActive || navigator.userActivation.hasBeenActive);
-    }
-  } catch {
-    // Assume a gesture is required when the API is missing or throws.
-  }
-  return true;
-}
-
 function isTalkOffControl(target) {
   if (!target || typeof target.closest !== "function") return false;
   return Boolean(
@@ -1969,12 +1958,8 @@ function startTalkFromGesture() {
 
 function onTalkAutoStartPointer(event) {
   if (!talk.armed || talk.active || talk.opening) return;
+  if (!event || event.isTrusted !== true) return;
   if (isTalkOffControl(event && event.target)) return;
-  startTalkFromGesture();
-}
-
-function onTalkAutoStartFocus() {
-  if (!talk.armed || talk.active || talk.opening) return;
   startTalkFromGesture();
 }
 
@@ -2004,16 +1989,12 @@ function bindTalkAutoStart() {
   if (talk.autoBound) return;
   talk.autoBound = true;
   document.addEventListener("pointerdown", onTalkAutoStartPointer, true);
-  const input = document.getElementById("chat-input");
-  if (input) input.addEventListener("focus", onTalkAutoStartFocus);
 }
 
 function unbindTalkAutoStart() {
   if (!talk.autoBound) return;
   talk.autoBound = false;
   document.removeEventListener("pointerdown", onTalkAutoStartPointer, true);
-  const input = document.getElementById("chat-input");
-  if (input) input.removeEventListener("focus", onTalkAutoStartFocus);
 }
 
 function disarmTalk(options = {}) {
@@ -2034,15 +2015,20 @@ function armTalkForPhone() {
   talk.armed = true;
   setTalkState("armed");
   bindTalkAutoStart();
-  if (talkGestureRequired()) {
-    showTalkStartOverlay();
-  } else {
-    startTalkFromGesture();
-  }
+  // Never open the mic on load or sign-in: only a real tap (the overlay button or a
+  // trusted pointerdown) may start Talk.
+  showTalkStartOverlay();
 }
 
+// GQ talks a touch faster than the raw clip; pitch stays put.
+const TALK_PLAYBACK_RATE = 1.08;
+
 function ensureTalkPlayer() {
-  if (!talk.player) talk.player = new Audio();
+  if (!talk.player) {
+    talk.player = new Audio();
+    talk.player.preservesPitch = true;
+    talk.player.webkitPreservesPitch = true;
+  }
   return talk.player;
 }
 
@@ -2543,6 +2529,8 @@ async function speakTalkTurn(text) {
   talk.objectUrl = objectUrl;
   talk.audio = audio;
   audio.src = objectUrl;
+  audio.playbackRate = TALK_PLAYBACK_RATE;
+  audio.defaultPlaybackRate = TALK_PLAYBACK_RATE;
   const played = await waitForTalkPlayback(audio);
   if (talk.audio === audio) talk.audio = null;
   // Revoke only after playback finished or was interrupted — never while waiting.
