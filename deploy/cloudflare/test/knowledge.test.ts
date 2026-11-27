@@ -207,3 +207,21 @@ describe("read_page", () => {
     expect(data._sources).toEqual([{ title: "Story", url: "https://example-news.org/story" }]);
   });
 });
+
+describe("fact lookups", () => {
+  it("forces a search for specific facts but not for explanations or questions about Nous", async () => {
+    const { needsFactLookup } = await import("../src/agent/knowledge");
+    for (const q of [
+      "What year was the Voynich manuscript vellum carbon-dated to, and who did the dating?",
+      "Who discovered Pluto?",
+      "How tall is Mount Kilimanjaro?",
+      "Tell me about the Antikythera mechanism",
+      "What is the population of Lagos?",
+    ]) {
+      expect(needsFactLookup(q), q).toBe(true);
+    }
+    for (const q of ["Why do we have seasons?", "why?", "go deeper", "Who made you?", "How does a rainbow form?", "What's 2+2?"]) {
+      expect(needsFactLookup(q), q).toBe(false);
+    }
+  });
+});
