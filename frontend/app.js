@@ -256,18 +256,6 @@ function rememberVoiceBudget(result) {
   if (result && result.voice_resting) state.voiceResting = true;
 }
 
-async function voicePlaybackAllowed() {
-  // Subscribers pay for their own voice, so the free-tier rest day never blocks them.
-  if (state.voiceStatus && state.voiceStatus.subscribed) return true;
-  if (state.voiceResting) return false;
-  try {
-    rememberVoiceBudget(await fetchJson("/live/budget"));
-  } catch {
-    // A missed status check does not block a listen the chat has not marked resting.
-  }
-  return !state.voiceResting;
-}
-
 /* --------------------------------------------------------- topic replies */
 
 function chartValue(starterId, value) {
@@ -1387,10 +1375,6 @@ async function handleQuestion(question) {
     const replyMessage = addReply(reply.text, reply.chart);
     showToolsUsed(replyMessage, reply.toolsUsed);
     showSources(replyMessage, reply.sources);
-    if (reply.voiceResting && !state.toldVoiceResting) {
-      state.toldVoiceResting = true;
-      showHint(replyMessage, reply.voiceMessage || VOICE_RESTING_MESSAGE);
-    }
     if (reply.actions) {
       const actions = replyMessage.querySelector(".message-actions");
       for (const [label, action] of reply.actions) {
@@ -2508,15 +2492,8 @@ async function speakTalkTurn(text) {
     startListening();
     return;
   }
-  if (!(await voicePlaybackAllowed())) {
-    if (!talk.active || mine !== talk.turn) return;
-    if (!state.toldVoiceResting) {
-      state.toldVoiceResting = true;
-      addReply(VOICE_RESTING_MESSAGE);
-    }
-    startListening();
-    return;
-  }
+  // GQ voice is limited by its own balance and daily budget (answered below with
+  // 402 / 429). The Workers AI "rest" line never mutes it.
   setTalkState("speaking");
   let response;
   try {
@@ -2533,11 +2510,18 @@ async function speakTalkTurn(text) {
     return;
   }
   if (!talk.active || mine !== talk.turn) return;
-  if (response.status === 401 || response.status === 402) {
+  if (response.status === 401 || response.status === 402 || response.status === 429) {
+    // Out of voice: keep the conversation going in text with one short note.
     talk.voiceOff = true;
     if (!talk.toldVoice) {
       talk.toldVoice = true;
-      const reply = addReply(response.status === 401 ? TALK_SIGN_IN : TALK_NO_CREDIT);
+      const note =
+        response.status === 401
+          ? TALK_SIGN_IN
+          : response.status === 429
+            ? VOICE_RESTING_MESSAGE
+            : TALK_NO_CREDIT;
+      const reply = addReply(note);
       const actions = reply.querySelector(".message-actions");
       if (actions && response.status === 402) {
         actions.append(makeButton("Subscribe", startSubscribe));

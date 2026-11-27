@@ -1073,7 +1073,6 @@ class TestForecastDashboard:
         assert "/live/lottery" not in app_js
         assert "/agent/chat" in app_js
         assert "/live/ask" in app_js
-        assert "/live/budget" in app_js
         assert "Voice is resting for today, text still works." in app_js
         assert "neuralForgeChatMode" in app_js
         assert "mode: chatMode()" in app_js

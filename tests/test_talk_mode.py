@@ -57,7 +57,10 @@ def test_talk_mode_surfaces_auth_and_voice_failures() -> None:
     assert "TALK_SIGN_IN" in section
     assert "TALK_NO_CREDIT" in section
     assert "TALK_VOICE_FAILED" in section
-    assert "response.status === 401 || response.status === 402" in section
+    assert (
+        "response.status === 401 || response.status === 402 || response.status === 429"
+        in section
+    )
     assert "tellTalkVoiceIssue(TALK_VOICE_FAILED)" in section
     assert "tellTalkVoiceIssue(TALK_PLAYBACK_BLOCKED)" in section
 
