@@ -2094,3 +2094,52 @@ body:not(.has-chat) #chat-log {
   outline: 2px solid #fff;
   outline-offset: 2px;
 }
+
+/* ---- Chat abilities: attached files and images Nous makes ---- */
+.file-attachment {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  align-self: flex-start;
+  max-width: 100%;
+  padding: 6px 8px 6px 12px;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  background: var(--composer);
+  font-size: 0.9rem;
+}
+
+.file-attachment[hidden] {
+  display: none;
+}
+
+.file-attachment[data-busy="true"] .file-attachment-name {
+  opacity: 0.7;
+}
+
+.file-attachment-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gen-image {
+  margin: 10px 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.gen-image img {
+  display: block;
+  width: 100%;
+  max-width: 420px;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+}
+
+.gen-image-save {
+  font-size: 0.85rem;
+  color: inherit;
+  opacity: 0.75;
+}

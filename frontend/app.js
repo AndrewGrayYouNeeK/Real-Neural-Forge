@@ -218,6 +218,7 @@ function addReply(text, chartSpec) {
     charts.renderLineChart(host, chartSpec);
     scrollToBottom();
   }
+  if (window.nousAbilities) window.nousAbilities.decorateReply(message, text);
   return message;
 }
 
@@ -1356,6 +1357,7 @@ async function askLive(question, options) {
   const facts = options && typeof options.facts === "string" ? options.facts : "";
   const payload = { question, mode: chatMode() };
   if (facts) payload.facts = facts;
+  if (window.nousAbilities) Object.assign(payload, window.nousAbilities.takeChatExtras());
   const history = chatHistoryPayload();
   if (history.length) payload.history = history;
   if (currentThreadId) payload.thread_id = currentThreadId;
@@ -1425,6 +1427,7 @@ function agentReplyExtras(result) {
 }
 
 async function answer(question) {
+  if (window.nousAbilities && window.nousAbilities.hasPendingFile()) return askLive(question);
   if (isMultiStepAsk(question)) return askLive(question);
   const intent = matchIntent(question);
   if (!intent) return askLive(question);
@@ -4506,11 +4509,13 @@ document.getElementById("chat-form").addEventListener("submit", (event) => {
     handleImageQuestion(question, image).then(() => syncHasChatClass());
     return;
   }
-  if (!question) return;
+  const fileAttached = Boolean(window.nousAbilities && window.nousAbilities.hasPendingFile());
+  if (!question && !fileAttached) return;
+  const asked = question || "Summarize this file.";
   input.value = "";
   resizeComposer();
-  rememberChatTurn(question);
-  handleQuestion(question).then(() => syncHasChatClass());
+  rememberChatTurn(asked);
+  handleQuestion(asked).then(() => syncHasChatClass());
 });
 
 const attachImageBtn = document.getElementById("attach-image-btn");
@@ -4530,6 +4535,10 @@ if (imageAttachFile) {
     const input = event.currentTarget;
     const file = input.files && input.files[0];
     input.value = "";
+    if (file && window.nousAbilities && !window.nousAbilities.isImageFile(file)) {
+      void window.nousAbilities.attach(file);
+      return;
+    }
     if (file) void setPendingImage(file);
   });
 }
@@ -4542,6 +4551,12 @@ if (chatFormEl) {
   });
   chatFormEl.addEventListener("drop", (event) => {
     const file = firstImageFile(event.dataTransfer && event.dataTransfer.files);
+    const dropped = event.dataTransfer && event.dataTransfer.files && event.dataTransfer.files[0];
+    if (!file && dropped && window.nousAbilities) {
+      event.preventDefault();
+      void window.nousAbilities.attach(dropped);
+      return;
+    }
     if (!file) return;
     event.preventDefault();
     void setPendingImage(file);

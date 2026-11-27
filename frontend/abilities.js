@@ -1,0 +1,182 @@
+/* Nous chat abilities: reading attached files and showing images Nous made.
+ * Everything triggers from normal chat; the only control is the attach button.
+ */
+(function () {
+  "use strict";
+
+  const FILE_MAX_BYTES = 5 * 1024 * 1024;
+  const IMAGE_MARKER = /\[\[image:(img_[a-f0-9]{20})\]\]/g;
+  const pending = { files: [] };
+
+  /* ------------------------------------------------------------- replies */
+
+  function stripMarkers(text) {
+    return String(text || "").replace(IMAGE_MARKER, "").replace(/[ \t]+\n/g, "\n").trim();
+  }
+
+  function addGeneratedImage(bubble, id) {
+    const figure = document.createElement("figure");
+    figure.className = "gen-image";
+    const img = document.createElement("img");
+    img.src = `/agent/images/${id}`;
+    img.alt = "Image made by Nous";
+    img.loading = "lazy";
+    img.decoding = "async";
+    img.addEventListener("load", () => {
+      const log = document.getElementById("chat-log");
+      if (log) log.scrollTop = log.scrollHeight;
+    });
+    img.addEventListener("error", () => {
+      figure.replaceChildren(document.createTextNode("This image has expired or can't be loaded."));
+    });
+    const save = document.createElement("a");
+    save.href = `/agent/images/${id}`;
+    save.download = `nous-${id}.jpg`;
+    save.className = "gen-image-save";
+    save.textContent = "Save image";
+    figure.append(img, save);
+    bubble.append(figure);
+  }
+
+  /** Called by addReply for every assistant message (live and from history). */
+  function decorateReply(message, text) {
+    if (!message) return;
+    const raw = String(text || "");
+    const bubble = message.querySelector(".bubble");
+    if (!bubble) return;
+    const ids = [...raw.matchAll(IMAGE_MARKER)].map((match) => match[1]);
+    if (ids.length) {
+      const clean = stripMarkers(raw);
+      const host = bubble.querySelector(".chart-host");
+      bubble.textContent = clean;
+      if (host) bubble.append(host);
+      message.dataset.speech = clean;
+      for (const id of ids) addGeneratedImage(bubble, id);
+    }
+    for (const hook of decorators) {
+      try {
+        hook(message, raw, bubble);
+      } catch {
+        // A decorator never breaks the reply.
+      }
+    }
+  }
+
+  const decorators = [];
+
+  /* --------------------------------------------------------------- files */
+
+  function chip() {
+    let el = document.getElementById("file-attachment");
+    if (el) return el;
+    const form = document.getElementById("chat-form");
+    if (!form) return null;
+    el = document.createElement("div");
+    el.id = "file-attachment";
+    el.className = "file-attachment";
+    el.hidden = true;
+    const label = document.createElement("span");
+    label.className = "file-attachment-name";
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "icon-btn icon-btn-small";
+    remove.setAttribute("aria-label", "Remove attached file");
+    remove.title = "Remove file";
+    remove.textContent = "×";
+    remove.addEventListener("click", () => clearFiles());
+    el.append(label, remove);
+    const row = form.querySelector(".composer-row");
+    form.insertBefore(el, row || form.firstChild);
+    return el;
+  }
+
+  function showChip(text, busy) {
+    const el = chip();
+    if (!el) return;
+    el.hidden = false;
+    el.dataset.busy = busy ? "true" : "false";
+    el.querySelector(".file-attachment-name").textContent = text;
+  }
+
+  function clearFiles() {
+    pending.files = [];
+    const el = document.getElementById("file-attachment");
+    if (el) el.hidden = true;
+  }
+
+  function notice(text) {
+    const el = document.getElementById("notice");
+    if (el) el.textContent = text;
+  }
+
+  function sizeLabel(bytes) {
+    if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+    return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+  }
+
+  async function attach(file) {
+    if (!file) return;
+    if (file.size > FILE_MAX_BYTES) {
+      notice("That file is too big. Keep it under 5 MB.");
+      return;
+    }
+    showChip(`Reading ${file.name}…`, true);
+    try {
+      const response = await fetch("/agent/files", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: {
+          "Content-Type": file.type || "application/octet-stream",
+          "X-File-Name": encodeURIComponent(file.name),
+        },
+        body: file,
+      });
+      let data = {};
+      try {
+        data = await response.json();
+      } catch {
+        data = {};
+      }
+      if (!response.ok || !data.file) {
+        clearFiles();
+        notice(data.error || data.detail || "I couldn't read that file.");
+        return;
+      }
+      pending.files = [data.file];
+      showChip(`📄 ${data.file.name} · ${sizeLabel(data.file.bytes)}`, false);
+      notice("");
+      const input = document.getElementById("chat-input");
+      if (input) input.focus();
+    } catch {
+      clearFiles();
+      notice("I couldn't upload that file. Check your connection and try again.");
+    }
+  }
+
+  function hasPendingFile() {
+    return pending.files.length > 0;
+  }
+
+  /** Extra fields for the next /agent/chat call; clears the attachment. */
+  function takeChatExtras() {
+    if (!pending.files.length) return {};
+    const extras = { file_ids: pending.files.map((file) => file.id) };
+    clearFiles();
+    return extras;
+  }
+
+  function isImageFile(file) {
+    return Boolean(file && typeof file.type === "string" && file.type.startsWith("image/"));
+  }
+
+  window.nousAbilities = {
+    attach,
+    hasPendingFile,
+    takeChatExtras,
+    isImageFile,
+    decorateReply,
+    addDecorator(hook) {
+      if (typeof hook === "function") decorators.push(hook);
+    },
+  };
+})();
