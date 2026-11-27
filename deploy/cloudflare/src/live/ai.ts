@@ -363,19 +363,54 @@ export function systemPromptFor(mode: ChatMode = "normal"): string {
 const PLANNING_LINE =
   /^(need to respond\b|just greet\b|just (say|answer|reply)\b|i (need|should|will|'ll) (respond|reply|greet|answer)\b|planning to\b|let me (greet|respond|answer|reply)\b)/i;
 
+/** Tool names / verbs that only show up when the model narrates its own plan. */
+const PLAN_VERB =
+  "(call|use|run|invoke|search|look ?up|fetch|query|pull|respond|reply|answer|greet|output)";
+/**
+ * One sentence of self-talk: "We need data, so call weather_history for Louisville.",
+ * "The user asks about X.", "Let me check the forecast tool.", "So I'll answer briefly."
+ */
+const PLANNING_SENTENCE = new RegExp(
+  [
+    `^(?:ok(?:ay)?,?\\s+|so,?\\s+|now,?\\s+|first,?\\s+|then,?\\s+)?(?:we|i)(?:'ll| will| need to| need| should| must| have to| want to)\\b[^.!?\\n]*\\b${PLAN_VERB}\\b`,
+    `^(?:ok(?:ay)?,?\\s+|so,?\\s+)?let(?:'s| me| us)\\s+${PLAN_VERB}\\b`,
+    `^(?:the\\s+)?user\\s+(?:asks|asked|wants|is asking|requests|requested|said|says|needs)\\b`,
+    `^(?:we|i)\\s+(?:need|should|must)\\b[^.!?\\n]*\\b(?:data|tool|tools|info|information|source|sources)\\b`,
+    `^(?:call|use|run|invoke)\\s+[a-z]+_[a-z_]+\\b`,
+    `\\b(?:call|use|run|invoke)\\s+(?:the\\s+)?[a-z]+_[a-z_]+(?:\\s+tool)?\\b`,
+  ].join("|"),
+  "i",
+);
+
+/** Split off the first sentence (up to . ! ? or newline). */
+function firstSentence(text: string): { head: string; rest: string } {
+  const match = /^[\s\S]*?(?:[.!?](?=\s|$)|\n|$)/.exec(text);
+  const head = (match ? match[0] : text).trim();
+  return { head, rest: text.slice(match ? match[0].length : text.length).trim() };
+}
+
+export function isPlanningSentence(sentence: string): boolean {
+  const s = sentence.trim();
+  if (!s || s.length > 220) return false;
+  if (s.length <= 80 && PLANNING_LINE.test(s)) return true;
+  return PLANNING_SENTENCE.test(s);
+}
+
+/**
+ * Drop leading self-talk so only the user-facing answer remains. Strips up to
+ * six planning sentences/lines. When nothing but planning is left, returns ""
+ * so callers treat it as "no answer" (retry / fallback) instead of showing it.
+ */
 export function stripLeadingPlanning(text: string): string {
   let rest = text.trim();
-  const original = rest;
-  for (let pass = 0; pass < 3; pass += 1) {
-    const breakAt = rest.indexOf("\n");
-    const first = (breakAt === -1 ? rest : rest.slice(0, breakAt)).trim();
-    const planning = first.length > 0 && first.length <= 80 && PLANNING_LINE.test(first);
-    if (!planning) break;
-    const next = breakAt === -1 ? "" : rest.slice(breakAt + 1).trim();
-    if (!next) break;
+  let stripped = false;
+  for (let pass = 0; pass < 6 && rest; pass += 1) {
+    const { head, rest: next } = firstSentence(rest);
+    if (!isPlanningSentence(head)) break;
+    stripped = true;
     rest = next;
   }
-  return rest || original;
+  return stripped ? rest : text.trim();
 }
 
 function visibleAnswer(text: string, reasoning: string[]): string {
