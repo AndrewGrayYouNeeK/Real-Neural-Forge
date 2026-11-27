@@ -88,12 +88,12 @@ voice:
   alt_voice_name: Ivy
   model_id: eleven_multilingual_v2
   # Crisp and quick, still Andrew: high stability + similarity, no style
-  # exaggeration, speaker boost on, 10% faster than the natural drawl.
+  # exaggeration, speaker boost on, 15% faster, and the player adds 8% more.
   stability: 0.75
   similarity_boost: 0.9
   style: 0
   use_speaker_boost: true
-  speed: 1.1
+  speed: 1.15
   apply_text_normalization: "on"
   free_chars: 5000
   max_chars_per_request: 2000

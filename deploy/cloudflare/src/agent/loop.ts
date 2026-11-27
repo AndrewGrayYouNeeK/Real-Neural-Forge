@@ -150,7 +150,7 @@ export function isSmallTalk(question: string): boolean {
  * actually understand, then go deeper only when asked.
  */
 export const UNDERSTANDING_STYLE =
-  "Understanding first: when someone asks what, why, or how, give the plain-language explanation first, in words a curious 12-year-old could follow, with one everyday analogy or concrete example. " +
+  "Understanding first: when someone asks what, why, or how, give the plain-language explanation first, in words a curious 12-year-old could follow, with one funny everyday analogy or concrete example, and land one real joke before you stop. " +
   "Stop there and let them pull for more. When they say 'why?', 'go deeper', 'explain more', or 'how does that work', go exactly one layer deeper than your last answer (the mechanism, then the evidence, then the math or edge cases) without repeating what you already said. " +
   "When numbers would make it clearer, use a data tool so a chart is attached. " +
   "Openness: never dodge or refuse mainstream, controversial, political, or conspiracy topics. Answer directly in this shape: the mainstream view; the alternative or conspiracy claims stated fairly at their strongest; what evidence supports or contradicts each side, with sources; then let the person decide. " +
@@ -829,6 +829,9 @@ const NO_MORE_TOOLS_NOTE =
 const FINISH_THE_JOB_NOTE =
   "You stopped before finishing the user's request. Do not answer yet and do not promise to do it later. Reply with ONLY the tool JSON for the next missing step now.";
 
+const LONG_ANSWER_NOTE =
+  "Your last reply ran out of room and was cut off. Write the whole answer now, finished, in your usual funny voice. Do not call a tool.";
+
 const WRITE_FULL_ANSWER_NOTE =
   "Every data step is done. Write the complete final answer now, covering every step the user asked for, including a short plain-words explanation. Do not promise further work.";
 
@@ -864,6 +867,8 @@ export async function runAgentTurn(
   let modelId = PRIMARY_MODEL;
   let voiceResting = false;
   let strictRetryUsed = false;
+  let longAnswerUsed = false;
+  let truncatedProse: string | null = null;
   let intentRouted = false;
   let lastStepTruncated = false;
   let modelSteps = 0;
@@ -1174,7 +1179,18 @@ export async function runAgentTurn(
     // The model answered in prose. Before accepting it, check the plan.
     const prose: string | null = answer || proseFrom(step);
     answer = prose;
-    if (!multiStep) break;
+    if (!multiStep) {
+      // The short tool-picking budget includes hidden reasoning, so a long answer
+      // (a list, a how-to) can be cut off. Ask once more with the full answer budget.
+      if (prose && lastStepTruncated && !longAnswerUsed && !toolResults.length) {
+        longAnswerUsed = true;
+        truncatedProse = prose;
+        pendingExtra = LONG_ANSWER_NOTE;
+        answer = null;
+        continue;
+      }
+      break;
+    }
     const missingData = missingDeliverables(plan, toolResults, prose).filter((item) => item !== "explain");
     const explainMissing = plan.deliverables.includes("explain") && !deliverableDone("explain", toolResults, prose);
     const promised = promisesFutureWork(prose);
@@ -1204,6 +1220,8 @@ export async function runAgentTurn(
     }
     break;
   }
+
+  if (!answer && truncatedProse) answer = truncatedProse;
 
   // Out of steps / tools / time with no final answer: one tools-off wrap-up call.
   if (

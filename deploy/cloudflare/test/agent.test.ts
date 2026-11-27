@@ -1106,6 +1106,32 @@ describe("agent turn caps and fallback", () => {
     expect(result.text.toLowerCase()).toContain("forge");
   });
 
+  it("asks again with the full answer budget when a long answer was cut off", async () => {
+    const db = new MemoryD1();
+    const calls: Array<Record<string, unknown>> = [];
+    const ai = {
+      async run(_model: string, inputs: Record<string, unknown>) {
+        calls.push(inputs);
+        if (calls.length === 1) {
+          return { response: "Here's a quick list, y'all.", status: "incomplete", incomplete_details: { reason: "max_output_tokens" } };
+        }
+        return { response: "Here's a quick list, y'all.\n- Eggs\n- Milk\n- Hot sauce, because we have standards." };
+      },
+    };
+    const result = await runAgentTurn("help me write a grocery list", "normal", [], {
+      ai,
+      db,
+      ip: "7.7.7.7",
+      owner: false,
+      toolContext: toolContext(),
+      models: { primary: PRIMARY_MODEL, fallback: FALLBACK_MODEL },
+    });
+    expect(calls.length).toBe(2);
+    expect(Number(calls[1].max_output_tokens ?? calls[1].max_tokens)).toBeGreaterThan(Number(calls[0].max_output_tokens ?? calls[0].max_tokens));
+    expect(result.text).toContain("Hot sauce");
+    expect(result.text).toContain("- Eggs");
+  });
+
   it("logs the 120B error reason when falling back to 8B", async () => {
     const db = new MemoryD1();
     const logged: string[] = [];

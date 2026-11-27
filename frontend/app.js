@@ -2041,8 +2041,15 @@ function armTalkForPhone() {
   }
 }
 
+// GQ talks a touch faster than the raw clip; pitch stays put.
+const TALK_PLAYBACK_RATE = 1.08;
+
 function ensureTalkPlayer() {
-  if (!talk.player) talk.player = new Audio();
+  if (!talk.player) {
+    talk.player = new Audio();
+    talk.player.preservesPitch = true;
+    talk.player.webkitPreservesPitch = true;
+  }
   return talk.player;
 }
 
@@ -2543,6 +2550,8 @@ async function speakTalkTurn(text) {
   talk.objectUrl = objectUrl;
   talk.audio = audio;
   audio.src = objectUrl;
+  audio.playbackRate = TALK_PLAYBACK_RATE;
+  audio.defaultPlaybackRate = TALK_PLAYBACK_RATE;
   const played = await waitForTalkPlayback(audio);
   if (talk.audio === audio) talk.audio = null;
   // Revoke only after playback finished or was interrupted — never while waiting.

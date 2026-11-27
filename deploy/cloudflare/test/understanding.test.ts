@@ -223,3 +223,12 @@ describe("Nous identity and humor", () => {
     expect(UNHINGED_PROMPT).not.toMatch(/Neural Forge/);
   });
 });
+
+describe("Funny default and complete answers", () => {
+  it("makes humor a final check in the default prompt, never in Unhinged", async () => {
+    const { SYSTEM_PROMPT, UNHINGED_PROMPT } = await import("../src/live/ai");
+    expect(SYSTEM_PROMPT).toContain("A reply with no humor is a failed reply");
+    expect(UNHINGED_PROMPT).not.toContain("failed reply");
+    expect(UNDERSTANDING_STYLE).toContain("land one real joke");
+  });
+});
