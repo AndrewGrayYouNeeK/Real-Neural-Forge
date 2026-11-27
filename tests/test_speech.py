@@ -146,3 +146,14 @@ def test_concat_mp3_drops_later_id3_tags() -> None:
     first = b"ID3\x03\x00\x00\x00\x00\x00\x00one"
     second = b"ID3\x03\x00\x00\x00\x00\x00\x00two"
     assert concat_mp3([first, second]) == first + b"two"
+
+
+def test_nous_is_spoken_as_noose_for_every_voice():
+    from src.voice.text import speech_text
+
+    assert speech_text("Nous can help. NOUS and nous too.") == (
+        "Noose can help. Noose and Noose too."
+    )
+    assert speech_text("Ask Nous's team about nousy things") == (
+        "Ask Noose's team about nousy things"
+    )

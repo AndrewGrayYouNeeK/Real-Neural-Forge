@@ -28,6 +28,7 @@ _SIGN_UP_PROMPT = "Create a free account to hear GQ. Text on Nous stays free."
 
 class SpeakRequest(BaseModel):
     text: str = Field(min_length=1)
+    voice: str | None = Field(default=None, max_length=20)
 
 
 class SyncRequest(BaseModel):
@@ -82,7 +83,7 @@ def voice_speak(
 ) -> Response:
     actor = _voice_actor(request, authorization)
     try:
-        result = speak(actor, body.text, _app_config())
+        result = speak(actor, body.text, _app_config(), body.voice)
     except WorkspaceError as exc:
         _raise(exc)
     headers = {
