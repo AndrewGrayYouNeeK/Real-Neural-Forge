@@ -919,6 +919,13 @@ class TestForecastDashboard:
         assert 'id="gate-setup"' in html
         assert 'id="gate-recovery"' in html
         assert "<title>Nous" in html
+        assert "The architecture of understanding." in html
+        assert "What do you want to understand?" in html
+        assert "Forecast anything. Just ask." not in html
+        assert "What can I help you forecast?" not in html
+        assert client.get("/manifest.webmanifest").json()["description"] == (
+            "The architecture of understanding."
+        )
         assert 'rel="manifest"' in html
         assert "/assets/brand/nous-s.webp" in html
         assert "/assets/brand/nous-o.webp" in html

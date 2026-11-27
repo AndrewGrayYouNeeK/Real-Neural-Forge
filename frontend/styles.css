@@ -1612,10 +1612,53 @@ body.auth-pending #talk-start-overlay {
   line-height: 1;
 }
 
-.landing-tag {
+.landing-tag,
+.gate-tag,
+.about-tag,
+.docs-tag {
   margin: 0;
   color: var(--muted);
-  font-size: clamp(1.05rem, 2.4vw, 1.3rem);
+  font-family: var(--display);
+  font-style: italic;
+  font-weight: 400;
+  letter-spacing: 0.01em;
+}
+
+.landing-tag {
+  font-size: clamp(0.95rem, 2vw, 1.15rem);
+}
+
+.gate-tag {
+  margin: -2px 0 4px;
+  font-size: 0.95rem;
+}
+
+.about-tag {
+  font-size: 1.05rem;
+}
+
+.docs-tag {
+  font-size: 0.72rem;
+  line-height: 1.2;
+}
+
+.about-brand {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 4px 0 18px;
+}
+
+.about-brand .nous-wordmark {
+  font-size: 42px;
+}
+
+.brand-with-tag {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
 }
 
 .landing-cta {

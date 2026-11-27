@@ -3,20 +3,20 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Nous — forecast anything, just ask</title>
+    <title>Nous — The architecture of understanding</title>
     <meta
       name="description"
-      content="Nous forecasts your numbers, weather and markets, reads charts, runs what-if simulations, and talks back. Text chat is free."
+      content="The architecture of understanding. Forecasts, live weather and markets, chart reading, what-if simulations and voice. Text chat is free."
     />
     <meta name="application-name" content="Nous" />
     <meta name="apple-mobile-web-app-title" content="Nous" />
     <meta name="theme-color" content="#000000" />
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="Nous" />
-    <meta property="og:title" content="Nous — forecast anything, just ask" />
+    <meta property="og:title" content="Nous — The architecture of understanding" />
     <meta
       property="og:description"
-      content="Forecasts, live data, chart reading, what-if simulations and voice. Text chat is free."
+      content="The architecture of understanding."
     />
     <meta property="og:url" content="https://nous.youneek.dev/" />
     <meta property="og:image" content="https://nous.youneek.dev/assets/brand/nous-og.png" />
@@ -24,8 +24,8 @@
     <meta property="og:image:height" content="630" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:image" content="https://nous.youneek.dev/assets/brand/nous-og.png" />
-    <meta name="twitter:title" content="Nous" />
-    <meta name="twitter:description" content="Forecast anything. Just ask." />
+    <meta name="twitter:title" content="Nous — The architecture of understanding" />
+    <meta name="twitter:description" content="The architecture of understanding." />
     <link rel="icon" href="/favicon.ico" sizes="any" />
     <link rel="icon" href="/assets/brand/icon-32.png" sizes="32x32" type="image/png" />
     <link rel="icon" href="/assets/brand/icon-16.png" sizes="16x16" type="image/png" />
@@ -60,7 +60,7 @@
         <h1 id="landing-title" class="landing-wordmark">
           <span class="nous-wordmark" role="img" aria-label="Nous"><span class="nou" aria-hidden="true">N</span><img class="nous-o" src="/assets/brand/nous-o.webp" alt="" aria-hidden="true" /><span class="nou" aria-hidden="true">U</span><img class="nous-s" src="/assets/brand/nous-s.webp" alt="" aria-hidden="true" /></span>
         </h1>
-        <p class="landing-tag">Forecast anything. Just ask.</p>
+        <p class="landing-tag">The architecture of understanding.</p>
         <div class="landing-cta">
           <a href="/app" class="btn primary" id="open-app-btn" data-open-gate="signup">Open app</a>
           <a href="/app" class="btn secondary" data-open-gate="login">Log in</a>
@@ -87,6 +87,7 @@
         <a class="brand brand-center" href="/" aria-label="Nous home">
           <span class="nous-wordmark gate-wordmark" role="img" aria-label="Nous"><span class="nou" aria-hidden="true">N</span><img class="nous-o" src="/assets/brand/nous-o.webp" alt="" aria-hidden="true" /><span class="nou" aria-hidden="true">U</span><img class="nous-s" src="/assets/brand/nous-s.webp" alt="" aria-hidden="true" /></span>
         </a>
+        <p class="gate-tag">The architecture of understanding.</p>
         <h1 id="gate-title" class="gate-title">Sign up or log in</h1>
         <p id="gate-error" class="gate-error" role="alert" hidden></p>
 
@@ -226,7 +227,7 @@
           <div class="chat-stage" id="chat-stage">
             <div class="empty-greeting" id="empty-greeting">
               <img class="brand-mark" src="/assets/brand/icon-192.png" alt="" width="56" height="56" />
-              <p class="greeting-line" id="greeting-line">What can I help you forecast?</p>
+              <p class="greeting-line" id="greeting-line">What do you want to understand?</p>
             </div>
 
             <div id="chat-log" class="chat-log" aria-live="polite"></div>
@@ -302,7 +303,7 @@
                   name="question"
                   rows="1"
                   autocomplete="off"
-                  placeholder="Ask anything"
+                  placeholder="What do you want to understand?"
                 ></textarea>
               </div>
               <div class="composer-toolbar">
@@ -370,6 +371,10 @@
           </div>
 
           <section class="tool-view about-view" id="view-about" data-tool-view="about" hidden>
+            <div class="about-brand">
+              <span class="nous-wordmark" role="img" aria-label="Nous"><span class="nou" aria-hidden="true">N</span><img class="nous-o" src="/assets/brand/nous-o.webp" alt="" aria-hidden="true" /><span class="nou" aria-hidden="true">U</span><img class="nous-s" src="/assets/brand/nous-s.webp" alt="" aria-hidden="true" /></span>
+              <p class="about-tag">The architecture of understanding.</p>
+            </div>
             <header class="tool-view-head">
               <h2>About Nous</h2>
               <button type="button" class="btn secondary back-to-chat" data-view="chat">Back to chat</button>
@@ -477,11 +482,11 @@
           <!-- Tool panels (driven by TOOL_REGISTRY) -->
           <section class="tool-view" id="view-forecast" data-tool-view="forecast" hidden>
             <header class="tool-view-head">
-              <h2>Forecast</h2>
+              <h2>What do you want to understand?</h2>
               <button type="button" class="btn secondary back-to-chat" data-view="chat">Back to chat</button>
             </header>
             <p class="hint">
-              Ask for a starter series forecast in chat, or try a sample below.
+              Ask in chat, or try a sample below.
             </p>
             <div id="forecast-panel-actions" class="chip-row"></div>
           </section>
