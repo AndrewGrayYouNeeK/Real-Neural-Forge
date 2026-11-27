@@ -1,5 +1,5 @@
 /**
- * Nous: self-supervised world model (JEPA) panel.
+ * Henad: self-supervised world model (JEPA) panel.
  * Runs /analysis/simulate with encoder "auto" so the container backtests the
  * PCA and JEPA encoders on the chosen series and rolls the winner forward.
  * Loaded after app.js and reuses its helpers (fetchJson, charts, simChart,
@@ -65,15 +65,15 @@
       const name = payload.name || "this series";
       let text;
       if (!cmp.jepa) {
-        text = cmp.note || "JEPA could not be scored on this series, so Nous used PCA.";
+        text = cmp.note || "JEPA could not be scored on this series, so Henad used PCA.";
       } else if (vgain == null) {
-        text = `${cmp.note || "Too little history for a separate validation split."} Nous used PCA.`;
+        text = `${cmp.note || "Too little history for a separate validation split."} Henad used PCA.`;
       } else if (chosen === "jepa") {
         text = `JEPA wins on ${name}: ${Math.abs(vgain).toFixed(1)}% lower error than PCA on the validation windows, and ${gain != null && gain > 0 ? `${gain.toFixed(1)}% lower` : "no better"} on the untouched holdouts. The simulation below uses the self-supervised encoder.`;
       } else if (vgain > 0) {
-        text = `JEPA was only ${vgain.toFixed(1)}% better than PCA on validation (it needs 5%), so Nous kept the simpler PCA encoder.`;
+        text = `JEPA was only ${vgain.toFixed(1)}% better than PCA on validation (it needs 5%), so Henad kept the simpler PCA encoder.`;
       } else {
-        text = `PCA wins on ${name}: JEPA was ${Math.abs(vgain).toFixed(1)}% worse on validation, so Nous kept PCA. Learned features don't help every series.`;
+        text = `PCA wins on ${name}: JEPA was ${Math.abs(vgain).toFixed(1)}% worse on validation, so Henad kept PCA. Learned features don't help every series.`;
       }
       verdict.textContent = text;
     }
@@ -160,5 +160,5 @@
   form.addEventListener("submit", (event) => void submit(event));
   form.series.addEventListener("change", syncForm);
   syncForm();
-  window.NousWorldEncoder = { render, submit };
+  window.HenadWorldEncoder = { render, submit };
 })();

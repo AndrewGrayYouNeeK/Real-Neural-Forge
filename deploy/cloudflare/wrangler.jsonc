@@ -1,7 +1,7 @@
 {
   // Separate Worker from the dashboard Workers `real-neural-forge` and
   // `real-neural-forge-frontend`. This file is the only place that may route
-  // forge.youneek.xyz and forge.youneek.dev. Keep it in deploy/cloudflare/.
+  // henad.youneek.*, nous.youneek.* and forge.youneek.*. Keep it in deploy/cloudflare/.
   // A wrangler config at the repository root would change the dashboard builds.
   // Never name a Worker in this repo youneek-xyz.
   "$schema": "./node_modules/wrangler/config-schema.json",
@@ -38,9 +38,22 @@
     { "tag": "v1", "new_sqlite_classes": ["NeuralForgeContainer"] }
   ],
   // workers.dev stays on. Custom hostnames are additional routes.
-  // nous.* is the Nous home; forge.* 301-redirects there (src/auth/gate.ts).
+  // henad.* is the Henad home. The old hosts nous.* and forge.* 301-redirect
+  // there (signed-in visits get a one-time session hand-off first; see
+  // src/auth/gate.ts and src/auth/handoff.ts). Keep the old routes so old
+  // links, bookmarks and the Stripe webhook keep working.
   "workers_dev": true,
   "routes": [
+    {
+      "pattern": "henad.youneek.dev",
+      "zone_name": "youneek.dev",
+      "custom_domain": true
+    },
+    {
+      "pattern": "henad.youneek.xyz",
+      "zone_name": "youneek.xyz",
+      "custom_domain": true
+    },
     {
       "pattern": "nous.youneek.dev",
       "zone_name": "youneek.dev",
@@ -93,12 +106,12 @@
   ],
   "vars": {
     "NEURAL_FORGE_CONFIG": "config/config.yaml",
-    "NEURAL_FORGE_CHECKPOINT_URL": "https://github.com/AndrewGrayYouNeeK/Nous/releases/download/champions/champion-default.pt",
+    "NEURAL_FORGE_CHECKPOINT_URL": "https://github.com/AndrewGrayYouNeeK/Henad/releases/download/champions/champion-default.pt",
     "NEURAL_FORGE_STORAGE": "cloudflare",
     "NEURAL_FORGE_BINDINGS_URL": "http://bindings.neuralforge",
-    "NEURAL_FORGE_PUBLIC_URL": "https://nous.youneek.dev",
+    "NEURAL_FORGE_PUBLIC_URL": "https://henad.youneek.dev",
     "NEURAL_FORGE_OWNER_EMAIL": "andrewgray@youneek.xyz",
-    "NOUS_EMAIL_FROM": "no-reply@youneek.dev",
+    "HENAD_EMAIL_FROM": "no-reply@youneek.dev",
     "NEURAL_FORGE_AI_MODEL": "@cf/openai/gpt-oss-120b",
     "NEURAL_FORGE_AI_FALLBACK_MODEL": "@cf/meta/llama-3.1-8b-instruct-fp8-fast",
     "NEURAL_FORGE_AI_DAILY_NEURONS": "25000",

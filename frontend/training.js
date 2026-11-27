@@ -1,5 +1,5 @@
-/* Nous training-example collector (owner only).
-   Adds Save / Fix it / That was bad to each Nous reply, an Add example
+/* Henad training-example collector (owner only).
+   Adds Save / Fix it / That was bad to each Henad reply, an Add example
    composer and a Training examples list with tags and JSONL export.
    Nothing here shows unless /owner/training/status says this session is the
    verified owner, and every route checks again on the server. */
@@ -107,7 +107,7 @@
     const row = el("div", { class: "nt-actions", role: "group", "aria-label": "Training example (owner only)" });
     const status = el("span", { class: "nt-status", "aria-live": "polite" });
     const save = el("button", { class: "nt-btn", type: "button", title: "Save this answer as a good example", text: "👍 Save" });
-    const fix = el("button", { class: "nt-btn", type: "button", title: "Rewrite how Nous should have answered", text: "✏️ Fix it" });
+    const fix = el("button", { class: "nt-btn", type: "button", title: "Rewrite how Henad should have answered", text: "✏️ Fix it" });
     const bad = el("button", { class: "nt-btn", type: "button", title: "Save as a rejected example", text: "👎 That was bad" });
     save.addEventListener("click", async () => {
       const question = promptFor(message);
@@ -127,7 +127,7 @@
       } else toast(result.data.detail || "Couldn't save.", "err");
     });
     fix.addEventListener("click", () => {
-      openEditor({ title: "Fix it", hint: "Rewrite the answer the way Nous should have said it.", turns: [[promptFor(message), answer]], source: "fix", focusAnswer: true, onSaved: () => (status.textContent = "Fixed ✓") });
+      openEditor({ title: "Fix it", hint: "Rewrite the answer the way Henad should have said it.", turns: [[promptFor(message), answer]], source: "fix", focusAnswer: true, onSaved: () => (status.textContent = "Fixed ✓") });
     });
     bad.addEventListener("click", async () => {
       bad.disabled = true;
@@ -148,7 +148,7 @@
         offer.addEventListener("click", () =>
           openEditor({
             title: "Fix the bad answer",
-            hint: "Write the answer Nous should have given. It's saved as a good example; the bad one stays rejected.",
+            hint: "Write the answer Henad should have given. It's saved as a good example; the bad one stays rejected.",
             turns: [[question === "(no question)" ? "" : question, answer]],
             source: "fix",
             pairId: badId,
@@ -272,7 +272,7 @@
     const addTurn = (question, answer) => {
       const number = turnNodes.length + 1;
       const q = el("textarea", { class: "nt-input", rows: "2", placeholder: "What someone asks…", "aria-label": `Question ${number}`, value: question || "", enterkeyhint: "next" });
-      const a = el("textarea", { class: "nt-input nt-answer", rows: "5", placeholder: "The perfect Nous answer…", "aria-label": `Answer ${number}`, value: answer || "" });
+      const a = el("textarea", { class: "nt-input nt-answer", rows: "5", placeholder: "The perfect Henad answer…", "aria-label": `Answer ${number}`, value: answer || "" });
       const remove = number > 1 ? el("button", { type: "button", class: "linklike nt-remove", text: "Remove turn" }) : null;
       const block = el("div", { class: "nt-turn" }, [
         number > 1 ? el("p", { class: "nt-turn-label", text: `Turn ${number}` }) : null,
@@ -474,7 +474,7 @@
 
   function boot() {
     checkOwner(true);
-    window.addEventListener("nous:account", () => checkOwner(true));
+    window.addEventListener("henad:account", () => checkOwner(true));
     const log = document.getElementById("chat-log");
     if (log) {
       // Replies restored from history or added by other code paths.
@@ -485,7 +485,7 @@
     }
   }
 
-  window.nousTraining = { decorateReply, openAdd, openList, checkOwner };
+  window.henadTraining = { decorateReply, openAdd, openList, checkOwner };
 
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);
   else boot();

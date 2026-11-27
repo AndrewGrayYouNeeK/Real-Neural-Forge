@@ -1,4 +1,5 @@
 import { getContainer } from "@cloudflare/containers";
+import { sayHenad } from "./protocol";
 
 import { containerEnv } from "../containerEnv";
 import {
@@ -231,7 +232,8 @@ async function answerAgentChat(
       const topics = (await listThreads(env.WORKSPACES_DB, identity.scope))
         .filter((thread) => thread.id !== threadId)
         .map((thread) => thread.title);
-      memoryPrompt = compactMemoryPrompt(facts, topics);
+      // Saved facts and old chat titles may still use the old name (Nous).
+      memoryPrompt = sayHenad(compactMemoryPrompt(facts, topics));
     } catch {
       memoryPrompt = memoryPromptBlock([]);
     }

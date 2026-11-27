@@ -2,8 +2,8 @@
 
 This directory is a Worker named `real-neural-forge-api`. It is not the
 dashboard Worker `real-neural-forge` or `real-neural-forge-frontend`.
-Do not deploy this repository as `youneek-xyz`. `forge.youneek.xyz` and
-`forge.youneek.dev` are routes only in this directory.
+Do not deploy this repository as `youneek-xyz`. `henad.youneek.*` (the app) and
+the old hosts `nous.youneek.*` and `forge.youneek.*` are routes only in this directory.
 
 The live API is https://real-neural-forge-api.youneekartifacts.workers.dev.
 `wrangler.jsonc` pins `main-<sha>` in the Cloudflare registry. It does not
@@ -20,7 +20,8 @@ commands in the repository README under **Live hosting**. The container
 reaches those bindings only through `/_bindings/sql` and `/_bindings/object`,
 which require `NEURAL_FORGE_STORAGE_SECRET`.
 
-`routes` attach `forge.youneek.xyz` and `forge.youneek.dev`. `workers_dev`
+`routes` attach `henad.youneek.dev`, `henad.youneek.xyz`, and the old hosts
+`nous.youneek.*` and `forge.youneek.*`, which 301 to henad.* (see `src/auth/gate.ts`). `workers_dev`
 stays true. Session cookies are host-only; this Worker does not set a cookie
 `Domain`.
 
@@ -45,7 +46,7 @@ class uses it to apply `sleepAfter`.
 ## Account emails, memory and the owner dashboard
 
 - **Email** (confirm address, reset password) goes through the Cloudflare
-  Email Sending binding `EMAIL` from `no-reply@youneek.dev` (`NOUS_EMAIL_FROM`).
+  Email Sending binding `EMAIL` from `no-reply@youneek.dev` (`HENAD_EMAIL_FROM`).
   Sending stays **off** (`app_settings.email_sending`) until the owner opens
   Settings → Usage dashboard → **Send test & turn on**, which mails only the
   owner's own address and turns email on only if that send works. Setup errors

@@ -1,4 +1,4 @@
-/* Nous code runner (page side): shows code blocks in replies and runs Python
+/* Henad code runner (page side): shows code blocks in replies and runs Python
  * ones in a throwaway Pyodide worker (frontend/pyworker.js). Nothing runs on
  * the server; each run gets 15 seconds after Python has started.
  */
@@ -146,6 +146,6 @@
       .join(" ");
   }
 
-  if (window.nousAbilities) window.nousAbilities.addDecorator(decorate);
-  window.nousCodeRunner = { splitFences };
+  if (window.henadAbilities) window.henadAbilities.addDecorator(decorate);
+  window.henadCodeRunner = { splitFences };
 })();

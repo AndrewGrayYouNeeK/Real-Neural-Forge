@@ -1521,7 +1521,7 @@ select {
   }
 }
 
-/* ------------------------------------------------------------------ Nous */
+/* ------------------------------------------------------------------ Henad */
 
 /* Auth state: landing for visitors, a gate before the app, the app after. */
 body.auth-pending .app-shell,
@@ -1676,7 +1676,7 @@ body.auth-pending #talk-start-overlay {
   margin: 4px 0 18px;
 }
 
-.about-brand .nous-wordmark {
+.about-brand .henad-wordmark {
   font-size: 42px;
 }
 
@@ -1975,38 +1975,93 @@ body:not(.has-chat) #chat-log {
   }
 }
 
-/* Brand: HTML "N" and "U" + the black hole O and swirl S images.
-   Size it with font-size. Both images are cropped centred on the cap
-   centre of the source letters (cap height 147px = 0.7em in Montserrat). */
-.nous-wordmark {
+/* Brand: HENAD. "HEN" and "D" are Montserrat text. The A is drawn as two
+   legs (no crossbar) and the one black hole sits in the A's counter, where
+   the crossbar would be: the legs run behind its glowing ring and the hole's
+   dark center hides them. Only the hole's center moves (black-hole.css).
+   Size the whole mark with font-size. Cap height is 0.7em in Montserrat. */
+.henad-wordmark {
   display: inline-flex;
-  align-items: center;
+  align-items: baseline;
   font-size: 22px;
   line-height: 1;
   color: #fff;
   white-space: nowrap;
 }
 
-.nous-wordmark .nou {
+.henad-wordmark .hw {
   font-family: "Montserrat", "Futura", "Century Gothic", "Avenir Next", sans-serif;
   font-weight: 500;
   letter-spacing: 0.06em;
 }
 
-.nous-wordmark .nous-o {
-  /* 241px tall in the source = 1.148em. */
-  height: 1.148em;
+.henad-wordmark .henad-a {
+  position: relative;
+  display: inline-block;
+  flex: none;
+  width: 0.74em;
+  height: 0.7em;
+  margin: 0 0.1em 0 0.02em;
+  isolation: isolate;
+}
+
+.henad-wordmark .henad-a-legs {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  z-index: 0;
+}
+
+.henad-wordmark .henad-a-legs path {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 86;
+  stroke-linejoin: miter;
+  stroke-miterlimit: 8;
+}
+
+/* The black hole: 287 x 241 source, centred on the A, low in the counter. */
+.henad-wordmark .henad-o-wrap {
+  position: absolute;
+  left: 50%;
+  bottom: -0.1em;
+  height: 0.66em;
+  aspect-ratio: 287 / 241;
   width: auto;
-  margin: 0 0.01em 0 -0.01em;
+  transform: translateX(-50%);
+  transform-origin: 50% 50%;
+  z-index: 1;
   display: block;
 }
 
-.nous-wordmark .nous-s {
-  /* 255px tall in the source = 1.214em. */
-  height: 1.214em;
-  width: auto;
-  margin: -0.05em 0 -0.05em -0.02em;
+/* The hole's dark center covers the legs inside the ring. */
+.henad-wordmark .henad-o-wrap::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 37%;
+  aspect-ratio: 1;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: #000;
+  z-index: 0;
+  pointer-events: none;
+}
+
+.henad-wordmark .henad-o-wrap .henad-o {
+  position: absolute;
+  inset: 0;
+  height: 100%;
+  width: 100%;
+  margin: 0;
   display: block;
+}
+
+.henad-wordmark .henad-o-ring {
+  z-index: 1;
 }
 
 .brand-mark {
@@ -2021,7 +2076,7 @@ body:not(.has-chat) #chat-log {
   font-weight: inherit;
 }
 
-.landing-wordmark .nous-wordmark {
+.landing-wordmark .henad-wordmark {
   font-size: clamp(56px, 11vw, 112px);
   margin-bottom: 0.08em;
 }
@@ -2031,7 +2086,7 @@ body:not(.has-chat) #chat-log {
   margin: 0 auto 0.08em;
 }
 
-.sidebar-logo .nous-wordmark {
+.sidebar-logo .henad-wordmark {
   font-size: 20px;
 }
 
@@ -2077,7 +2132,7 @@ body:not(.has-chat) #chat-log {
   }
 }
 
-/* Voice & Nous Plus panel */
+/* Voice & Henad Plus panel */
 .stat-card {
   display: flex;
   flex-direction: column;
@@ -2193,7 +2248,7 @@ body:not(.has-chat) #chat-log {
   white-space: nowrap;
 }
 
-/* ---- Chat abilities: attached files and images Nous makes ---- */
+/* ---- Chat abilities: attached files and images Henad makes ---- */
 .file-attachment {
   display: flex;
   align-items: center;
@@ -2351,23 +2406,21 @@ body:not(.has-chat) #chat-log {
   text-align: left;
 }
 
-/* Black hole O: the outer ring stays still. Only the center (see black-hole.css)
-   turns. Talking pulses the whole O, never the S. */
-.nous-wordmark .nous-o-wrap {
-  transform-origin: 50% 50%;
-}
+/* The black hole in the A: the outer ring stays still. Only the center (see
+   black-hole.css) turns. Talking pulses the whole hole, never the letters.
+   `scale` (not `transform`) so the centring translate is kept. */
 @media (prefers-reduced-motion: no-preference) {
-  body.nous-talking .nous-wordmark .nous-o-wrap {
-    transform: scale(var(--nous-pulse, 1.07));
-    transition: transform 80ms linear;
-    will-change: transform;
+  body.henad-talking .henad-wordmark .henad-o-wrap {
+    scale: var(--henad-pulse, 1.07);
+    transition: scale 80ms linear;
+    will-change: scale;
   }
-  body.nous-talking.nous-talk-pulse .nous-wordmark .nous-o-wrap {
-    animation: nous-pulse 0.85s ease-in-out infinite;
+  body.henad-talking.henad-talk-pulse .henad-wordmark .henad-o-wrap {
+    animation: henad-pulse 0.85s ease-in-out infinite;
   }
 }
-@keyframes nous-pulse {
-  50% { transform: scale(1.1); }
+@keyframes henad-pulse {
+  50% { scale: 1.1; }
 }
 
 .about-say {

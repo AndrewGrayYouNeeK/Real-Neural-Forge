@@ -1,4 +1,4 @@
-"""Nous: transformer pipeline for time-series prediction."""
+"""Henad: transformer pipeline for time-series prediction."""
 
 from __future__ import annotations
 

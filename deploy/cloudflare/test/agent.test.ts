@@ -3,8 +3,9 @@ import { createHash } from "node:crypto";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 /** SHA-256 of the shipped Unhinged prompt; Unhinged must never change. */
-// Unhinged is locked byte-for-byte. The only change since it shipped: it says "Nous" instead of "Neural Forge".
-const UNHINGED_PROMPT_SHA256 = "419915705a15f529e9ffde7ef07200cd587c4e6590225483c32d6c27d0cc44ac";
+// Unhinged is locked byte-for-byte. The only change since it shipped: it says "Henad" instead of "Neural Forge".
+// Only change since it shipped: the name Nous became Henad (Nov 27, 2026).
+const UNHINGED_PROMPT_SHA256 = "b21059df32a8b05e6191d21c43e75aa58b5439ac6a9e4ff24eec7e95d14ece0b";
 
 import {
   FALLBACK_MODEL,
@@ -1113,7 +1114,7 @@ describe("agent turn caps and fallback", () => {
     const ai = {
       async run(_model: string, inputs: Record<string, unknown>) {
         seen.push(JSON.stringify(inputs));
-        return { response: "I'm Nous." };
+        return { response: "I'm Henad." };
       },
     };
     await runAgentTurn(
@@ -1127,7 +1128,7 @@ describe("agent turn caps and fallback", () => {
     );
     const sent = JSON.parse(seen[0]) as { input: Array<{ role: string; content: string }> };
     const assistant = sent.input.filter((item) => item.role === "assistant").map((item) => item.content);
-    expect(assistant).toEqual(["I'm Nous, the Nous bot."]);
+    expect(assistant).toEqual(["I'm Henad, the Henad bot."]);
   });
 
   it("does not dump space data for a general ask like listing planets", async () => {
@@ -1197,10 +1198,10 @@ describe("agent turn caps and fallback", () => {
             error.status = 400;
             throw error;
           }
-          return { response: "Nous predicts time series with transformers." };
+          return { response: "Henad predicts time series with transformers." };
         },
       };
-      const result = await runAgentTurn("What does Nous do?", "normal", [], {
+      const result = await runAgentTurn("What does Henad do?", "normal", [], {
         ai,
         db,
         ip: "4.4.4.4",

@@ -30,12 +30,12 @@ async function addSession(db: SqliteD1, userId: string, token: string, mfa: bool
 function call(db: SqliteD1, method: string, path: string, token?: string, body?: unknown) {
   const headers: Record<string, string> = { "Content-Type": "application/json" };
   if (token) headers.Authorization = `Bearer ${token}`;
-  const request = new Request(`https://nous.youneek.dev${path}`, {
+  const request = new Request(`https://henad.youneek.dev${path}`, {
     method,
     headers,
     body: body === undefined ? undefined : JSON.stringify(body),
   });
-  return handleTrainingRoute(request, { WORKSPACES_DB: db, NOUS_TRAINING_EXPORT_TOKEN: EXPORT_TOKEN });
+  return handleTrainingRoute(request, { WORKSPACES_DB: db, HENAD_TRAINING_EXPORT_TOKEN: EXPORT_TOKEN });
 }
 
 const pair = (q: string, a: string) => [

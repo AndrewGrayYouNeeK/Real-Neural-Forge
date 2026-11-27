@@ -23,7 +23,7 @@ export function isKnowledgeTool(name: string): name is KnowledgeToolName {
 }
 
 /** Wikimedia asks API clients for a descriptive User-Agent with a contact URL. */
-export const KNOWLEDGE_USER_AGENT = "NousBot/1.0 (+https://nous.youneek.dev; knowledge lookups)";
+export const KNOWLEDGE_USER_AGENT = "HenadBot/1.0 (+https://henad.youneek.dev; knowledge lookups)";
 const WIKI_API = "https://en.wikipedia.org/w/api.php";
 const WIKI_REST = "https://en.wikipedia.org/api/rest_v1/page/summary/";
 const KNOWLEDGE_CACHE_VERSION = 1;
@@ -154,7 +154,7 @@ export function wantsRecent(text: string, now: Date = new Date()): boolean {
 
 const FACT_ASK =
   /\b(what year|which year|when (?:did|was|were|is|does)|who (?:discovered|invented|founded|wrote|painted|built|designed|directed|composed|won|was|is|were|did|led|killed|dated|named)|how (?:many|much|tall|old|long|far|big|deep|heavy)|what (?:is|was) the (?:name|population|capital|height|date|cost|record|size)|population of|founded|born|died|first (?:person|man|woman)|carbon[- ]dated|dated to)\b/i;
-const ABOUT_NOUS = /\b(you|your|yourself|nous)\b/i;
+const ABOUT_HENAD = /\b(you|your|yourself|henad)\b/i;
 
 /**
  * Specific-fact asks (dates, names, counts) about real things. The model is
@@ -163,7 +163,7 @@ const ABOUT_NOUS = /\b(you|your|yourself|nous)\b/i;
  */
 export function needsFactLookup(text: string): boolean {
   const q = text.replace(/\s+/g, " ").trim();
-  if (q.length < 10 || ABOUT_NOUS.test(q)) return false;
+  if (q.length < 10 || ABOUT_HENAD.test(q)) return false;
   if (FACT_ASK.test(q)) return true;
   // A proper noun after the first word plus a question shape ("Tell me about the Voynich manuscript").
   const properNoun = /\s[A-Z][a-z]{2,}/.test(q.slice(1));

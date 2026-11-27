@@ -26,10 +26,10 @@ function positiveInt(value: unknown, fallback: number): number {
   return Math.floor(parsed);
 }
 
-/** Env overrides: NOUS_<KIND>_MEMBER_DAILY / _OWNER_DAILY / _GLOBAL_DAILY. */
+/** Env overrides: HENAD_<KIND>_MEMBER_DAILY / _OWNER_DAILY / _GLOBAL_DAILY. */
 export function abilityCaps(kind: AbilityKind, env: Record<string, unknown> = {}): AbilityCaps {
   const base = ABILITY_CAPS[kind];
-  const prefix = `NOUS_${kind.toUpperCase()}`;
+  const prefix = `HENAD_${kind.toUpperCase()}`;
   return {
     member: positiveInt(env[`${prefix}_MEMBER_DAILY`], base.member),
     owner: positiveInt(env[`${prefix}_OWNER_DAILY`], base.owner),

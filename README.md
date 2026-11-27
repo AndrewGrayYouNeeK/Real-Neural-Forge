@@ -1,16 +1,16 @@
-# Nous
+# Henad
 
 The architecture of understanding.
 
-Nous is pronounced “noose.”
+Henad is pronounced “HEN-add.” It was called Nous until Nov 27, 2026 (renamed because Nous Research holds the NOUS trademark).
 
-[![CI](https://github.com/AndrewGrayYouNeeK/Nous/actions/workflows/ci.yml/badge.svg)](https://github.com/AndrewGrayYouNeeK/Nous/actions/workflows/ci.yml)
-[![Publish image](https://github.com/AndrewGrayYouNeeK/Nous/actions/workflows/publish.yml/badge.svg)](https://github.com/AndrewGrayYouNeeK/Nous/actions/workflows/publish.yml)
+[![CI](https://github.com/AndrewGrayYouNeeK/Henad/actions/workflows/ci.yml/badge.svg)](https://github.com/AndrewGrayYouNeeK/Henad/actions/workflows/ci.yml)
+[![Publish image](https://github.com/AndrewGrayYouNeeK/Henad/actions/workflows/publish.yml/badge.svg)](https://github.com/AndrewGrayYouNeeK/Henad/actions/workflows/publish.yml)
 
 A production-ready transformer pipeline for time-series prediction, built with PyTorch, CUDA, and FastAPI. Source of truth is this GitHub repository — no Vercel, no vendor-hosted backend.
 
-**GitHub:** <https://github.com/AndrewGrayYouNeeK/Nous>  
-**Image:** `ghcr.io/andrewgrayyouneek/nous`
+**GitHub:** <https://github.com/AndrewGrayYouNeeK/Henad>  
+**Image:** `ghcr.io/andrewgrayyouneek/henad`
 
 ## Features
 
@@ -20,7 +20,7 @@ A production-ready transformer pipeline for time-series prediction, built with P
 - **Forecast dashboard** – recent history, the next forecast (with a p10–p90 band when the API provides one), past predictions against actuals, and experiment metrics, served at `/`
 - **SQLite experiment store** – local persistence for training runs and metrics
 - **Modular Python package** – models, data, training, evaluation, inference, and storage layers
-- **Docker & GitHub Container Registry** – `docker compose up --build` locally, or pull `ghcr.io/andrewgrayyouneek/nous`
+- **Docker & GitHub Container Registry** – `docker compose up --build` locally, or pull `ghcr.io/andrewgrayyouneek/henad`
 - **Configurable via YAML** – all hyper-parameters in `config/config.yaml`
 - **GQ voice read-aloud** – Andrew's ElevenLabs voice clone reads forecasts and results aloud; text stays free and audio is metered per account. Credit-pack checkout is in test mode and will not charge a real card.
 
@@ -82,16 +82,16 @@ A production-ready transformer pipeline for time-series prediction, built with P
 ### Clone from GitHub
 
 ```bash
-git clone https://github.com/AndrewGrayYouNeeK/Nous.git
-cd Nous
+git clone https://github.com/AndrewGrayYouNeeK/Henad.git
+cd Henad
 ```
 
 ### GitHub Container Registry (recommended)
 
-After CI succeeds on `main`, the [Publish image](https://github.com/AndrewGrayYouNeeK/Nous/actions/workflows/publish.yml) workflow pushes `:latest`, `sha-<sha>`, and `main-<sha>` (the first 7 characters of that commit):
+After CI succeeds on `main`, the [Publish image](https://github.com/AndrewGrayYouNeeK/Henad/actions/workflows/publish.yml) workflow pushes `:latest`, `sha-<sha>`, and `main-<sha>` (the first 7 characters of that commit):
 
 ```bash
-docker pull ghcr.io/andrewgrayyouneek/nous:latest
+docker pull ghcr.io/andrewgrayyouneek/henad:latest
 docker compose -f docker-compose.ghcr.yml up
 ```
 
@@ -343,7 +343,7 @@ The blend was chosen on 2009–2016. The other rows are references on the same 3
 
 ## API Reference
 
-The same curl examples live on the site at [https://nous.youneek.dev/docs](https://nous.youneek.dev/docs). The OpenAPI schema is `/openapi.json`, with explorers at `/openapi/docs` and `/openapi/redoc`.
+The same curl examples live on the site at [https://henad.youneek.dev/docs](https://henad.youneek.dev/docs). The OpenAPI schema is `/openapi.json`, with explorers at `/openapi/docs` and `/openapi/redoc`.
 
 ### `GET /starters`
 
@@ -496,9 +496,9 @@ YouNeeK Time is **100 units / 100 minutes / 100 seconds** (not App Store 10/10/1
 ### GQ voice
 
 - `POST /agent/transcribe` — Talk mode hearing. Body is one spoken turn as a 16 kHz mono WAV (up to about 37 seconds). Whisper (`@cf/openai/whisper-large-v3-turbo`, about 47 neurons per audio minute) returns `{"text": ...}`. Signed-in only, counted against the shared daily neuron cap; `429` with a friendly note when that cap is used up.
-- `GET /voice/status` — balance, the Nous Plus plan and subscription, today's site-wide voice usage, and recent usage. Reports `signed_in: false` with a sign-up prompt without a session.
+- `GET /voice/status` — balance, the Henad Plus plan and subscription, today's site-wide voice usage, and recent usage. Reports `signed_in: false` with a sign-up prompt without a session.
 - `POST /voice/speak` — `{"text": "...", "voice": "gq" | "female"}` → `audio/mpeg`. `voice` is optional and defaults to GQ; the second voice is ElevenLabs' premade "Sarah", shown as "Ivy" (`voice.alt_voice_id` / `voice.alt_voice_name` in `config.yaml`). Both voices draw on the same character balance, and an unknown voice is a `422`. `401` signed out, `402` out of voice, `422` empty or too long, `429` daily site cap reached (free tier only), `502`/`503` voice unavailable. Identical text replays from cache without spending.
-- `POST /voice/checkout` — no body → a Stripe Checkout URL for the one Nous Plus subscription, or `{"available": false}` ("coming soon") when Stripe is not configured. `409` when already subscribed.
+- `POST /voice/checkout` — no body → a Stripe Checkout URL for the one Henad Plus subscription, or `{"available": false}` ("coming soon") when Stripe is not configured. `409` when already subscribed.
 - `POST /voice/sync` — `{"session_id": "cs_..."}` → the new status. Confirms the buyer's own completed checkout so voice is on the moment they return.
 - `POST /voice/portal` — a Stripe customer-portal URL to update the card or cancel.
 - `POST /voice/stripe/webhook` — Stripe webhook. The signature is verified first. Handles `checkout.session.completed`, `invoice.paid`, and `customer.subscription.created|updated|deleted`; each billing period's allowance lands exactly once.
@@ -579,7 +579,7 @@ The dashboard can read forecasts and results aloud in **GQ**, Andrew's professio
 
 - **Text is always free.** Every page, forecast, explanation, and workspace feature works in text with no account and no credit. Voice credit never gates text.
 - **Each account gets a free GQ allowance** — 5,000 characters, granted once, the first time the account opens the Voice & credits page or listens.
-- **Voice comes with the subscription.** **Nous Plus** is **$9.00 a month** and includes **40,000 characters** of GQ every month (about 45 minutes of audio). There are no voice packs or add-ons to buy: one Subscribe button opens one Stripe Checkout, and voice works as soon as the buyer is back. The allowance resets each billing period and does not roll over. At about **$0.08 per 1,000 characters** from ElevenLabs the allowance costs at most about $3.20 a month, and cached replays cost nothing. The plan is configurable under `voice.plan` in `config/config.yaml` (name, price, `monthly_chars`; `NEURAL_FORGE_VOICE_PLAN_CHARS` overrides the allowance).
+- **Voice comes with the subscription.** **Henad Plus** is **$9.00 a month** and includes **40,000 characters** of GQ every month (about 45 minutes of audio). There are no voice packs or add-ons to buy: one Subscribe button opens one Stripe Checkout, and voice works as soon as the buyer is back. The allowance resets each billing period and does not roll over. At about **$0.08 per 1,000 characters** from ElevenLabs the allowance costs at most about $3.20 a month, and cached replays cost nothing. The plan is configurable under `voice.plan` in `config/config.yaml` (name, price, `monthly_chars`; `NEURAL_FORGE_VOICE_PLAN_CHARS` overrides the allowance).
 - **Metering is server-side.** `POST /voice/speak` checks the account balance before calling ElevenLabs, deducts the exact character count (the monthly plan allowance first, then the free allowance), and returns `402` when the balance is short. A request longer than `max_chars_per_request` (2,000 characters) is rejected with `422`.
 - **Identical text is free to replay.** Audio is cached by a hash of voice id + text, so the same paragraph never spends credit twice.
 - **A global daily safety cap** (`daily_char_limit`, default 300,000 characters ≈ $24/day of ElevenLabs spend) stops the free tier's bill from running away; further free requests get `429` until the UTC day rolls over. Subscribers are bounded by their own paid allowance instead.
@@ -616,9 +616,9 @@ minutes); secrets never reach an already-running instance.
 
 In the Stripe dashboard:
 
-1. **Developers → Webhooks → Add endpoint**: URL `https://nous.youneek.xyz/voice/stripe/webhook`, events `checkout.session.completed`, `invoice.paid`, `customer.subscription.created`, `customer.subscription.updated`, and `customer.subscription.deleted`. (Voice still turns on after checkout through `/voice/sync` and renews through a lazy Stripe lookup if an event is missed.)
+1. **Developers → Webhooks → Add endpoint**: URL `https://henad.youneek.xyz/voice/stripe/webhook`, events `checkout.session.completed`, `invoice.paid`, `customer.subscription.created`, `customer.subscription.updated`, and `customer.subscription.deleted`. (Voice still turns on after checkout through `/voice/sync` and renews through a lazy Stripe lookup if an event is missed.)
 2. Copy the endpoint's **Signing secret** and store it with `npx wrangler secret put STRIPE_WEBHOOK_SECRET`, then let the container restart so the secret is picked up.
-3. Subscribe with a test account and check the Voice page shows Nous Plus active with the monthly allowance. Turn on the **customer portal** (Settings → Billing → Customer portal) so Manage subscription can update cards and cancel.
+3. Subscribe with a test account and check the Voice page shows Henad Plus active with the monthly allowance. Turn on the **customer portal** (Settings → Billing → Customer portal) so Manage subscription can update cards and cancel.
 
 The voice tables ship as D1 migrations `0002_voice.sql` and `0014_voice_plan.sql` (the subscription tables); `npx wrangler d1 migrations apply neural-forge-workspaces --remote` applies them. Locally, `prepare_workspace` creates the same tables at startup.
 
@@ -632,7 +632,7 @@ The voice tables ship as D1 migrations `0002_voice.sql` and `0014_voice_plan.sql
 | `NEURAL_FORGE_VOICE_FREE_CHARS` | `5000` |
 | `NEURAL_FORGE_VOICE_MAX_CHARS` | `2000` |
 | `NEURAL_FORGE_VOICE_DAILY_LIMIT` | `300000` |
-| `NEURAL_FORGE_VOICE_PLAN_CHARS` | `40000` (Nous Plus monthly allowance) |
+| `NEURAL_FORGE_VOICE_PLAN_CHARS` | `40000` (Henad Plus monthly allowance) |
 | `NEURAL_FORGE_PUBLIC_URL` | derived from the request host; base for the Checkout success/cancel return URLs |
 
 Cached audio lives beside workspace bytes (`voice/cache/<sha256>.mp3` in R2, files under the workspace directory locally), so the cache needs no extra storage service. The $5/month Cloudflare plan is untouched: no new Workers, routes, or bindings, and the cache reduces ElevenLabs spend.
@@ -643,9 +643,9 @@ GitHub is the home for this project:
 
 | Surface | Where |
 | --- | --- |
-| Source, issues, pull requests | [github.com/AndrewGrayYouNeeK/Nous](https://github.com/AndrewGrayYouNeeK/Nous) |
-| CI (test, lint, typecheck, Docker build) | [GitHub Actions CI](https://github.com/AndrewGrayYouNeeK/Nous/actions/workflows/ci.yml) |
-| Published image | `ghcr.io/andrewgrayyouneek/nous` |
+| Source, issues, pull requests | [github.com/AndrewGrayYouNeeK/Henad](https://github.com/AndrewGrayYouNeeK/Henad) |
+| CI (test, lint, typecheck, Docker build) | [GitHub Actions CI](https://github.com/AndrewGrayYouNeeK/Henad/actions/workflows/ci.yml) |
+| Published image | `ghcr.io/andrewgrayyouneek/henad` |
 | Run the published image | `docker compose -f docker-compose.ghcr.yml up` |
 | Cloudflare Workers | `real-neural-forge` and `real-neural-forge-frontend` |
 
@@ -673,10 +673,10 @@ The release is anchored by a git tag named `champions`. That tag is not a softwa
 Public URLs, after the first successful run:
 
 ```text
-https://github.com/AndrewGrayYouNeeK/Nous/releases/download/champions/forecast-default.json
-https://github.com/AndrewGrayYouNeeK/Nous/releases/download/champions/forecasts-index.json
-https://github.com/AndrewGrayYouNeeK/Nous/releases/download/champions/champion-default.pt
-https://github.com/AndrewGrayYouNeeK/Nous/releases/download/champions/metrics-history.json
+https://github.com/AndrewGrayYouNeeK/Henad/releases/download/champions/forecast-default.json
+https://github.com/AndrewGrayYouNeeK/Henad/releases/download/champions/forecasts-index.json
+https://github.com/AndrewGrayYouNeeK/Henad/releases/download/champions/champion-default.pt
+https://github.com/AndrewGrayYouNeeK/Henad/releases/download/champions/metrics-history.json
 ```
 
 Replace `default` with the dataset id. The same JSON is uploaded as the `latest-forecasts` workflow artifact (kept 90 days). A private repository needs a token with contents read to download the release.
@@ -714,14 +714,14 @@ To serve a dataset other than `default`, change `vars.NEURAL_FORGE_CONFIG` and `
 
 ### Redeploy
 
-Wait until [Publish image](https://github.com/AndrewGrayYouNeeK/Nous/actions/workflows/publish.yml) succeeds for the commit you want. On a push to `main` it pushes three GHCR tags for that commit: `:latest`, `sha-<sha>`, and `main-<sha>`. `<sha>` is the first 7 characters of the commit. Tagged releases and manual runs push the same commit tags.
+Wait until [Publish image](https://github.com/AndrewGrayYouNeeK/Henad/actions/workflows/publish.yml) succeeds for the commit you want. On a push to `main` it pushes three GHCR tags for that commit: `:latest`, `sha-<sha>`, and `main-<sha>`. `<sha>` is the first 7 characters of the commit. Tagged releases and manual runs push the same commit tags.
 
 Copy that image into Cloudflare's registry and point the Worker at the new tag. From a machine that can pull GHCR and is logged into the same Cloudflare account:
 
 ```bash
 SHA=b49247b
-docker pull ghcr.io/andrewgrayyouneek/nous:main-$SHA
-docker tag ghcr.io/andrewgrayyouneek/nous:main-$SHA real-neural-forge:main-$SHA
+docker pull ghcr.io/andrewgrayyouneek/henad:main-$SHA
+docker tag ghcr.io/andrewgrayyouneek/henad:main-$SHA real-neural-forge:main-$SHA
 cd deploy/cloudflare
 npm install
 npx wrangler login
@@ -756,20 +756,20 @@ npx wrangler secret put NEURAL_FORGE_CHECKPOINT_TOKEN
 | `NEURAL_FORGE_CHECKPOINT_PATH` | No | Where the file is saved. Default is `inference.checkpoint_path`. |
 | `NEURAL_FORGE_CHECKPOINT_MAX_BYTES` | No | Download cap. Default 256 MiB. |
 | `ELEVENLABS_API_KEY` | For GQ voice | ElevenLabs text-to-speech key. Voice is unavailable (text unaffected) while unset. See [GQ voice](#gq-voice-metered-read-aloud). |
-| `STRIPE_SECRET_KEY` | For GQ voice sales | Creates the Nous Plus subscription Checkout session. The Subscribe button shows "coming soon" while unset. |
-| `STRIPE_WEBHOOK_SECRET` | For GQ voice sales | Verifies the Stripe webhook that keeps Nous Plus subscriptions current. |
+| `STRIPE_SECRET_KEY` | For GQ voice sales | Creates the Henad Plus subscription Checkout session. The Subscribe button shows "coming soon" while unset. |
+| `STRIPE_WEBHOOK_SECRET` | For GQ voice sales | Verifies the Stripe webhook that keeps Henad Plus subscriptions current. |
 | `FORGE_VOICE_ID` | No | Overrides the GQ voice id. A Worker secret with the pre-`NEURAL_FORGE_` name; the Worker forwards it into the container as `NEURAL_FORGE_VOICE_ID` (`deploy/cloudflare/src/containerEnv.ts`). Omit it to use the built-in voice. |
 
 The container needs outbound internet so it can download the champion. D1 and R2 calls stay inside the Worker: the container requests `http://bindings.neuralforge`, and `outboundByHost` serves those paths with the bindings.
 
-Sessions use a host-only cookie named `nf_session` (`HttpOnly`, `SameSite=Strict`, `Secure` on HTTPS, 14-day expiry, no `Domain` attribute). A sign-in on `nous.youneek.xyz` is not sent to `nous.youneek.dev` or to the workers.dev host. `forge.youneek.dev` and `forge.youneek.xyz` answer `301` to the matching `nous.youneek.*` host with the same path and query (`deploy/cloudflare/src/auth/gate.ts`); only `POST /voice/stripe/webhook` is served on the old hosts so the Stripe dashboard endpoint keeps working.
+Sessions use a host-only cookie named `nf_session` (`HttpOnly`, `SameSite=Strict`, `Secure` on HTTPS, 14-day expiry, no `Domain` attribute). A sign-in on `henad.youneek.xyz` is not sent to `henad.youneek.dev` or to the workers.dev host. The old hosts `nous.youneek.dev`, `nous.youneek.xyz`, `forge.youneek.dev` and `forge.youneek.xyz` answer `301` (`308` for non-GET requests) to the matching `henad.youneek.*` host with the same path and query (`deploy/cloudflare/src/auth/gate.ts`); only `POST /voice/stripe/webhook` is served on the old hosts so the Stripe dashboard endpoint keeps working. Because the cookie is host-only, a signed-in browser visit to an old host gets a one-time hand-off instead of the bare redirect (`deploy/cloudflare/src/auth/handoff.ts`): the old host mints a single-use code (sha256 stored in `host_handoffs`, 2 minutes) and a small page posts it, with the chat-history list and Talk/voice choices from `localStorage`, to `https://henad.<tld>/auth/handoff`. That endpoint only accepts posts whose `Origin` is the matching old host, starts a new session for the same account with the same expiry and second-factor stamp, sets its own cookie, restores the settings and continues to the same path and query.
 
 ### Owner account and two-step sign-in
 
 There is no hidden owner sign-in and no shared owner token login. The owner is a normal email + password account (`id='owner'`, `role='owner'` in D1). Owner powers (shared champion training, caps bypass, unlimited voice) only unlock on a session that passed a second factor in the last 12 hours. All checks are server-side: the container (`src/workspace/service.py`) and the Worker (`deploy/cloudflare/src/auth/session.ts`).
 
 * **Claim, once, with a setup link.** The owner row starts without a password. `POST /auth/signup` with `andrewgray@youneek.xyz` only succeeds with a valid one-time `setup_token` (the site reads it from `/app?setup=<token>`, keeps it in memory, and strips it from the address bar). Only the token's sha256 is stored, in D1 table `owner_setup`, with an expiry; the link itself is written to a file under `~/.secrets/` on the operator's machine. Without a valid link the owner email answers like any taken address. There is no email verification (no free mail sender is wired up).
-* **Second factor.** Passkeys (WebAuthn, `ES256`/`RS256`, user verification required, RP ID = the `nous.youneek.*` hostname) are preferred. An authenticator app (TOTP, SHA-1, 6 digits, 30 s) is the backup. Enrolling either shows 10 one-time recovery codes once; only their hashes are stored. Endpoints: `/auth/mfa/status`, `/auth/mfa/totp/setup|confirm`, `/auth/mfa/verify`, `/auth/mfa/recovery/regenerate`, `/auth/webauthn/register/options|verify`, `/auth/webauthn/login/options|verify`.
+* **Second factor.** Passkeys (WebAuthn, `ES256`/`RS256`, user verification required, RP ID = the parent domain, `youneek.dev` or `youneek.xyz`, offered on `henad.youneek.*`, so a passkey survives a subdomain change; the server still checks the exact page origin) are preferred. An authenticator app (TOTP, SHA-1, 6 digits, 30 s) is the backup. Enrolling either shows 10 one-time recovery codes once; only their hashes are stored. Endpoints: `/auth/mfa/status`, `/auth/mfa/totp/setup|confirm`, `/auth/mfa/verify`, `/auth/mfa/recovery/regenerate`, `/auth/webauthn/register/options|verify`, `/auth/webauthn/login/options|verify`.
 * **Lockout.** Five wrong passwords for an email in 15 minutes lock it for 15 minutes; an IP is locked after 20. Five wrong second-factor attempts lock that account's second factor for 15 minutes. Locked calls return `429`.
 * **Gate.** Everything except `/`, `/app`, `/assets/*`, `/docs`, `/openapi*`, `/health`, `/auth/*`, `/youneek/*`, `POST /voice/stripe/webhook`, and `GET /agent/reports/{id}` needs a session (`401 {"auth_required": true}`). Daily AI caps count per account (`acct:<id>`) once signed in.
 
@@ -823,7 +823,7 @@ npx wrangler secret put NEURAL_FORGE_API_TOKEN
 npx wrangler secret put NEURAL_FORGE_CHECKPOINT_TOKEN
 ```
 
-`NEURAL_FORGE_CHECKPOINT_TOKEN` is only required when the champions release is private. Omit that `secret put` for a public release. `npx wrangler deploy` (after the image pin is updated) attaches the custom hostnames `forge.youneek.xyz` and `forge.youneek.dev` and keeps `https://real-neural-forge-api.youneekartifacts.workers.dev`. `npx wrangler d1 migrations apply neural-forge-workspaces --remote` above also applies `migrations/0002_voice.sql`, the GQ voice metering tables.
+`NEURAL_FORGE_CHECKPOINT_TOKEN` is only required when the champions release is private. Omit that `secret put` for a public release. `npx wrangler deploy` (after the image pin is updated) attaches the custom hostnames `henad.youneek.dev` and `henad.youneek.xyz` (the app) plus the old hosts `nous.youneek.*` and `forge.youneek.*` (redirects) and keeps `https://real-neural-forge-api.youneekartifacts.workers.dev`. `npx wrangler d1 migrations apply neural-forge-workspaces --remote` above also applies `migrations/0002_voice.sql`, the GQ voice metering tables.
 
 ### Fly.io (one command after the token is filled in)
 
@@ -834,7 +834,7 @@ fly auth login
 fly launch --copy-config --ha=false --yes --no-deploy \
   && fly secrets set \
        NEURAL_FORGE_API_TOKEN="replace-with-a-long-random-string" \
-       NEURAL_FORGE_CHECKPOINT_URL="https://github.com/AndrewGrayYouNeeK/Nous/releases/download/champions/champion-default.pt" \
+       NEURAL_FORGE_CHECKPOINT_URL="https://github.com/AndrewGrayYouNeeK/Henad/releases/download/champions/champion-default.pt" \
        NEURAL_FORGE_CHECKPOINT_TOKEN="github-token-or-omit-this-line-when-the-release-is-public" \
   && fly deploy --ha=false
 ```

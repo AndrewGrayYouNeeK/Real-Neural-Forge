@@ -20,7 +20,7 @@ import urllib.request
 from src.domain_forecasts.baselines import iter_months
 from src.utils.paths import resolve_repo_path
 
-USER_AGENT = "Nous/1.0 (topic counts; no token)"
+USER_AGENT = "Henad/1.0 (topic counts; no token)"
 
 
 def search_url(month: str) -> str:

@@ -370,5 +370,5 @@
     container.replaceChildren(figure);
   }
 
-  window.NousCharts = { renderLineChart, renderBarChart };
+  window.HenadCharts = { renderLineChart, renderBarChart };
 })();

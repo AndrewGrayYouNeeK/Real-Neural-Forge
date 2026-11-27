@@ -490,7 +490,7 @@ class TestArtifacts:
             return subprocess.CompletedProcess(args, returncode, stdout="", stderr="")
 
         monkeypatch.setattr("src.retrain.artifacts.subprocess.run", fake_run)
-        monkeypatch.setenv("GITHUB_REPOSITORY", "AndrewGrayYouNeeK/Nous")
+        monkeypatch.setenv("GITHUB_REPOSITORY", "AndrewGrayYouNeeK/Henad")
         publish_release(tmp_path)
         create = next(args for args in calls if "create" in args)
         upload = next(args for args in calls if "upload" in args)

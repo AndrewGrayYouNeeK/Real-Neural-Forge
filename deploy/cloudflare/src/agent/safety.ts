@@ -141,13 +141,13 @@ export async function checkOutput(ai: AiLike, question: string, answer: string):
 // Creator honesty (default mode never claims another maker).
 
 export const CREATOR_ANSWER =
-  "Nous was created by and is owned by Andrew Gray, founder, owner and CEO of YouNeeK (pronounced \"unique\"). It runs on GPT-OSS 120B, an open model Andrew chose; OpenAI released that model, but OpenAI and xAI didn't make Nous.";
+  "Henad was created by and is owned by Andrew Gray, founder, owner and CEO of YouNeeK (pronounced \"unique\"). It runs on GPT-OSS 120B, an open model Andrew chose; OpenAI released that model, but OpenAI and xAI didn't make Henad.";
 
 export function asksAboutCreator(question: string): boolean {
   const q = question.toLowerCase();
   return (
-    /\b(who|which company|what company)\b[^?]{0,40}\b(made|make|created|create|built|build|owns?|developed|develop|programmed|trained|behind|runs)\b[^?]{0,20}\b(you|nous|this (?:ai|app|bot|site|thing))\b/.test(q) ||
-    /\b(your|nous'?s?)\s+(creator|maker|owner|developer|founder|parent company)\b/.test(q) ||
+    /\b(who|which company|what company)\b[^?]{0,40}\b(made|make|created|create|built|build|owns?|developed|develop|programmed|trained|behind|runs)\b[^?]{0,20}\b(you|henad|this (?:ai|app|bot|site|thing))\b/.test(q) ||
+    /\b(your|henad'?s?)\s+(creator|maker|owner|developer|founder|parent company)\b/.test(q) ||
     /\bare you (?:made|built|created|owned) by\b/.test(q) ||
     /\bwhat (?:ai |llm |language )?model (?:are you|do you (?:use|run on)|powers you)\b/.test(q)
   );

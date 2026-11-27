@@ -151,7 +151,7 @@ describe("file reading", () => {
   it("stores the file in R2, records it in D1, and enforces size and daily caps", async () => {
     const { db, rows } = fakeDb();
     const bucket = fakeBucket();
-    const deps = { db, bucket, scope: "user:u1", owner: false, env: { NOUS_FILES_MEMBER_DAILY: "2" } };
+    const deps = { db, bucket, scope: "user:u1", owner: false, env: { HENAD_FILES_MEMBER_DAILY: "2" } };
     const big = await uploadFile(deps, "big.txt", "text/plain", new ArrayBuffer(6 * 1024 * 1024));
     expect(big.status).toBe(413);
     const ok = await uploadFile(deps, "a.txt", "text/plain", new TextEncoder().encode("some notes").buffer);
@@ -211,7 +211,7 @@ describe("image making", () => {
         return { image: jpeg };
       },
     };
-    const deps = { ai, db, bucket, scope: "user:u1", owner: false, capKey: "acct:u1", env: { NOUS_IMAGES_MEMBER_DAILY: "1" } };
+    const deps = { ai, db, bucket, scope: "user:u1", owner: false, capKey: "acct:u1", env: { HENAD_IMAGES_MEMBER_DAILY: "1" } };
     const first = await generateImage(deps, "draw a red fox");
     expect(first.imageId).toMatch(/^img_[a-f0-9]{20}$/);
     expect(first.text).toContain(`[[image:${first.imageId}]]`);

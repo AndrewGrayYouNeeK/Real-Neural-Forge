@@ -116,7 +116,7 @@ describe("safety guard verdicts", () => {
 
 describe("creator honesty", () => {
   it("recognizes creator questions", () => {
-    for (const q of ["Who made you?", "who created Nous", "Who owns this AI?", "Are you made by OpenAI?", "who is your creator", "what model do you run on"]) {
+    for (const q of ["Who made you?", "who created Henad", "Who owns this AI?", "Are you made by OpenAI?", "who is your creator", "what model do you run on"]) {
       expect(asksAboutCreator(q), q).toBe(true);
     }
     expect(asksAboutCreator("who made the first airplane")).toBe(false);
@@ -125,7 +125,7 @@ describe("creator honesty", () => {
   it("always credits Andrew Gray and never OpenAI/xAI as the maker", () => {
     expect(enforceCreatorAnswer("Who made you?", "I was created by OpenAI.")).toBe(CREATOR_ANSWER);
     expect(enforceCreatorAnswer("Who made you?", "I'm Grok, built by xAI.")).toContain("Andrew Gray");
-    const good = 'Nous was created by and is owned by Andrew Gray, founder, owner and CEO of YouNeeK (pronounced "unique"). Ask him about it.';
+    const good = 'Henad was created by and is owned by Andrew Gray, founder, owner and CEO of YouNeeK (pronounced "unique"). Ask him about it.';
     expect(enforceCreatorAnswer("who created you", good)).toBe(good);
     // Anything that is not the canonical wording becomes the canonical answer.
     expect(enforceCreatorAnswer("who created you", "Andrew Gray (YouNeeK) built me.")).toBe(CREATOR_ANSWER);
@@ -139,7 +139,7 @@ describe("creator honesty with model typography", () => {
   it("accepts an answer that names Andrew Gray with a non-breaking space", () => {
     const answer = "I was created by\u2014and am owned by\u2014Andrew\u00a0Gray (YouNeeK), and I run on GPT\u2011OSS 120B.";
     expect(enforceCreatorAnswer("Who made you?", answer)).toBe(CREATOR_ANSWER);
-    const smart = "Nous was created by and is owned by Andrew\u00a0Gray, founder, owner and CEO of YouNeeK (pronounced \u201cunique\u201d).";
+    const smart = "Henad was created by and is owned by Andrew\u00a0Gray, founder, owner and CEO of YouNeeK (pronounced \u201cunique\u201d).";
     expect(enforceCreatorAnswer("Who made you?", smart)).toContain("created by and is owned by Andrew Gray, founder, owner and CEO of YouNeeK");
     expect(enforceCreatorAnswer("Who made you?", smart)).not.toBe(CREATOR_ANSWER);
   });
@@ -163,6 +163,6 @@ describe("creator title wording", () => {
     expect(normalizeCreatorTitle(`Made by ${title}`)).toBe(`Made by ${title}`);
     expect(normalizeCreatorTitle("Andrew Gray the CEO of YouNeeK")).toBe(title);
     expect(enforceCreatorAnswer("who created you?", "Created by Andrew Gray, founder and CEO of YouNeeK.")).toBe(CREATOR_ANSWER);
-    expect(enforceCreatorAnswer("what's your name?", "I'm Nous, built by Andrew Gray, founder and CEO of YouNeeK.")).toBe(`I'm Nous, built by ${title}.`);
+    expect(enforceCreatorAnswer("what's your name?", "I'm Henad, built by Andrew Gray, founder and CEO of YouNeeK.")).toBe(`I'm Henad, built by ${title}.`);
   });
 });

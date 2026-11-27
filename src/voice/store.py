@@ -25,7 +25,7 @@ ACTIVE_STATUSES = frozenset({"active", "trialing"})
 
 
 def sql_statements(script: str | None = None, *, plan: bool = False) -> list[str]:
-    """Split the voice schema (or the Nous Plus schema) into statements."""
+    """Split the voice schema (or the Henad Plus schema) into statements."""
     if script is None:
         text = (_PLAN_SCHEMA if plan else _SCHEMA).read_text(encoding="utf-8")
     else:

@@ -1,4 +1,4 @@
-"""GQ voice: text stays free, audio spends characters, the Nous Plus subscription
+"""GQ voice: text stays free, audio spends characters, the Henad Plus subscription
 includes a monthly allowance, owners are unlimited."""
 
 from __future__ import annotations
@@ -162,7 +162,7 @@ def test_signed_out_visitors_get_no_gq(voice_client):
     assert body["signed_in"] is False
     assert body["voice"] is True
     assert "free account" in body["message"]
-    denied = _speak(client, "Hello from Nous.")
+    denied = _speak(client, "Hello from Henad.")
     assert denied.status_code == 401
     assert "free account" in denied.json()["detail"]
 
@@ -683,7 +683,7 @@ def test_portal_needs_a_subscription_and_opens_stripes_portal(
     client, _root = voice_client
     user_id = _signup(client, "portal@example.com")
     monkeypatch.setenv("STRIPE_SECRET_KEY", STRIPE_SECRET)
-    monkeypatch.setenv("NEURAL_FORGE_PUBLIC_URL", "https://nous.youneek.dev")
+    monkeypatch.setenv("NEURAL_FORGE_PUBLIC_URL", "https://henad.youneek.dev")
     assert client.post("/voice/portal").status_code == 404
     _subscribe(client, monkeypatch, user_id, "sub_portal")
     captured: dict = {}
@@ -726,7 +726,7 @@ def test_member_status_reports_balance_and_the_plan(voice_client, monkeypatch):
     assert body["role"] == "member"
     assert body["balance"]["free"] == 100
     assert "packs" not in body
-    assert body["plan"]["name"] == "Nous Plus"
+    assert body["plan"]["name"] == "Henad Plus"
     assert body["plan"]["price_usd"] == 9.0
     assert body["plan"]["monthly_chars"] == 40000
     assert body["plan"]["interval"] == "month"
@@ -777,7 +777,7 @@ def test_cache_store_failure_is_json_503(voice_client, monkeypatch: pytest.Monke
     monkeypatch.setattr(VoiceStore, "cache_get", boom)
     spoken = client.post(
         "/voice/speak",
-        json={"text": "Hello from Nous."},
+        json={"text": "Hello from Henad."},
         headers=owner_headers(),
     )
     assert spoken.status_code == 503

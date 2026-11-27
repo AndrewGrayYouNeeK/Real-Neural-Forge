@@ -62,10 +62,14 @@ def test_container_worker_is_not_a_dashboard_worker():
     assert hostnames["forge.youneek.xyz"]["zone_name"] == "youneek.xyz"
     assert hostnames["forge.youneek.dev"]["custom_domain"] is True
     assert hostnames["forge.youneek.dev"]["zone_name"] == "youneek.dev"
-    assert hostnames["nous.youneek.dev"]["custom_domain"] is True
+    assert hostnames["henad.youneek.dev"]["custom_domain"] is True
+    assert hostnames["henad.youneek.dev"]["zone_name"] == "youneek.dev"
+    assert hostnames["henad.youneek.xyz"]["custom_domain"] is True
+    assert hostnames["henad.youneek.xyz"]["zone_name"] == "youneek.xyz"
+    # Old hosts stay routed so they can 301 to henad.*.
     assert hostnames["nous.youneek.dev"]["zone_name"] == "youneek.dev"
-    assert hostnames["nous.youneek.xyz"]["custom_domain"] is True
     assert hostnames["nous.youneek.xyz"]["zone_name"] == "youneek.xyz"
+    assert config["vars"]["NEURAL_FORGE_PUBLIC_URL"] == "https://henad.youneek.dev"
     worker = (ROOT / "deploy" / "cloudflare" / "src" / "index.ts").read_text()
     # Voice and payments secrets must reach the container through envVars.
     forward = (ROOT / "deploy" / "cloudflare" / "src" / "containerEnv.ts").read_text()
@@ -124,7 +128,7 @@ def test_voice_plan_migration_matches_the_schema():
 
 
 def test_fly_and_render_use_the_published_image_and_no_baked_secrets():
-    image = "ghcr.io/andrewgrayyouneek/nous:latest"
+    image = "ghcr.io/andrewgrayyouneek/henad:latest"
     fly = (ROOT / "fly.toml").read_text(encoding="utf-8")
     render = (ROOT / "render.yaml").read_text(encoding="utf-8")
     assert image in fly

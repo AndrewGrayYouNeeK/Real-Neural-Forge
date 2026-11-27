@@ -1,16 +1,17 @@
-"""Build the Nous raster brand assets from the source artwork.
+"""Build the Henad raster brand assets from the source artwork.
 
 Source (committed): frontend/brand/source/nous-final-blackhole-o-swirl-s.jpg
-(white N and U, black hole O, purple-cyan swirl S). On the site N and U are HTML text,
-so they stay crisp; the O and S are images cut from the artwork.
+(the original artwork from before the rename: white N and U, black hole O,
+purple-cyan swirl S). Only the black hole is used now. On the site the HENAD
+letters are HTML text and the A's legs are an inline SVG, so they stay crisp;
+the black hole that sits in the A's counter is cut from the artwork.
 
 Outputs in frontend/brand/:
-  nous-o.png / nous-o.webp       the black hole O, black keyed to transparency
-  nous-s.png / nous-s.webp       the swirl S, black keyed to transparency
+  henad-o.png / henad-o.webp       the black hole, black keyed to transparency
   icon-16/32/180/192/512.png     app icons: the black hole O on black
   icon-512.webp, apple-touch-icon.png
   ../favicon.ico                 16/32/48
-nous-og.png (1200x630) is a browser screenshot of the HTML wordmark + tagline.
+henad-og.png (1200x630) is a browser screenshot of the HTML wordmark + tagline.
 Run with any Python that has Pillow: python3 scripts/build_brand.py
 """
 
@@ -53,13 +54,12 @@ def key_black(image: Image.Image) -> Image.Image:
 SOURCE_FILE = "nous-final-blackhole-o-swirl-s.jpg"
 CAP_TOP, CAP_BOTTOM = 282, 429
 O_BOX = (424, 235, 711, 476)
-S_BOX = (862, 228, 1110, 483)
 ICON_CENTER, ICON_SIDE = (567, 353), 282
 
 
 def build_letters() -> None:
     art = Image.open(SOURCE / SOURCE_FILE).convert("RGB")
-    for name, box in (("nous-o", O_BOX), ("nous-s", S_BOX)):
+    for name, box in (("henad-o", O_BOX),):
         keyed = key_black(art.crop(box))
         keyed.save(BRAND / f"{name}.png", optimize=True)
         keyed.save(BRAND / f"{name}.webp", quality=90, method=6)
@@ -88,4 +88,4 @@ if __name__ == "__main__":
     BRAND.mkdir(parents=True, exist_ok=True)
     build_letters()
     build_icons()
-    print("Built Nous brand assets in", BRAND)
+    print("Built Henad brand assets in", BRAND)

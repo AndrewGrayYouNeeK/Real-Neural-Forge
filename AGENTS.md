@@ -1,4 +1,4 @@
-# Nous
+# Henad
 
 A transformer pipeline for time-series prediction (PyTorch + FastAPI). See `README.md`
 for the full product overview, config reference, and API documentation.
@@ -41,11 +41,12 @@ Standard commands are documented in `README.md`; run them via the venv:
   unset, the server uses an **untrained** model (predictions are effectively random) and
   `/model/info` reports `checkpoint_loaded: false`.
 - `deploy/cloudflare/` is the Containers Worker `real-neural-forge-api`. It is
-  the only Worker that may route `forge.youneek.xyz` and `forge.youneek.dev`.
+  the only Worker that may route `henad.youneek.dev`/`.xyz` (the app) and the old
+  hosts `nous.youneek.*` and `forge.youneek.*` (they 301 to henad.*).
   Do not add a root `wrangler.jsonc`; `workers_ci` writes that file only when
   `WRANGLER_CI_OVERRIDE_NAME` is set. A value of `youneek-xyz` is rewritten to
   `real-neural-forge-frontend` and must not gain routes for `youneek.xyz`,
-  `www.youneek.xyz`, `forge.youneek.xyz`, or `forge.youneek.dev`. Never deploy
+  `www.youneek.xyz`, `forge.youneek.*`, `nous.youneek.*` or `henad.youneek.*`. Never deploy
   this repo as the Worker `youneek-xyz`.
 - The dashboard is served by the same FastAPI process at `/`; static assets are mounted at
   `/assets`. No separate frontend build/server is needed.

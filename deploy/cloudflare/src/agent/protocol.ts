@@ -366,9 +366,16 @@ export function collectToolCalls(result: unknown, text: string | null): ParsedTo
   return [];
 }
 
-/** The product is Nous. If the model slips and uses the old name, say Nous instead. */
-export function sayNous(text: string): string {
-  return text.replace(/\b(?:Real\s+)?Neural\s+Forge\b/gi, "Nous");
+/**
+ * The product is Henad. Old chats (and the odd model slip) still say the old
+ * names, Nous or (Real) Neural Forge, so rewrite them before the model sees
+ * them and before an answer is shown. "Nous Research" (another company) and
+ * lowercase French "nous" are left alone.
+ */
+export function sayHenad(text: string): string {
+  return text
+    .replace(/\b(?:Real\s+)?Neural\s+Forge\b/gi, "Henad")
+    .replace(/\b(?:Nous|NOUS)\b(?!\s*Research|\s*-?\s*Hermes|\s+Portal)/g, "Henad");
 }
 
 const TOOL_JSON_LINE =
@@ -388,7 +395,7 @@ export function sanitizeAgentAnswer(text: string): string {
     "",
   );
   value = value.replace(/\bforecast\s+failed\s*:\s*[^\n]*/gi, "");
-  value = sayNous(value);
+  value = sayHenad(value);
   return stripLeadingPlanning(tidyAnswerWhitespace(value));
 }
 

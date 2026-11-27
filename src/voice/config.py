@@ -42,7 +42,7 @@ class VoicePlan:
     """The subscription that includes GQ voice."""
 
     id: str = "plus"
-    name: str = "Nous Plus"
+    name: str = "Henad Plus"
     monthly_chars: int = 40_000
     price_usd: float = 9.0
 

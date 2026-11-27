@@ -23,7 +23,7 @@ from src.workspace.service import resolve_actor
 
 router = APIRouter()
 
-_SIGN_UP_PROMPT = "Create a free account to hear GQ. Text on Nous stays free."
+_SIGN_UP_PROMPT = "Create a free account to hear GQ. Text on Henad stays free."
 
 
 class SpeakRequest(BaseModel):
@@ -110,7 +110,7 @@ def voice_checkout(
     request: Request,
     authorization: str | None = Header(default=None),
 ) -> dict[str, Any]:
-    """Start the one Nous Plus checkout. GQ voice comes with the subscription."""
+    """Start the one Henad Plus checkout. GQ voice comes with the subscription."""
     actor = _voice_actor(request, authorization)
     try:
         return create_checkout(actor, _app_config(), _base_url(request))

@@ -27,7 +27,7 @@ function mailer(fail?: string) {
 const forward = async () => new Response("container", { status: 500 });
 
 function post(path: string, body: unknown, headers: Record<string, string> = {}) {
-  return new Request(`https://nous.youneek.dev${path}`, {
+  return new Request(`https://henad.youneek.dev${path}`, {
     method: "POST",
     headers: { "Content-Type": "application/json", "CF-Connecting-IP": "203.0.113.9", ...headers },
     body: JSON.stringify(body),
@@ -90,7 +90,7 @@ describe("forgot password", () => {
 
   it("says email is not working, the same way for every address, while sending is off", async () => {
     const mail = mailer();
-    const env = { WORKSPACES_DB: db, EMAIL: mail.binding, NOUS_EMAIL_FROM: "no-reply@youneek.dev" };
+    const env = { WORKSPACES_DB: db, EMAIL: mail.binding, HENAD_EMAIL_FROM: "no-reply@youneek.dev" };
     const known = await handleAuthRoute(post("/auth/password/forgot", { email: "member@example.test" }), env, forward);
     const unknown = await handleAuthRoute(post("/auth/password/forgot", { email: "nobody@example.test" }), env, forward);
     expect(known!.status).toBe(503);
@@ -101,7 +101,7 @@ describe("forgot password", () => {
   it("answers identically for real and unknown emails, and only mails the real one", async () => {
     db.exec("INSERT INTO app_settings (key, value, updated_at) VALUES ('email_sending', 'on', 'x')");
     const mail = mailer();
-    const env = { WORKSPACES_DB: db, EMAIL: mail.binding, NOUS_EMAIL_FROM: "no-reply@youneek.dev" };
+    const env = { WORKSPACES_DB: db, EMAIL: mail.binding, HENAD_EMAIL_FROM: "no-reply@youneek.dev" };
     const known = await handleAuthRoute(post("/auth/password/forgot", { email: "Member@Example.test" }), env, forward);
     const unknown = await handleAuthRoute(post("/auth/password/forgot", { email: "nobody@example.test" }), env, forward);
     expect(known!.status).toBe(200);
@@ -120,7 +120,7 @@ describe("forgot password", () => {
 
   it("rate-limits by email and by network", async () => {
     db.exec("INSERT INTO app_settings (key, value, updated_at) VALUES ('email_sending', 'on', 'x')");
-    const env = { WORKSPACES_DB: db, EMAIL: mailer().binding, NOUS_EMAIL_FROM: "no-reply@youneek.dev" };
+    const env = { WORKSPACES_DB: db, EMAIL: mailer().binding, HENAD_EMAIL_FROM: "no-reply@youneek.dev" };
     const statuses: number[] = [];
     for (let i = 0; i < 4; i += 1) {
       statuses.push((await handleAuthRoute(post("/auth/password/forgot", { email: "nobody@example.test" }), env, forward))!.status);
@@ -130,7 +130,7 @@ describe("forgot password", () => {
 
   it("turns email off by itself when the sending domain is not set up", async () => {
     db.exec("INSERT INTO app_settings (key, value, updated_at) VALUES ('email_sending', 'on', 'x')");
-    const env = { WORKSPACES_DB: db, EMAIL: mailer("E_SENDER_DOMAIN_NOT_AVAILABLE").binding, NOUS_EMAIL_FROM: "no-reply@youneek.dev" };
+    const env = { WORKSPACES_DB: db, EMAIL: mailer("E_SENDER_DOMAIN_NOT_AVAILABLE").binding, HENAD_EMAIL_FROM: "no-reply@youneek.dev" };
     const first = await handleAuthRoute(post("/auth/password/forgot", { email: "member@example.test" }), env, forward);
     expect(first!.status).toBe(200);
     expect(db.rows("SELECT value FROM app_settings WHERE key = 'email_sending'")[0].value).toBe("down:E_SENDER_DOMAIN_NOT_AVAILABLE");
@@ -147,7 +147,7 @@ describe("password reset", () => {
   beforeEach(async () => {
     db = new SqliteD1();
     mail = mailer();
-    env = { WORKSPACES_DB: db, EMAIL: mail.binding, NOUS_EMAIL_FROM: "no-reply@youneek.dev" };
+    env = { WORKSPACES_DB: db, EMAIL: mail.binding, HENAD_EMAIL_FROM: "no-reply@youneek.dev" };
     db.exec("INSERT INTO app_settings (key, value, updated_at) VALUES ('email_sending', 'on', 'x')");
     await addUser(db, "usr_a", "member@example.test");
     await addSession(db, "usr_a", "member-session");
@@ -225,7 +225,7 @@ describe("email verification", () => {
     const db = new SqliteD1();
     db.exec("INSERT INTO app_settings (key, value, updated_at) VALUES ('email_sending', 'on', 'x')");
     const mail = mailer();
-    const env = { WORKSPACES_DB: db, EMAIL: mail.binding, NOUS_EMAIL_FROM: "no-reply@youneek.dev" };
+    const env = { WORKSPACES_DB: db, EMAIL: mail.binding, HENAD_EMAIL_FROM: "no-reply@youneek.dev" };
     const jobs: Promise<unknown>[] = [];
     const signupForward = async () => {
       await addUser(db, "usr_new", "new@example.test");
@@ -243,7 +243,7 @@ describe("email verification", () => {
 
     await addSession(db, "usr_new", "new-session");
     const status = await handleAuthRoute(
-      new Request("https://nous.youneek.dev/auth/email/status", { headers: { Cookie: "nf_session=new-session" } }),
+      new Request("https://henad.youneek.dev/auth/email/status", { headers: { Cookie: "nf_session=new-session" } }),
       env,
       forward,
     );
@@ -253,7 +253,7 @@ describe("email verification", () => {
   it("does not send anything while email is off", async () => {
     const db = new SqliteD1();
     const mail = mailer();
-    const env = { WORKSPACES_DB: db, EMAIL: mail.binding, NOUS_EMAIL_FROM: "no-reply@youneek.dev" };
+    const env = { WORKSPACES_DB: db, EMAIL: mail.binding, HENAD_EMAIL_FROM: "no-reply@youneek.dev" };
     const jobs: Promise<unknown>[] = [];
     const signupForward = async () => Response.json({ id: "usr_new", email: "new@example.test", role: "member" }, { status: 201 });
     await handleAuthRoute(post("/auth/signup", { email: "new@example.test", password: "a-long-password" }), env, signupForward, (job) => jobs.push(job));
@@ -264,9 +264,9 @@ describe("email verification", () => {
 
 describe("owner usage dashboard", () => {
   let db: SqliteD1;
-  const env = () => ({ WORKSPACES_DB: db, EMAIL: mailer().binding, NOUS_EMAIL_FROM: "no-reply@youneek.dev" });
+  const env = () => ({ WORKSPACES_DB: db, EMAIL: mailer().binding, HENAD_EMAIL_FROM: "no-reply@youneek.dev" });
   const get = (token?: string) =>
-    new Request("https://nous.youneek.dev/owner/usage", { headers: token ? { Cookie: `nf_session=${token}` } : {} });
+    new Request("https://henad.youneek.dev/owner/usage", { headers: token ? { Cookie: `nf_session=${token}` } : {} });
 
   beforeEach(async () => {
     db = new SqliteD1();
@@ -291,7 +291,7 @@ describe("owner usage dashboard", () => {
     expect((await handleOwnerRoute(get("member-session"), env()))!.status).toBe(404);
     expect((await handleOwnerRoute(get("owner-stale"), env()))!.status).toBe(404);
     expect((await handleOwnerRoute(get("owner-nomfa"), env()))!.status).toBe(404);
-    const post = new Request("https://nous.youneek.dev/owner/email", {
+    const post = new Request("https://henad.youneek.dev/owner/email", {
       method: "POST",
       headers: { Cookie: "nf_session=member-session" },
       body: JSON.stringify({ action: "test" }),
@@ -316,8 +316,8 @@ describe("owner usage dashboard", () => {
 
   it("turns email on only after a test reaches the owner", async () => {
     const mail = mailer();
-    const ownerEnv = { WORKSPACES_DB: db, EMAIL: mail.binding, NOUS_EMAIL_FROM: "no-reply@youneek.dev" };
-    const request = new Request("https://nous.youneek.dev/owner/email", {
+    const ownerEnv = { WORKSPACES_DB: db, EMAIL: mail.binding, HENAD_EMAIL_FROM: "no-reply@youneek.dev" };
+    const request = new Request("https://henad.youneek.dev/owner/email", {
       method: "POST",
       headers: { Cookie: "nf_session=owner-fresh" },
       body: JSON.stringify({ action: "test" }),
@@ -339,7 +339,7 @@ describe("shared email for other features (reminders)", () => {
     const { emailReminder } = await import("../src/abilities/reminders");
     const db = new SqliteD1();
     const mail = mailer();
-    const env = { WORKSPACES_DB: db, EMAIL: mail.binding, NOUS_EMAIL_FROM: "no-reply@youneek.dev" };
+    const env = { WORKSPACES_DB: db, EMAIL: mail.binding, HENAD_EMAIL_FROM: "no-reply@youneek.dev" };
     await addUser(db, "usr_a", "member@example.test");
     expect(await emailReminder(db, env, "usr_a", "⏰ Reminder: Stretch.")).toBe(false);
     db.exec("INSERT INTO app_settings (key, value, updated_at) VALUES ('email_sending', 'on', 'x')");

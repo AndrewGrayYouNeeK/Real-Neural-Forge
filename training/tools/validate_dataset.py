@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Check training/nous_chat.jsonl before you train on it.
+"""Check training/henad_chat.jsonl before you train on it.
 
 Run from the repo root:  python3 training/tools/validate_dataset.py
 
@@ -13,7 +13,7 @@ import sys
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent.parent
-DATA = HERE / "nous_chat.jsonl"
+DATA = HERE / "henad_chat.jsonl"
 SYSTEM = (HERE / "system_prompt.txt").read_text(encoding="utf-8").strip()
 CREATOR = 'created by and is owned by Andrew Gray, founder, owner and CEO of YouNeeK (pronounced "unique")'
 

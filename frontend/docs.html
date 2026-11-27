@@ -3,10 +3,10 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Nous API docs — The architecture of understanding</title>
+    <title>Henad API docs — The architecture of understanding</title>
     <meta
       name="description"
-      content="The architecture of understanding. API docs and examples for Nous: health, sample models, predict, forecast, workspace training, and live data."
+      content="The architecture of understanding. API docs and examples for Henad: health, sample models, predict, forecast, workspace training, and live data."
     />
     <link rel="icon" href="/favicon.ico" sizes="any" />
     <link rel="icon" href="/assets/brand/icon-32.png" sizes="32x32" type="image/png" />
@@ -18,7 +18,7 @@
     <a class="skip-link" href="#docs">Skip to the API docs</a>
     <div class="grid-bg" aria-hidden="true"></div>
     <header class="topbar">
-      <a class="brand brand-with-tag" href="/" aria-label="Nous home"><span class="nous-wordmark" role="img" aria-label="Nous"><span class="nou" aria-hidden="true">N</span><img class="nous-o" src="/assets/brand/nous-o.webp" alt="" aria-hidden="true" /><span class="nou" aria-hidden="true">U</span><img class="nous-s" src="/assets/brand/nous-s.webp" alt="" aria-hidden="true" /></span><span class="docs-tag">The architecture of understanding.</span></a>
+      <a class="brand brand-with-tag" href="/" aria-label="Henad home"><span class="henad-wordmark" role="img" aria-label="Henad"><span class="hw" aria-hidden="true">HEN</span><span class="henad-a" aria-hidden="true"><svg class="henad-a-legs" viewBox="0 0 740 700" preserveAspectRatio="none" focusable="false"><path d="M44 700 L370 26 L696 700" /></svg><span class="henad-o-wrap"><img class="henad-o henad-o-ring" src="/assets/brand/henad-o.webp" alt="" /></span></span><span class="hw" aria-hidden="true">D</span></span><span class="docs-tag">The architecture of understanding.</span></a>
       <div class="topbar-actions">
         <a class="topbar-link" href="/docs" aria-current="page">API docs</a>
         <a class="topbar-link" href="/">Back to chat</a>
@@ -27,12 +27,12 @@
     <main class="docs-shell" id="docs">
       <h1>API docs and examples</h1>
       <p>
-        Nous is a small time-series model you can train on your own
+        Henad is a small time-series model you can train on your own
         numbers, plus live weather, markets, and space answers in the chat.
         The examples below use the public site origin. Replace the host if you
         are calling a local server. Text answers are free. Training needs a
         free account and stays under published caps. GQ voice is included with
-        the Nous Plus subscription.
+        the Henad Plus subscription.
       </p>
       <p>
         The machine-readable schema stays at
@@ -44,7 +44,7 @@
       </p>
 
       <h2>Health</h2>
-      <pre><code>curl -sS https://nous.youneek.dev/health</code></pre>
+      <pre><code>curl -sS https://henad.youneek.dev/health</code></pre>
       <p>A healthy process returns <code>{"status":"ok"}</code>.</p>
 
       <h2>Sample models (no account)</h2>
@@ -54,9 +54,9 @@
         approaches, and moon illumination. The public catalog and forecasts
         need no sign-in.
       </p>
-      <pre><code>curl -sS https://nous.youneek.dev/starters
+      <pre><code>curl -sS https://henad.youneek.dev/starters
 
-curl -sS "https://nous.youneek.dev/starters/weather/forecast?points=16"</code></pre>
+curl -sS "https://henad.youneek.dev/starters/weather/forecast?points=16"</code></pre>
       <p>
         Other starter ids are <code>stocks</code>, <code>crypto</code>,
         <code>near-earth</code>, and <code>lunar</code>. Each forecast includes
@@ -70,14 +70,14 @@ curl -sS "https://nous.youneek.dev/starters/weather/forecast?points=16"</code></
         champion model. The default response is a single point:
         <code>{"prediction":[...]}</code>.
       </p>
-      <pre><code>curl -sS -X POST https://nous.youneek.dev/predict \
+      <pre><code>curl -sS -X POST https://henad.youneek.dev/predict \
   -H "Content-Type: application/json" \
   -d '{"sequence":[[0.1],[0.2],[0.3],[0.4]]}'</code></pre>
       <p>
         <code>POST /forecast</code> asks for a multi-step outlook from the same
         model. See the schema for horizon and quantile fields.
       </p>
-      <pre><code>curl -sS -X POST https://nous.youneek.dev/forecast \
+      <pre><code>curl -sS -X POST https://henad.youneek.dev/forecast \
   -H "Content-Type: application/json" \
   -d '{"sequence":[[0.1],[0.2],[0.3],[0.4]],"horizon":3}'</code></pre>
 
@@ -87,15 +87,15 @@ curl -sS "https://nous.youneek.dev/starters/weather/forecast?points=16"</code></
         Authenticated routes accept a session cookie from the site, or
         <code>Authorization: Bearer YOUR_TOKEN</code>.
       </p>
-      <pre><code>curl -sS https://nous.youneek.dev/workspace/limits
+      <pre><code>curl -sS https://henad.youneek.dev/workspace/limits
 
 # After you upload a CSV (multipart) and get a dataset id:
-curl -sS -X POST https://nous.youneek.dev/workspace/datasets/DATASET_ID/train \
+curl -sS -X POST https://henad.youneek.dev/workspace/datasets/DATASET_ID/train \
   -H "Authorization: Bearer YOUR_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"target_column":"value"}'
 
-curl -sS -X POST https://nous.youneek.dev/workspace/models/MODEL_ID/predict-latest \
+curl -sS -X POST https://henad.youneek.dev/workspace/models/MODEL_ID/predict-latest \
   -H "Authorization: Bearer YOUR_TOKEN"</code></pre>
 
       <h2>Live data</h2>
@@ -103,49 +103,49 @@ curl -sS -X POST https://nous.youneek.dev/workspace/models/MODEL_ID/predict-late
         These routes are answered by the Worker in front of the API. They do
         not require an account.
       </p>
-      <pre><code>curl -sS "https://nous.youneek.dev/live/weather?q=Dallas"
+      <pre><code>curl -sS "https://henad.youneek.dev/live/weather?q=Dallas"
 
-curl -sS "https://nous.youneek.dev/live/quote?kind=stock&amp;q=AAPL"
+curl -sS "https://henad.youneek.dev/live/quote?kind=stock&amp;q=AAPL"
 
-curl -sS -X POST https://nous.youneek.dev/agent/chat \
+curl -sS -X POST https://henad.youneek.dev/agent/chat \
   -H "Content-Type: application/json" \
-  -d '{"question":"What can Nous do?"}'
+  -d '{"question":"What can Henad do?"}'
 
 # Optional history and mode. The agent may call forecast, live-data, and
 # evaluation tools before answering.
-curl -sS -X POST https://nous.youneek.dev/agent/chat \
+curl -sS -X POST https://henad.youneek.dev/agent/chat \
   -H "Content-Type: application/json" \
   -d '{"question":"How accurate is the weather sample?","mode":"normal","history":[]}'
 
 # Unhinged mode on the agent route (same voice rules as /live/ask).
-curl -sS -X POST https://nous.youneek.dev/agent/chat \
+curl -sS -X POST https://henad.youneek.dev/agent/chat \
   -H "Content-Type: application/json" \
-  -d '{"question":"What can Nous do?","mode":"unhinged"}'
+  -d '{"question":"What can Henad do?","mode":"unhinged"}'
 
 # Phase 4: read an image or chart (PNG/JPEG/WebP/GIF data URL, max 1.5 MB).
 # Returns a description, any chart numbers as a series, and a quick forecast.
-curl -sS -X POST https://nous.youneek.dev/agent/vision \
+curl -sS -X POST https://henad.youneek.dev/agent/vision \
   -H "Content-Type: application/json" \
   -d "{\"question\":\"Where is this heading?\",\"image\":\"data:image/png;base64,$(base64 -w0 chart.png)\"}"
 
 # Phase 5: world model simulator. Baseline vs scenarios, 14 days, weather in °F.
-curl -sS -X POST https://nous.youneek.dev/analysis/simulate \
+curl -sS -X POST https://henad.youneek.dev/analysis/simulate \
   -H "Content-Type: application/json" \
   -d '{"starter_id":"weather","display_unit":"°F","horizon":14,"scenarios":[{"name":"Cold snap","events":[{"kind":"shock","step":1,"value":-15}]}]}'
 
 # Self-supervised world model: backtest PCA vs JEPA encoders, simulate with the winner.
-curl -sS -X POST https://nous.youneek.dev/analysis/simulate \
+curl -sS -X POST https://henad.youneek.dev/analysis/simulate \
   -H "Content-Type: application/json" \
   -d '{"starter_id":"lunar","horizon":14,"encoder":"auto"}'
 
 # Fallback without tools (unchanged):
-curl -sS -X POST https://nous.youneek.dev/live/ask \
+curl -sS -X POST https://henad.youneek.dev/live/ask \
   -H "Content-Type: application/json" \
-  -d '{"question":"What can Nous do?"}'
+  -d '{"question":"What can Henad do?"}'
 
-curl -sS -X POST https://nous.youneek.dev/live/ask \
+curl -sS -X POST https://henad.youneek.dev/live/ask \
   -H "Content-Type: application/json" \
-  -d '{"question":"What can Nous do?","mode":"unhinged"}'</code></pre>
+  -d '{"question":"What can Henad do?","mode":"unhinged"}'</code></pre>
       <p>
         <code>POST /agent/chat</code> is the tool-calling chat agent. Same
         request shape as <code>/live/ask</code> (<code>question</code>,

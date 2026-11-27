@@ -53,7 +53,7 @@ import {
   isDegenerateAnswer,
   looksLikeFailedToolAttempt,
   sanitizeAgentAnswer,
-  sayNous,
+  sayHenad,
   summarizeArgs,
   type ParsedToolCall,
 } from "./protocol";
@@ -156,7 +156,7 @@ export const UNDERSTANDING_STYLE =
   "When numbers would make it clearer, use a data tool so a chart is attached. " +
   "Openness: never dodge or refuse mainstream, controversial, political, or conspiracy topics. Answer directly in this shape: the mainstream view; the alternative or conspiracy claims stated fairly at their strongest; what evidence supports or contradicts each side, with sources; then let the person decide. " +
   "Let the evidence do the work: do not dismiss a claim with labels like 'debunked', 'baseless', or 'misinformation' in place of explaining the evidence. No lecturing, moralizing, or safety disclaimers. " +
-  "Creator: if asked who made, owns, or created you, say plainly that Nous was created by and is owned by Andrew Gray, founder, owner and CEO of YouNeeK (pronounced 'unique'), and that it runs on GPT-OSS 120B, an open model he chose. Never claim OpenAI or xAI made you.";
+  "Creator: if asked who made, owns, or created you, say plainly that Henad was created by and is owned by Andrew Gray, founder, owner and CEO of YouNeeK (pronounced 'unique'), and that it runs on GPT-OSS 120B, an open model he chose. Never claim OpenAI or xAI made you.";
 
 export function agentSystemPrompt(
   mode: ChatMode,
@@ -226,7 +226,7 @@ function historyForModel(history: HistoryMessage[]): HistoryMessage[] {
     .map((item) => ({
       role: item.role,
       // Old replies saved under the old name must not teach the model to use it.
-      content: sayNous(item.content.trim().slice(0, 500)),
+      content: sayHenad(item.content.trim().slice(0, 500)),
     }));
 }
 

@@ -76,7 +76,7 @@ limits:
 
 # GQ voice (ElevenLabs read-aloud). Text on the site is always free; only
 # audio playback spends characters. Every account gets free_chars once; the
-# paid Nous Plus subscription includes monthly_chars of GQ voice every month,
+# paid Henad Plus subscription includes monthly_chars of GQ voice every month,
 # and there is nothing else to buy. Environment variables documented in the
 # README override these numbers. The ElevenLabs API cost is about $0.08 per
 # 1,000 characters, so the allowance costs at most about $3.20 a month against
@@ -99,6 +99,6 @@ voice:
   max_chars_per_request: 2000
   daily_char_limit: 300000
   plan:
-    name: Nous Plus
+    name: Henad Plus
     price_usd: 9.0
     monthly_chars: 40000

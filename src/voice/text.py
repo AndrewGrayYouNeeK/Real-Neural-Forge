@@ -33,9 +33,16 @@ _UNIT = re.compile(
     r"(km/h|mph|km|cm|mm|kg|lb|ft|mi|AU|GB|MB|KB)\b",
     flags=re.IGNORECASE,
 )
-# "Nous" is said "noose" (rhymes with moose). The spoken text spells it that way
-# for every voice; the words on screen are never touched.
-_NOUS = re.compile(r"\b(?:(?:real\s+)?neural\s+forge|nous)\b", flags=re.IGNORECASE)
+# "Henad" is said "HEN-add". Spelled plainly, ElevenLabs says "heh-NUT", so the
+# spoken text spells it "Hen-add" for every voice (GQ and Ivy); Whisper hears
+# that back as "Henad". The old names (Nous, Real Neural Forge) are spoken as
+# Henad too. "Nous Research" (another company) keeps its name. The words on
+# screen are never touched.
+_HENAD = re.compile(
+    r"\b(?:(?:real\s+)?neural\s+forge|henad|nous(?!\s+research))\b",
+    flags=re.IGNORECASE,
+)
+HENAD_SPOKEN = "Hen-add"
 # "YouNeeK" (and its YNK brand short form) is said "unique". Screen text keeps
 # the spelling; only the spoken text changes. Voice names are not touched.
 _YOUNEEK = re.compile(r"\byouneek\b", flags=re.IGNORECASE)
@@ -120,7 +127,7 @@ def speech_text(raw: str) -> str:
     text = _SCIENCE.sub(_science, text)
     text = _THOUSANDS.sub("", text)
     text = _UNIT.sub(_unit, text)
-    text = _NOUS.sub("Noose", text)
+    text = _HENAD.sub(HENAD_SPOKEN, text)
     text = _YOUNEEK.sub("unique", text)
     text = _YNK.sub("unique", text)
     text = _TICKER.sub(_ticker, text)

@@ -6,7 +6,7 @@ export const GEOCODE_TTL_SECONDS = 24 * 60 * 60;
 
 const CACHE_ORIGIN = "https://live-cache.forge.invalid/";
 
-export const FETCH_UA = "Nous/1.0 (https://nous.youneek.dev)";
+export const FETCH_UA = "Henad/1.0 (https://henad.youneek.dev)";
 
 export async function cachedJson<T>(
   key: string,

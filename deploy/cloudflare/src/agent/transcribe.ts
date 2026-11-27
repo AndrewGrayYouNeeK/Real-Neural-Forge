@@ -25,6 +25,18 @@ export function toBase64(bytes: Uint8Array): string {
   return btoa(binary);
 }
 
+// Whisper hears the name "Henad" (said HEN-add) many ways. These spellings are
+// never ordinary words, so they always become Henad.
+const HENAD_ALWAYS = /\b(?:hen[\s-]+add?|hen[\s-]+nad|henn?add?|hennad|hanadd?|heinad)\b/gi;
+// "Henna" / "Hena" / the old name are real words, so only fix them when they
+// are used to address the assistant: at the start, or after hey/hi/ok/yo.
+const HENAD_ADDRESS = /(^|\b(?:hey|hi|hello|ok|okay|yo)[,\s]+)(?:henna|hena|hennah|nous|noose)\b/gi;
+
+/** Fix the assistant's name in a Talk-mode transcript. */
+export function normalizeName(text: string): string {
+  return text.replace(HENAD_ALWAYS, "Henad").replace(HENAD_ADDRESS, (_m, lead: string) => `${lead}Henad`);
+}
+
 /** Whisper sometimes invents text for silence or noise. Drop those. */
 export function cleanTranscript(raw: unknown): string {
   const text = typeof raw === "string" ? raw.replace(/\s+/g, " ").trim() : "";
@@ -44,7 +56,7 @@ export function cleanTranscript(raw: unknown): string {
   ]);
   if (filler.has(bare)) return "";
   if (/^[\[(].*[\])]$/.test(text)) return "";
-  return text.slice(0, 500);
+  return normalizeName(text).slice(0, 500);
 }
 
 export type TranscribeDeps = {

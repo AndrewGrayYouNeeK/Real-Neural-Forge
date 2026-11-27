@@ -1,9 +1,9 @@
-/* Nous chat-first app. All API text is written with textContent only. */
-const charts = window.NousCharts;
+/* Henad chat-first app. All API text is written with textContent only. */
+const charts = window.HenadCharts;
 const MODE_KEY = "neuralForgeChatMode";
 const TALK_PREF_KEY = "neuralForgeTalkPref";
 const MAX_VOICE_CHARS = 2000;
-const VOICE_PICK_KEY = "nousVoicePick";
+const VOICE_PICK_KEY = "henadVoicePick";
 const DEFAULT_VOICES = [
   { key: "gq", name: "GQ" },
   { key: "female", name: "Ivy" },
@@ -235,10 +235,10 @@ function addReply(text, chartSpec) {
     charts.renderLineChart(host, chartSpec);
     scrollToBottom();
   }
-  if (window.nousAbilities) window.nousAbilities.decorateReply(message, text);
+  if (window.henadAbilities) window.henadAbilities.decorateReply(message, text);
   // Owner-only Save / Fix it / That was bad buttons (training.js).
   message.dataset.replyText = String(text || "");
-  if (window.nousTraining) window.nousTraining.decorateReply(message, text);
+  if (window.henadTraining) window.henadTraining.decorateReply(message, text);
   return message;
 }
 
@@ -1055,7 +1055,7 @@ async function voiceReply() {
     if (!status.signed_in) {
       return {
         text:
-          "Every reply here has a small speaker button. Press it and my GQ voice reads the answer aloud. Reading text is always free; GQ voice comes with Nous Plus, and a free account starts with a small allowance.",
+          "Every reply here has a small speaker button. Press it and my GQ voice reads the answer aloud. Reading text is always free; GQ voice comes with Henad Plus, and a free account starts with a small allowance.",
         actions: [["Sign in", openSignInModal]],
       };
     }
@@ -1068,7 +1068,7 @@ async function voiceReply() {
     if (status.subscribed) {
       return {
         text:
-          `Nous Plus includes GQ voice. You have ${Number(
+          `Henad Plus includes GQ voice. You have ${Number(
             balance.total || 0
           ).toLocaleString()} characters left this month. Press any speaker button to listen.`,
       };
@@ -1076,7 +1076,7 @@ async function voiceReply() {
     return {
       text:
         `You have ${Number(balance.free || 0).toLocaleString()} free GQ characters left. ` +
-        "Nous Plus includes GQ voice every month, with no packs to buy. Press any speaker button to listen, or subscribe to keep going.",
+        "Henad Plus includes GQ voice every month, with no packs to buy. Press any speaker button to listen, or subscribe to keep going.",
       actions: status.checkout_available ? [["Subscribe", startSubscribe]] : [],
     };
   } catch (error) {
@@ -1093,7 +1093,7 @@ function helpReply() {
       "• Moon phase, near-Earth approaches, and the solar system\n" +
       "• Sample models — try the Central Park, AAPL, Bitcoin, near-Earth, or moon illumination starters. No account needed. These are historical samples, not live forecasts\n" +
       "• Training a small model on your CSV — use the Train on my CSV chip for the one-click flow\n" +
-      "• GQ voice — the speaker button on each reply, once you have an account. Voice comes with Nous Plus; text stays free\n" +
+      "• GQ voice — the speaker button on each reply, once you have an account. Voice comes with Henad Plus; text stays free\n" +
       "• General questions — a short AI answer, within a daily free allowance\n\n" +
       "If the AI allowance is used up, I will say so and still help with the live topics and sample models above.",
   };
@@ -1102,7 +1102,7 @@ function helpReply() {
 function greetReply() {
   return {
     text:
-      "Hello! I am Nous. Ask me for a live weather forecast, a market or crypto price, the moon, space, or a general question. You can also try a sample model with no account, or train a model on your data. What would you like to know?",
+      "Hello! I am Henad. Ask me for a live weather forecast, a market or crypto price, the moon, space, or a general question. You can also try a sample model with no account, or train a model on your data. What would you like to know?",
   };
 }
 
@@ -1150,7 +1150,7 @@ const INTENTS = [
   },
   {
     name: "voice",
-    test: /\b(gq( voice)?|voice credit|nous plus|read (it |this |that )?aloud|speaker button|text to speech)\b/i,
+    test: /\b(gq( voice)?|voice credit|henad plus|read (it |this |that )?aloud|speaker button|text to speech)\b/i,
     handler: voiceReply,
   },
   {
@@ -1241,7 +1241,7 @@ async function askLive(question, options) {
   const facts = options && typeof options.facts === "string" ? options.facts : "";
   const payload = { question, mode: chatMode() };
   if (facts) payload.facts = facts;
-  if (window.nousAbilities) Object.assign(payload, window.nousAbilities.takeChatExtras());
+  if (window.henadAbilities) Object.assign(payload, window.henadAbilities.takeChatExtras());
   const history = chatHistoryPayload();
   if (history.length) payload.history = history;
   if (currentThreadId) payload.thread_id = currentThreadId;
@@ -1303,7 +1303,7 @@ function agentReplyExtras(result) {
   if (result && Array.isArray(result.sources) && result.sources.length) extras.sources = result.sources;
   const csv = result && result.csv;
   if (csv && typeof csv.text === "string" && csv.text) {
-    const filename = typeof csv.filename === "string" && csv.filename ? csv.filename : "neural-forge-data.csv";
+    const filename = typeof csv.filename === "string" && csv.filename ? csv.filename : "henad-data.csv";
     extras.actions = [
       ["⬇ Download CSV", () => downloadText(csv.text, filename, "text/csv;charset=utf-8")],
     ];
@@ -1312,7 +1312,7 @@ function agentReplyExtras(result) {
 }
 
 async function answer(question) {
-  if (window.nousAbilities && window.nousAbilities.hasPendingFile()) return askLive(question);
+  if (window.henadAbilities && window.henadAbilities.hasPendingFile()) return askLive(question);
   if (isMultiStepAsk(question)) return askLive(question);
   const intent = matchIntent(question);
   if (!intent) return askLive(question);
@@ -1365,13 +1365,13 @@ function showToolsUsed(message, toolsUsed) {
   }
 }
 
-let nousQuestionBusy = false;
+let henadQuestionBusy = false;
 
 async function handleQuestion(question) {
   addMessage("user", question);
   const pending = addMessage("assistant", "One moment — checking…");
-  nousQuestionBusy = true;
-  setNousMotion("thinking");
+  henadQuestionBusy = true;
+  setHenadMotion("thinking");
   try {
     const reply = await answer(question);
     pending.remove();
@@ -1403,8 +1403,8 @@ async function handleQuestion(question) {
     reportError(error);
     return "";
   } finally {
-    nousQuestionBusy = false;
-    if (talk.state !== "speaking" && talk.state !== "thinking") setNousMotion("idle");
+    henadQuestionBusy = false;
+    if (talk.state !== "speaking" && talk.state !== "thinking") setHenadMotion("idle");
   }
 }
 
@@ -1678,7 +1678,7 @@ async function loadMultimodalAllowance() {
 const TALK_UNSUPPORTED =
   "This browser can't use hands-free speech recognition, so Talk mode stays off. You can still type, and the speaker button reads replies in GQ voice.";
 const TALK_NO_CREDIT =
-  "You've used up your free voice, so I'll answer in text from here. Keep typing, or Nous Plus brings the voice back.";
+  "You've used up your free voice, so I'll answer in text from here. Keep typing, or Henad Plus brings the voice back.";
 const TALK_VOICE_CAPPED =
   "Voice chat is resting for today, so I'll keep going in text. Keep typing and I'll answer.";
 const TALK_HEARING_FAILED = "I couldn't hear that one. Say it again, or type it.";
@@ -1756,23 +1756,23 @@ function prefersReducedMotion() {
   return Boolean(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
 }
 
-function setNousMotion(mode) {
+function setHenadMotion(mode) {
   const body = document.body;
   if (prefersReducedMotion()) {
-    body.classList.remove("nous-thinking", "nous-talking", "nous-talk-pulse");
-    body.style.removeProperty("--nous-pulse");
+    body.classList.remove("henad-thinking", "henad-talking", "henad-talk-pulse");
+    body.style.removeProperty("--henad-pulse");
     return;
   }
   if (mode === "thinking") {
-    body.classList.add("nous-thinking");
-    body.classList.remove("nous-talking", "nous-talk-pulse");
-    body.style.removeProperty("--nous-pulse");
+    body.classList.add("henad-thinking");
+    body.classList.remove("henad-talking", "henad-talk-pulse");
+    body.style.removeProperty("--henad-pulse");
   } else if (mode === "talking") {
-    body.classList.add("nous-talking");
-    body.classList.remove("nous-thinking");
+    body.classList.add("henad-talking");
+    body.classList.remove("henad-thinking");
   } else {
-    body.classList.remove("nous-thinking", "nous-talking", "nous-talk-pulse");
-    body.style.removeProperty("--nous-pulse");
+    body.classList.remove("henad-thinking", "henad-talking", "henad-talk-pulse");
+    body.style.removeProperty("--henad-pulse");
   }
 }
 
@@ -1780,16 +1780,16 @@ function setNousMotion(mode) {
 // voice playback (and the voice picker) stays exactly as it is.
 function startTalkPulse() {
   if (prefersReducedMotion()) return;
-  document.body.classList.add("nous-talk-pulse");
+  document.body.classList.add("henad-talk-pulse");
 }
 
 function setTalkState(state) {
   talk.state = state;
   // Only hear while listening; never pick up GQ's own voice or a half-done answer.
   if (talk.mic && state !== "listening") talk.mic.gate = false;
-  if (state === "thinking") setNousMotion("thinking");
-  else if (state === "speaking") setNousMotion("talking");
-  else if (!nousQuestionBusy) setNousMotion("idle");
+  if (state === "thinking") setHenadMotion("thinking");
+  else if (state === "speaking") setHenadMotion("talking");
+  else if (!henadQuestionBusy) setHenadMotion("idle");
   const button = document.getElementById("talk-toggle");
   if (!button) return;
   const labels = {
@@ -2178,7 +2178,7 @@ function onTalkAudio(event) {
       mic.preroll = [];
       mic.speechMs = mic.chunks.length * frameMs;
       mic.silentMs = 0;
-      setNousMotion("thinking");
+      setHenadMotion("thinking");
     }
     return;
   }
@@ -2696,7 +2696,7 @@ function renderVoicePanel() {
     fillStatGrid(grid, [["GQ voice", "checking"]]);
     return;
   }
-  const plan = status.plan || { name: "Nous Plus", price_usd: 9, monthly_chars: 40000 };
+  const plan = status.plan || { name: "Henad Plus", price_usd: 9, monthly_chars: 40000 };
   const sub = status.subscription || null;
   const cards = [["Text on the site", "always free"]];
   if (!status.signed_in) {
@@ -2914,7 +2914,7 @@ function refreshAuthModal() {
     button.textContent = "Log in";
   }
   // training.js re-checks owner powers with the server.
-  window.dispatchEvent(new Event("nous:account"));
+  window.dispatchEvent(new Event("henad:account"));
 }
 
 async function refreshAccount() {
@@ -3248,7 +3248,7 @@ const HISTORY_KEY = "neuralForgeChatHistory";
 let currentThreadId = null;
 let remoteChatThreads = null;
 const toolsApi =
-  (typeof window !== "undefined" && window.NousTools) || {
+  (typeof window !== "undefined" && window.HenadTools) || {
     TOOL_REGISTRY: [],
     ROADMAP: [],
     byId() {
@@ -4812,7 +4812,7 @@ document.getElementById("chat-form").addEventListener("submit", (event) => {
     handleImageQuestion(question, image).then(() => syncHasChatClass());
     return;
   }
-  const fileAttached = Boolean(window.nousAbilities && window.nousAbilities.hasPendingFile());
+  const fileAttached = Boolean(window.henadAbilities && window.henadAbilities.hasPendingFile());
   if (!question && !fileAttached) return;
   const asked = question || "Summarize this file.";
   input.value = "";
@@ -4838,8 +4838,8 @@ if (imageAttachFile) {
     const input = event.currentTarget;
     const file = input.files && input.files[0];
     input.value = "";
-    if (file && window.nousAbilities && !window.nousAbilities.isImageFile(file)) {
-      void window.nousAbilities.attach(file);
+    if (file && window.henadAbilities && !window.henadAbilities.isImageFile(file)) {
+      void window.henadAbilities.attach(file);
       return;
     }
     if (file) void setPendingImage(file);
@@ -4855,9 +4855,9 @@ if (chatFormEl) {
   chatFormEl.addEventListener("drop", (event) => {
     const file = firstImageFile(event.dataTransfer && event.dataTransfer.files);
     const dropped = event.dataTransfer && event.dataTransfer.files && event.dataTransfer.files[0];
-    if (!file && dropped && window.nousAbilities) {
+    if (!file && dropped && window.henadAbilities) {
       event.preventDefault();
-      void window.nousAbilities.attach(dropped);
+      void window.henadAbilities.attach(dropped);
       return;
     }
     if (!file) return;
@@ -5110,7 +5110,7 @@ syncHasChatClass();
 
 /* ------------------------------------------------------------- auth gate */
 
-const HAS_ACCOUNT_KEY = "nousHasAccount";
+const HAS_ACCOUNT_KEY = "henadHasAccount";
 const gate = { mode: "signup", step: "email", started: false, afterRecovery: null, setupToken: null };
 
 // One-time owner setup link: /app?setup=<token>. Kept in memory only and
@@ -5552,14 +5552,14 @@ function openProfileMenu() {
 function startFromLanding(question, action) {
   if (question) {
     try {
-      sessionStorage.setItem("nousLandingQuestion", question);
+      sessionStorage.setItem("henadLandingQuestion", question);
     } catch {
       // Storage blocked: the gate still opens.
     }
   }
   if (action) {
     try {
-      sessionStorage.setItem("nousLandingAction", action);
+      sessionStorage.setItem("henadLandingAction", action);
     } catch {
       // Storage blocked.
     }
@@ -5635,10 +5635,10 @@ function consumeLandingIntent() {
   let question = "";
   let action = "";
   try {
-    question = sessionStorage.getItem("nousLandingQuestion") || "";
-    action = sessionStorage.getItem("nousLandingAction") || "";
-    sessionStorage.removeItem("nousLandingQuestion");
-    sessionStorage.removeItem("nousLandingAction");
+    question = sessionStorage.getItem("henadLandingQuestion") || "";
+    action = sessionStorage.getItem("henadLandingAction") || "";
+    sessionStorage.removeItem("henadLandingQuestion");
+    sessionStorage.removeItem("henadLandingAction");
   } catch {
     return;
   }

@@ -7,12 +7,22 @@
 import { decodeCbor, type CborValue } from "./cbor";
 import { b64urlDecode, b64urlEncode, bytesEqual, sha256 } from "./util";
 
-export const PASSKEY_HOSTS = ["nous.youneek.dev", "nous.youneek.xyz"];
+/**
+ * Hosts that offer passkeys, and the RP ID each one uses. The RP ID is the
+ * parent domain (youneek.dev / youneek.xyz), not the app's own hostname, so a
+ * passkey keeps working if the app's subdomain changes again (it moved from
+ * nous.* to henad.* in Nov 2026). The browser still binds each sign-in to the
+ * exact page origin, and the server checks that origin too.
+ */
+export const PASSKEY_HOSTS: Record<string, string> = {
+  "henad.youneek.dev": "youneek.dev",
+  "henad.youneek.xyz": "youneek.xyz",
+};
 
 /** RP ID for this request, or null when passkeys are not offered on the host. */
 export function rpIdFor(url: URL): string | null {
   const host = url.hostname.toLowerCase();
-  if (PASSKEY_HOSTS.includes(host)) return host;
+  if (Object.prototype.hasOwnProperty.call(PASSKEY_HOSTS, host)) return PASSKEY_HOSTS[host];
   if (host === "localhost" || host === "127.0.0.1") return host;
   return null;
 }

@@ -175,7 +175,7 @@ describe("read_page", () => {
       "http://127.0.0.1/",
       "http://169.254.169.254/latest/meta-data",
       "file:///etc/passwd",
-      "https://nous.youneek.dev/agent/chat",
+      "https://henad.youneek.dev/agent/chat",
       "http://[::1]/",
       "https://user:pw@example.org/",
       "https://intranet:8443/",
@@ -209,7 +209,7 @@ describe("read_page", () => {
 });
 
 describe("fact lookups", () => {
-  it("forces a search for specific facts but not for explanations or questions about Nous", async () => {
+  it("forces a search for specific facts but not for explanations or questions about Henad", async () => {
     const { needsFactLookup } = await import("../src/agent/knowledge");
     for (const q of [
       "What year was the Voynich manuscript vellum carbon-dated to, and who did the dating?",
