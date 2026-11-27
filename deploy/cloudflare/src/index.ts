@@ -10,6 +10,7 @@ import { isAllowedObjectKey } from "./objectKey";
 import { handleAgent } from "./agent/handle";
 import { handleLive } from "./live/handle";
 import { runScheduledAbilities } from "./abilities/scheduled";
+import { withFreshness } from "./freshness";
 
 export { ContainerProxy };
 
@@ -424,6 +425,6 @@ export default {
     if (url.pathname === "/agent" || url.pathname.startsWith("/agent/")) {
       return handleAgent(request, env, ctx);
     }
-    return forwardToContainer(request, env);
+    return withFreshness(request, await forwardToContainer(request, env));
   },
 };
