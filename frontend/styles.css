@@ -2391,3 +2391,9 @@ body:not(.has-chat) #chat-log {
 @keyframes nous-pulse {
   50% { transform: scale(1.1); }
 }
+
+.about-say {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 0.85rem;
+}

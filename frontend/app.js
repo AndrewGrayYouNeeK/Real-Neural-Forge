@@ -1879,57 +1879,14 @@ function setNousMotion(mode) {
   } else {
     body.classList.remove("nous-thinking", "nous-talking", "nous-talk-pulse");
     body.style.removeProperty("--nous-pulse");
-    if (talk.pulseRaf) {
-      cancelAnimationFrame(talk.pulseRaf);
-      talk.pulseRaf = 0;
-    }
   }
 }
 
-function setupTalkAmplitude(audio) {
-  if (talk.ampTried || prefersReducedMotion() || !audio) return;
-  talk.ampTried = true;
-  try {
-    const AC = window.AudioContext || window.webkitAudioContext;
-    if (!AC) return;
-    talk.audioCtx = talk.audioCtx || new AC();
-    const src = talk.audioCtx.createMediaElementSource(audio);
-    const analyser = talk.audioCtx.createAnalyser();
-    analyser.fftSize = 256;
-    src.connect(analyser);
-    analyser.connect(talk.audioCtx.destination);
-    talk.analyser = analyser;
-    talk.ampData = new Uint8Array(analyser.fftSize);
-  } catch {
-    talk.analyser = null;
-  }
-}
-
-function startTalkPulse(audio) {
-  setupTalkAmplitude(audio);
-  if (talk.audioCtx && talk.audioCtx.state === "suspended") {
-    talk.audioCtx.resume().catch(() => {});
-  }
-  if (!talk.analyser || !talk.ampData) {
-    document.body.classList.add("nous-talk-pulse");
-    return;
-  }
-  document.body.classList.remove("nous-talk-pulse");
-  const data = talk.ampData;
-  const tick = () => {
-    if (talk.state !== "speaking" || !talk.analyser) return;
-    talk.analyser.getByteTimeDomainData(data);
-    let sum = 0;
-    for (let i = 0; i < data.length; i += 1) {
-      const d = (data[i] - 128) / 128;
-      sum += d * d;
-    }
-    const amp = Math.sqrt(sum / data.length);
-    document.body.style.setProperty("--nous-pulse", String(1 + Math.min(0.16, amp * 1.1)));
-    talk.pulseRaf = requestAnimationFrame(tick);
-  };
-  if (talk.pulseRaf) cancelAnimationFrame(talk.pulseRaf);
-  talk.pulseRaf = requestAnimationFrame(tick);
+// Talk pulse is a light CSS animation. It never touches the audio element, so
+// voice playback (and the voice picker) stays exactly as it is.
+function startTalkPulse() {
+  if (prefersReducedMotion()) return;
+  document.body.classList.add("nous-talk-pulse");
 }
 
 function setTalkState(state) {
@@ -2380,7 +2337,7 @@ function waitForTalkPlayback(audio) {
     audio.addEventListener("error", onError);
     audio.addEventListener("loadedmetadata", onMeta);
     armTimeout(TALK_PLAYBACK_MAX_MS);
-    startTalkPulse(audio);
+    startTalkPulse();
     audio.play().catch((err) => {
       const name = err && err.name;
       finish(name === "NotAllowedError" ? "blocked" : "error");

@@ -2,6 +2,8 @@
 
 The architecture of understanding.
 
+Nous is pronounced “noose.”
+
 [![CI](https://github.com/AndrewGrayYouNeeK/Nous/actions/workflows/ci.yml/badge.svg)](https://github.com/AndrewGrayYouNeeK/Nous/actions/workflows/ci.yml)
 [![Publish image](https://github.com/AndrewGrayYouNeeK/Nous/actions/workflows/publish.yml/badge.svg)](https://github.com/AndrewGrayYouNeeK/Nous/actions/workflows/publish.yml)
 
