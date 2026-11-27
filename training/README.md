@@ -125,6 +125,22 @@ Rules for examples: short and spoken-friendly, funny, honest when unsure, contro
 
 The creator answer must stay word for word: *created by and is owned by Andrew Gray, founder, owner and CEO of YouNeeK (pronounced "unique")*.
 
+## Collecting examples in the app (owner only)
+
+Signed in as the owner (with a passkey or authenticator code), every Nous reply gets three buttons:
+
+- **👍 Save**: saves your question and that answer, as-is, as a good example.
+- **✏️ Fix it**: opens an editor with the answer filled in. Rewrite it the way Nous should have said it and save.
+- **👎 That was bad**: one tap saves the question and the bad answer as a **rejected** example. Then **Fix it now?** lets you write the right answer, saved as a good example and linked to the bad one.
+
+The **🧠** button next to the attach buttons opens **Add example**: type a question and the perfect answer from scratch (add more turns if you want) and save. **See all examples** (also under Account → Owner → Training examples) lists everything with counts, a Good/Rejected filter, search, tags, edit and delete, plus **Export JSONL** (good examples, same format as `nous_chat.jsonl`) and **Export rejected**.
+
+Rejected examples are exported separately (`rejected.jsonl`, each line has `"label": "rejected"`) and are never mixed into the SFT data. Don't append them to `nous_chat.jsonl`.
+
+Examples live in the D1 table `training_examples`. Anything that looks like a key or token is refused. A weekly GitHub Action in the **private** repo `AndrewGrayYouNeeK/nous-training-data` backs both files up to `training/collected/examples.jsonl` and `training/collected/rejected.jsonl` there. It's a private repo because the examples come from real chats and this repo is public.
+
+To train with them: download **Export JSONL**, run `cat examples.jsonl >> training/nous_chat.jsonl` on a local copy (or upload it to Colab and point `DATA_URL` at it), then run `python3 training/tools/validate_dataset.py`.
+
 ## Renaming the app
 
 1. In the notebook's settings cell, set `APP_NAME = "Tholun"` (or the new name). The notebook swaps `Nous` for it in every example and in the system prompt before training.

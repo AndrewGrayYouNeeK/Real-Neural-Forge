@@ -253,7 +253,15 @@
     const probe = await call("/owner/usage?days=30");
     if (!probe.ok) return null;
     return section("Owner", [
-      el("button", { class: "btn secondary btn-small", type: "button", text: "Usage dashboard", on: { click: () => openDashboard(probe.data) } }),
+      el("div", { class: "nx-row" }, [
+        el("button", { class: "btn secondary btn-small", type: "button", text: "Usage dashboard", on: { click: () => openDashboard(probe.data) } }),
+        window.nousTraining
+          ? el("button", { class: "btn secondary btn-small", type: "button", text: "Training examples", on: { click: () => window.nousTraining.openList() } })
+          : null,
+        window.nousTraining
+          ? el("button", { class: "btn secondary btn-small", type: "button", text: "Add example", on: { click: () => window.nousTraining.openAdd() } })
+          : null,
+      ]),
     ]);
   }
 
