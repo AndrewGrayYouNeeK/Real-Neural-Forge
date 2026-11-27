@@ -1106,6 +1106,29 @@ describe("agent turn caps and fallback", () => {
     expect(result.text.toLowerCase()).toContain("forge");
   });
 
+  it("never shows the model the old name from saved chat history", async () => {
+    const db = new MemoryD1();
+    const seen: string[] = [];
+    const ai = {
+      async run(_model: string, inputs: Record<string, unknown>) {
+        seen.push(JSON.stringify(inputs));
+        return { response: "I'm Nous." };
+      },
+    };
+    await runAgentTurn(
+      "what's your name?",
+      "normal",
+      [
+        { role: "user", content: "who are you" },
+        { role: "assistant", content: "I'm Neural Forge, the Real Neural Forge bot." },
+      ],
+      { ai, db, ip: "8.8.8.8", owner: false, toolContext: toolContext(), models: { primary: PRIMARY_MODEL, fallback: FALLBACK_MODEL } },
+    );
+    const sent = JSON.parse(seen[0]) as { input: Array<{ role: string; content: string }> };
+    const assistant = sent.input.filter((item) => item.role === "assistant").map((item) => item.content);
+    expect(assistant).toEqual(["I'm Nous, the Nous bot."]);
+  });
+
   it("asks again with the full answer budget when a long answer was cut off", async () => {
     const db = new MemoryD1();
     const calls: Array<Record<string, unknown>> = [];

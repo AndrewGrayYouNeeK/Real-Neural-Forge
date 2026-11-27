@@ -53,6 +53,7 @@ import {
   isDegenerateAnswer,
   looksLikeFailedToolAttempt,
   sanitizeAgentAnswer,
+  sayNous,
   summarizeArgs,
   type ParsedToolCall,
 } from "./protocol";
@@ -224,7 +225,8 @@ function historyForModel(history: HistoryMessage[]): HistoryMessage[] {
     .slice(-8)
     .map((item) => ({
       role: item.role,
-      content: item.content.trim().slice(0, 500),
+      // Old replies saved under the old name must not teach the model to use it.
+      content: sayNous(item.content.trim().slice(0, 500)),
     }));
 }
 
