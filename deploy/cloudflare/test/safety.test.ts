@@ -131,3 +131,10 @@ describe("creator honesty", () => {
     expect(enforceCreatorAnswer("why is the sky blue", "Rayleigh scattering.")).toBe("Rayleigh scattering.");
   });
 });
+
+describe("creator honesty with model typography", () => {
+  it("accepts an answer that names Andrew Gray with a non-breaking space", () => {
+    const answer = "I was created by\u2014and am owned by\u2014Andrew\u00a0Gray (YouNeeK), and I run on GPT\u2011OSS 120B.";
+    expect(enforceCreatorAnswer("Who made you?", answer)).toBe(answer);
+  });
+});

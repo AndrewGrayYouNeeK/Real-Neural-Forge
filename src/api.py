@@ -272,6 +272,27 @@ app = FastAPI(
     redoc_url="/openapi/redoc",
 )
 
+# The in-browser Python runner's worker may only load Pyodide from its CDN and
+# may not call this site (or anywhere else) once user code runs.
+PYWORKER_CSP = (
+    "default-src 'none'; "
+    "script-src https://cdn.jsdelivr.net 'unsafe-eval' 'wasm-unsafe-eval'; "
+    "connect-src https://cdn.jsdelivr.net"
+)
+
+
+@app.get("/assets/pyworker.js", include_in_schema=False)
+def pyworker_script() -> FileResponse:
+    return FileResponse(
+        FRONTEND_DIR / "pyworker.js",
+        media_type="text/javascript",
+        headers={
+            "Content-Security-Policy": PYWORKER_CSP,
+            "Cache-Control": "public, max-age=3600",
+        },
+    )
+
+
 if FRONTEND_DIR.exists():
     app.mount("/assets", StaticFiles(directory=FRONTEND_DIR), name="assets")
 
