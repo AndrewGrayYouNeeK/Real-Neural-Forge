@@ -1317,7 +1317,7 @@ function chatMode() {
   return unhingedOn ? "unhinged" : "normal";
 }
 
-const NORMAL_PLACEHOLDER = "Ask anything";
+const NORMAL_PLACEHOLDER = "What do you want to understand?";
 const UNHINGED_PLACEHOLDER =
   "Unhinged is on. Ask anything. I'll roast the forecast and keep every number exact.";
 const ASK_UNAVAILABLE =
