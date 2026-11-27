@@ -79,6 +79,14 @@
   "ai": {
     "binding": "AI"
   },
+  // Account emails (confirm address, reset password). Sending stays off until
+  // the owner sends a test from the dashboard (app_settings.email_sending).
+  "send_email": [
+    {
+      "name": "EMAIL",
+      "allowed_sender_addresses": ["no-reply@youneek.dev"]
+    }
+  ],
   "vars": {
     "NEURAL_FORGE_CONFIG": "config/config.yaml",
     "NEURAL_FORGE_CHECKPOINT_URL": "https://github.com/AndrewGrayYouNeeK/Nous/releases/download/champions/champion-default.pt",
@@ -86,6 +94,7 @@
     "NEURAL_FORGE_BINDINGS_URL": "http://bindings.neuralforge",
     "NEURAL_FORGE_PUBLIC_URL": "https://nous.youneek.dev",
     "NEURAL_FORGE_OWNER_EMAIL": "andrewgray@youneek.xyz",
+    "NOUS_EMAIL_FROM": "no-reply@youneek.dev",
     "NEURAL_FORGE_AI_MODEL": "@cf/openai/gpt-oss-120b",
     "NEURAL_FORGE_AI_FALLBACK_MODEL": "@cf/meta/llama-3.1-8b-instruct-fp8-fast",
     "NEURAL_FORGE_AI_DAILY_NEURONS": "25000",
