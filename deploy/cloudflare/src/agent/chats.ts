@@ -35,7 +35,13 @@ export function normalizeChatTitle(raw: string): string {
 }
 
 export function normalizeChatContent(raw: string): string | null {
-  const content = raw.replace(/\s+/g, " ").trim().slice(0, MAX_CHAT_MESSAGE_LEN);
+  // Keep line breaks so code blocks and lists survive a reopened chat.
+  const content = raw
+    .replace(/\r\n?/g, "\n")
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim()
+    .slice(0, MAX_CHAT_MESSAGE_LEN);
   return content || null;
 }
 
