@@ -3,6 +3,11 @@ const charts = window.NousCharts;
 const MODE_KEY = "neuralForgeChatMode";
 const TALK_PREF_KEY = "neuralForgeTalkPref";
 const MAX_VOICE_CHARS = 2000;
+const VOICE_PICK_KEY = "nousVoicePick";
+const DEFAULT_VOICES = [
+  { key: "gq", name: "GQ" },
+  { key: "female", name: "Ivy" },
+];
 
 const state = {
   account: null,
@@ -309,7 +314,7 @@ async function speakMessage(message, speakButton) {
       method: "POST",
       credentials: "same-origin",
       headers: authHeaders({ "Content-Type": "application/json" }),
-      body: JSON.stringify({ text: text.slice(0, MAX_VOICE_CHARS) }),
+      body: JSON.stringify({ text: text.slice(0, MAX_VOICE_CHARS), voice: selectedVoice() }),
     });
     if (token !== speakToken) return;
     if (response.status === 401) {
@@ -1860,6 +1865,49 @@ function isPhoneSurface() {
   return /iPhone|iPod|iPad|Android.+Mobile|webOS|BlackBerry|IEMobile|Opera Mini/i.test(ua);
 }
 
+function voiceChoices() {
+  const list = state.voiceStatus && state.voiceStatus.voices;
+  return Array.isArray(list) && list.length ? list : DEFAULT_VOICES;
+}
+
+// GQ unless the person picked the other voice. Falls back to GQ for any value
+// that is not on the list.
+function selectedVoice() {
+  try {
+    const raw = localStorage.getItem(VOICE_PICK_KEY);
+    if (raw && voiceChoices().some((choice) => choice.key === raw)) return raw;
+  } catch {
+    // Storage can be blocked; GQ stays the default.
+  }
+  return "gq";
+}
+
+function renderVoicePickers() {
+  const current = selectedVoice();
+  document.querySelectorAll("[data-voice-picker]").forEach((box) => {
+    box.replaceChildren();
+    voiceChoices().forEach((choice) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "voice-picker-option";
+      button.setAttribute("role", "radio");
+      button.setAttribute("aria-checked", choice.key === current ? "true" : "false");
+      button.textContent = choice.name;
+      button.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        try {
+          localStorage.setItem(VOICE_PICK_KEY, choice.key);
+        } catch {
+          // The pick still applies until the page reloads.
+        }
+        renderVoicePickers();
+      });
+      box.append(button);
+    });
+  });
+}
+
 function talkPreference() {
   try {
     const raw = localStorage.getItem(TALK_PREF_KEY);
@@ -1946,6 +1994,7 @@ function onTalkAutoStartFocus() {
 function bindTalkOverlayControls() {
   if (talk.overlayBound) return;
   talk.overlayBound = true;
+  renderVoicePickers();
   const startButton = document.getElementById("talk-start-button");
   if (startButton) {
     startButton.addEventListener("click", (event) => {
@@ -2225,7 +2274,7 @@ async function speakTalkTurn(text) {
       method: "POST",
       credentials: "same-origin",
       headers: authHeaders({ "Content-Type": "application/json" }),
-      body: JSON.stringify({ text: spoken }),
+      body: JSON.stringify({ text: spoken, voice: selectedVoice() }),
     });
   } catch {
     if (!talk.active || mine !== talk.turn) return;
@@ -2390,6 +2439,7 @@ function dateLabel(stamp) {
 }
 
 function renderVoicePanel() {
+  renderVoicePickers();
   const status = state.voiceStatus;
   const grid = document.getElementById("voice-status-grid");
   const planBox = document.getElementById("voice-plan");
