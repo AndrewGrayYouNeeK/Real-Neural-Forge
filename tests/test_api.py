@@ -1167,7 +1167,10 @@ class TestLunarEndpoints:
         assert '"mode":"unhinged"' in html
         assert "/openapi.json" in html
         assert "Henad Plus subscription" in html
-        assert '<footer class="site-legal docs-legal">YouNeeK™ · © 2026 Andrew Gray</footer>' in html
+        assert (
+            '<footer class="site-legal docs-legal">YouNeeK™ · © 2026 Andrew Gray</footer>'
+            in html
+        )
         assert "lottery" not in html.lower()
         schema = client.get("/openapi.json")
         assert schema.status_code == 200
