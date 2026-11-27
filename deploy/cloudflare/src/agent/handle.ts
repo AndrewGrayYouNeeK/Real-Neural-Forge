@@ -68,6 +68,15 @@ import {
   type FilesAi,
 } from "../abilities/files";
 import { generateImage, isImageRequest, serveImage } from "../abilities/imagegen";
+import {
+  acknowledgeDeliveries,
+  cancelReminders,
+  createReminder,
+  listReminders,
+  pendingDeliveries,
+  reminderIntent,
+  validTimeZone,
+} from "../abilities/reminders";
 import { abilityAllowance, abilityCaps, type R2Like } from "../abilities/limits";
 import {
   authHeadersFromRequest,
@@ -194,6 +203,7 @@ async function answerAgentChat(
   threadId: string | null,
   waitUntil?: (promise: Promise<unknown>) => void,
   fileIds: string[] = [],
+  timeZone: string | null = null,
 ): Promise<Response> {
   const clean = question.replace(/\s+/g, " ").trim();
   if (!clean) {
@@ -238,6 +248,11 @@ async function answerAgentChat(
   } catch {
     // Persistence is best-effort; chat still answers without a saved thread.
     activeThreadId = null;
+  }
+
+  const reminderAsk = fileIds.length ? null : reminderIntent(clean);
+  if (reminderAsk) {
+    return answerReminderRequest(env, identity, ip, clean, activeThreadId, reminderAsk, timeZone);
   }
 
   if (env.WORKSPACES && !fileIds.length && isImageRequest(clean)) {
@@ -348,6 +363,71 @@ async function answerImageRequest(
     }
   }
   return json({ text, model: true, capped, tools_used: [], thread_id: threadId });
+}
+
+async function answerReminderRequest(
+  env: AgentEnv,
+  identity: Awaited<ReturnType<typeof identityFor>>,
+  capKeyValue: string | null,
+  question: string,
+  threadId: string | null,
+  intent: "create" | "list" | "cancel",
+  timeZone: string | null,
+): Promise<Response> {
+  const db = env.WORKSPACES_DB as D1Like;
+  const deps = {
+    db,
+    ai: env.AI,
+    scope: identity.scope,
+    userId: identity.userId,
+    owner: identity.owner,
+    capKey: capKeyValue,
+    threadId,
+    tz: validTimeZone(timeZone),
+    env,
+  };
+  let text: string;
+  try {
+    const result =
+      intent === "create"
+        ? await createReminder(deps, question)
+        : intent === "list"
+          ? await listReminders(deps)
+          : await cancelReminders(deps, question);
+    text = result.text;
+  } catch {
+    text = "I couldn't save that reminder right now. Try again in a moment.";
+  }
+  if (threadId) {
+    try {
+      await appendMessage(db, threadId, "assistant", text);
+    } catch {
+      // Persistence is best-effort.
+    }
+  }
+  return json({ text, model: true, tools_used: [], thread_id: threadId });
+}
+
+async function handleReminders(
+  request: Request,
+  env: AgentEnv,
+  path: string,
+  body: Record<string, unknown> | null,
+): Promise<Response> {
+  if (!env.WORKSPACES_DB) return json({ deliveries: [] });
+  const identity = await identityFor(request, env);
+  if (path === "/agent/reminders/due" && request.method === "GET") {
+    try {
+      return json({ deliveries: await pendingDeliveries(env.WORKSPACES_DB, identity.scope) });
+    } catch {
+      return json({ deliveries: [] });
+    }
+  }
+  if (path === "/agent/reminders/ack" && request.method === "POST") {
+    const ids = Array.isArray(body?.ids) ? body.ids.filter((id): id is string => typeof id === "string") : [];
+    return json({ acknowledged: await acknowledgeDeliveries(env.WORKSPACES_DB, identity.scope, ids) });
+  }
+  return json({ error: "Not found." }, 404);
 }
 
 async function handleFiles(request: Request, env: AgentEnv, path: string): Promise<Response> {
@@ -873,6 +953,9 @@ export async function handleAgent(
   if (path === "/agent/chats" || path.startsWith("/agent/chats/")) {
     return handleChats(request, env, path, body);
   }
+  if (path.startsWith("/agent/reminders/")) {
+    return handleReminders(request, env, path, body);
+  }
   if (path === "/agent/chat") {
     if (request.method !== "POST" && request.method !== "GET") {
       return json({ error: "Method not allowed." }, 405);
@@ -886,6 +969,7 @@ export async function handleAgent(
       threadIdFrom(body),
       ctx?.waitUntil?.bind(ctx),
       fileIdsFrom(body),
+      typeof body?.tz === "string" ? body.tz : null,
     );
   }
   return json({ error: "Not found." }, 404);

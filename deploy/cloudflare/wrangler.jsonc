@@ -79,6 +79,10 @@
   "ai": {
     "binding": "AI"
   },
+  // Every minute: fire due reminders/check-ins; hourly cleanup of old files.
+  "triggers": {
+    "crons": ["* * * * *"]
+  },
   // Account emails (confirm address, reset password). Sending stays off until
   // the owner sends a test from the dashboard (app_settings.email_sending).
   "send_email": [
