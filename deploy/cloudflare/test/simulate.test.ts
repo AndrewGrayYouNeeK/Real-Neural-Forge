@@ -150,6 +150,34 @@ describe("simulate_world tool", () => {
     expect((result.data as Record<string, unknown>).ok).toBe(false);
   });
 
+  it("gives encoder auto/jepa one long attempt, not two short ones", async () => {
+    vi.useFakeTimers();
+    try {
+      const calls: number[] = [];
+      const fetchContainer = vi.fn(async (_path: string, init?: RequestInit) => {
+        calls.push(Date.now());
+        // Slower than the generic 12s forecast timeout, inside the 26s simulate budget.
+        await new Promise<void>((resolve) => setTimeout(resolve, 15_000));
+        if (init?.signal?.aborted) throw new Error("aborted");
+        return new Response(JSON.stringify(fakePayload(14, "°F")), { status: 200 });
+      });
+      const pending = dispatchTool(
+        "simulate_world",
+        { series: "weather", encoder: "auto" },
+        ctxWith(fetchContainer as unknown as ToolContext["fetchContainer"]),
+        8_000,
+        { coldStartWaitMs: 0 },
+      );
+      await vi.advanceTimersByTimeAsync(16_000);
+      const result = await pending;
+      expect(result.ok).toBe(true);
+      expect(fetchContainer).toHaveBeenCalledTimes(1);
+      expect((result.data as Record<string, unknown>).ok).not.toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("clamps scenarios to the API limits", () => {
     const cleaned = sanitizeSimScenarios(
       [

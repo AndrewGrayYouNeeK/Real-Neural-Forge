@@ -67,6 +67,11 @@ export const TOOL_TIMEOUT_MS = 8_000;
 export const FORECAST_TOOL_TIMEOUT_MS = 12_000;
 /** Hard cap across wake + attempts so /agent/chat does not burn ~20s then give up. */
 export const CONTAINER_TOOL_BUDGET_MS = 22_000;
+/**
+ * simulate_world with encoder auto/jepa trains + backtests a small ensemble (CPU, ~5-10s
+ * on the live container), so it gets one longer attempt instead of two short ones.
+ */
+export const SLOW_SIMULATE_TIMEOUT_MS = 26_000;
 export const TURN_TIMEOUT_MS = 45_000;
 /** Base wait before the first container retry. */
 export const CONTAINER_COLD_START_WAIT_MS = 500;
@@ -2326,7 +2331,13 @@ export async function dispatchTool(
       durationMs: Date.now() - started,
     };
   }
-  const effectiveTimeout = defaultTimeoutForTool(toolName, timeoutMs);
+  const slowSimulate =
+    toolName === "simulate_world" &&
+    (args.encoder === "auto" || args.encoder === "jepa") &&
+    (typeof timeoutMs !== "number" || !Number.isFinite(timeoutMs) || timeoutMs >= TOOL_TIMEOUT_MS);
+  const effectiveTimeout = slowSimulate
+    ? SLOW_SIMULATE_TIMEOUT_MS
+    : defaultTimeoutForTool(toolName, timeoutMs);
   const runOnce = (signal: AbortSignal): Promise<unknown> => {
     const keyed: ToolContext = { ...ctx, signal };
     switch (toolName) {
@@ -2396,7 +2407,8 @@ export async function dispatchTool(
   try {
     const data = await withContainerRetries(toolName, runOnce, effectiveTimeout, {
       baseWaitMs: options?.coldStartWaitMs ?? CONTAINER_COLD_START_WAIT_MS,
-      attempts: options?.retryAttempts,
+      attempts: slowSimulate ? 1 : options?.retryAttempts,
+      budgetMs: slowSimulate ? SLOW_SIMULATE_TIMEOUT_MS : undefined,
     });
     return {
       ok: true,
