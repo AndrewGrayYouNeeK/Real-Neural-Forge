@@ -17,6 +17,7 @@ import re
 import urllib.error
 import urllib.parse
 import urllib.request
+from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -368,6 +369,7 @@ def voice_status(actor: Actor | None, config: dict[str, Any] | None) -> dict[str
             "checkout_available": checkout_available,
             "checkout_test_mode": checkout_test_mode,
             "max_chars_per_request": cfg.max_chars_per_request,
+            "voices": cfg.choices(),
             "plan": plan,
             "message": (
                 "Create a free account to hear GQ. Reading the site in text stays free."
@@ -384,6 +386,7 @@ def voice_status(actor: Actor | None, config: dict[str, Any] | None) -> dict[str
             "checkout_available": False,
             "checkout_test_mode": checkout_test_mode,
             "max_chars_per_request": cfg.max_chars_per_request,
+            "voices": cfg.choices(),
             "plan": plan,
             "balance": None,
             "message": "The owner account is unlimited.",
@@ -411,6 +414,7 @@ def voice_status(actor: Actor | None, config: dict[str, Any] | None) -> dict[str
         "checkout_available": checkout_available and not subscribed,
         "checkout_test_mode": checkout_test_mode,
         "max_chars_per_request": cfg.max_chars_per_request,
+        "voices": cfg.choices(),
         "plan": plan,
         "balance": {
             "free": row["free_remaining"],
@@ -450,9 +454,22 @@ def _unavailable_voice() -> WorkspaceError:
     )
 
 
-def speak(actor: Actor, text: str, config: dict[str, Any] | None) -> dict[str, Any]:
-    """Synthesize (or replay) audio, charging member credit only on a fresh call."""
+def speak(
+    actor: Actor,
+    text: str,
+    config: dict[str, Any] | None,
+    voice: str | None = None,
+) -> dict[str, Any]:
+    """Synthesize (or replay) audio, charging member credit only on a fresh call.
+
+    ``voice`` picks GQ (the default) or the second voice. Both draw on the same
+    character balance, and each voice has its own cached clips.
+    """
     cfg = load_voice_config(config)
+    chosen = cfg.voice_id_for(voice)
+    if chosen is None:
+        raise WorkspaceError(422, "Pick GQ or " + cfg.alt_voice_name + ".")
+    cfg = replace(cfg, voice_id=chosen)
     _require_available(cfg)
     cleaned = truncate_speech(speech_text(text), cfg.max_chars_per_request)
     if not cleaned:

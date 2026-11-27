@@ -222,6 +222,38 @@ def test_cache_prevents_a_second_spend(voice_client, fake_speech):
     assert balance["free"] == 100 - len(text)
 
 
+def test_the_second_voice_shares_the_quota_and_gq_stays_the_default(
+    voice_client, monkeypatch: pytest.MonkeyPatch
+):
+    client, _root = voice_client
+    used: list[str] = []
+
+    def fake(text: str, cfg) -> bytes:
+        used.append(cfg.voice_id)
+        return b"AUDIO:" + cfg.voice_id.encode() + text.encode()
+
+    monkeypatch.setattr(voice_service, "synthesize_speech", fake)
+    _signup(client, "twovoices@example.com")
+    status = client.get("/voice/status").json()
+    assert status["voices"] == [
+        {"key": "gq", "name": "GQ"},
+        {"key": "female", "name": "Ivy"},
+    ]
+    text = "Hello from the other side."
+    default = client.post("/voice/speak", json={"text": text})
+    gq = client.post("/voice/speak", json={"text": text, "voice": "gq"})
+    assert default.status_code == gq.status_code == 200
+    assert gq.headers["x-neural-forge-voice-cache"] == "hit"
+    ivy = client.post("/voice/speak", json={"text": text, "voice": "female"})
+    assert ivy.status_code == 200
+    assert ivy.headers["x-neural-forge-voice-cache"] == "miss"
+    assert used == ["QMnwdN2oOwNXPcl9oXIl", "EXAVITQu4vr4xnSDxMaL"]
+    assert ivy.content != default.content
+    assert _balance(client)["spent"] == 2 * len(text)
+    bad = client.post("/voice/speak", json={"text": text, "voice": "nope"})
+    assert bad.status_code == 422
+
+
 def test_balance_enforcement_blocks_empty_accounts(voice_client, fake_speech):
     client, _root = voice_client
     _signup(client, "short@example.com")

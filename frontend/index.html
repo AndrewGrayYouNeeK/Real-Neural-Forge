@@ -946,6 +946,8 @@
                   Reading the chat in text is always free. GQ voice comes with
                   Nous Plus: subscribe once and it just works.
                 </p>
+                <h3>Choose a voice</h3>
+                <div class="voice-picker" data-voice-picker role="radiogroup" aria-label="Voice"></div>
                 <div id="voice-status-grid" class="status-grid"></div>
                 <p id="voice-message" class="hint" aria-live="polite"></p>
                 <div id="voice-plan" class="starter-list"></div>
@@ -1225,7 +1227,8 @@
     <div id="talk-start-overlay" class="talk-start-overlay" hidden>
       <div class="talk-start-card" role="dialog" aria-labelledby="talk-start-title" aria-modal="false">
         <p id="talk-start-title">Talk is on</p>
-        <p class="talk-start-copy">Tap once to start hands-free talking in GQ voice.</p>
+        <p class="talk-start-copy">Tap once to start hands-free talking.</p>
+        <div class="voice-picker" data-voice-picker role="radiogroup" aria-label="Voice"></div>
         <button type="button" id="talk-start-button" class="btn primary">Tap to start talking</button>
         <button type="button" id="talk-start-dismiss" class="btn">Not now</button>
       </div>

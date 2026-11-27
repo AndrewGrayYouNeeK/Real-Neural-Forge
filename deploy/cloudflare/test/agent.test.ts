@@ -956,25 +956,29 @@ describe("agent turn caps and fallback", () => {
     expect(UNHINGED_PROMPT).not.toContain("Answer exactly what was asked");
   });
 
-  it("gives the default mode a Grok-like witty persona and leaves Unhinged byte-for-byte unchanged", () => {
+  it("gives the default mode a warm, plain-spoken persona and leaves Unhinged byte-for-byte unchanged", () => {
     const normal = SYSTEM_PROMPT.toLowerCase();
     for (const phrase of [
-      "witty",
-      "funny",
-      "confident",
-      "grok-style",
-      "playful",
-      "quick joke",
+      "warm",
+      "clear",
+      "plain-spoken",
+      "knowledgeable friend",
+      "concise",
+      "light dry humor",
       "casual cussing is fine",
       "answer exactly what was asked",
       "answer first",
       "never a ramble",
+      "no jargon",
       "corporate help desk",
       "°f",
       "at most one light quip",
+      "andrew gray (youneek)",
     ]) {
       expect(normal).toContain(phrase);
     }
+    expect(normal).not.toContain("swagger");
+    expect(normal).not.toContain("smug");
     expect(normal).toContain("user: what's 2+2");
     expect(agentSystemPrompt("normal", false)).toContain("quick quip");
     expect(agentSystemPrompt("normal", true)).toContain("quick quip");
@@ -1020,7 +1024,7 @@ describe("agent turn caps and fallback", () => {
     expect(primary.reasoning).toEqual({ effort: "low" });
   });
 
-  it("adds the witty voice reminder to tool notes only in normal mode", async () => {
+  it("adds the warm voice reminder to tool notes only in normal mode", async () => {
     const notes: Record<string, string[]> = { normal: [], unhinged: [] };
     for (const mode of ["normal", "unhinged"] as const) {
       let call = 0;
