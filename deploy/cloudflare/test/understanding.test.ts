@@ -8,7 +8,8 @@ import { clearKnowledgeMemoryCache } from "../src/agent/knowledge";
 import { GUARD_MODEL } from "../src/agent/safety";
 import type { ToolContext } from "../src/agent/tools";
 
-const UNHINGED_PROMPT_SHA256 = "dc377e2d40781f22efb30a773dca8a6a598817e7464b3c35efedc5263ec6992b";
+// Unhinged is locked byte-for-byte. The only change since it shipped: it says "Nous" instead of "Neural Forge".
+const UNHINGED_PROMPT_SHA256 = "419915705a15f529e9ffde7ef07200cd587c4e6590225483c32d6c27d0cc44ac";
 
 /** Minimal D1 that always grants AI quota and knowledge lookups. */
 const openDb: D1Like = {
@@ -202,5 +203,23 @@ describe("knowledge fallback", () => {
     expect(result.toolsUsed).toContain("web_search");
     expect(result.text).toContain("1404");
     expect(result.text).not.toContain("could not finish");
+  });
+});
+
+describe("Nous identity and humor", () => {
+  it("says Nous when the model slips and uses the old name", async () => {
+    const { sayNous, sanitizeAgentAnswer } = await import("../src/agent/protocol");
+    expect(sayNous("I'm Neural Forge, aka Real Neural Forge.")).toBe("I'm Nous, aka Nous.");
+    expect(sanitizeAgentAnswer("Hi, I am neural   forge!")).toBe("Hi, I am Nous!");
+    expect(sayNous("see real-neural-forge.example")).toBe("see real-neural-forge.example");
+  });
+
+  it("gives default Nous a funny country smooth nerd voice and names it Nous everywhere", async () => {
+    const { SYSTEM_PROMPT, UNHINGED_PROMPT } = await import("../src/live/ai");
+    expect(SYSTEM_PROMPT).toContain("country smooth nerd");
+    expect(SYSTEM_PROMPT).toContain("at least one genuinely funny line");
+    expect(SYSTEM_PROMPT).toContain("Your name is Nous");
+    expect(UNHINGED_PROMPT).toContain("You are Nous in unhinged mode");
+    expect(UNHINGED_PROMPT).not.toMatch(/Neural Forge/);
   });
 });

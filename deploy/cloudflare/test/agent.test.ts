@@ -3,7 +3,8 @@ import { createHash } from "node:crypto";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 /** SHA-256 of the shipped Unhinged prompt; Unhinged must never change. */
-const UNHINGED_PROMPT_SHA256 = "dc377e2d40781f22efb30a773dca8a6a598817e7464b3c35efedc5263ec6992b";
+// Unhinged is locked byte-for-byte. The only change since it shipped: it says "Nous" instead of "Neural Forge".
+const UNHINGED_PROMPT_SHA256 = "419915705a15f529e9ffde7ef07200cd587c4e6590225483c32d6c27d0cc44ac";
 
 import {
   FALLBACK_MODEL,
@@ -948,7 +949,7 @@ describe("agent turn caps and fallback", () => {
   it("keeps the normal prompt direct and leaves Unhinged unchanged", () => {
     expect(SYSTEM_PROMPT.toLowerCase()).toContain("answer exactly what was asked");
     expect(SYSTEM_PROMPT.toLowerCase()).toContain("lead with the answer");
-    expect(SYSTEM_PROMPT.toLowerCase()).toContain("secondary");
+    expect(SYSTEM_PROMPT.toLowerCase()).toContain("funniest");
     expect(agentSystemPrompt("normal", true)).toContain("forecast");
     expect(agentSystemPrompt("normal", true)).toContain(SYSTEM_PROMPT);
     expect(agentSystemPrompt("unhinged", true).startsWith(UNHINGED_PROMPT)).toBe(true);
@@ -956,7 +957,7 @@ describe("agent turn caps and fallback", () => {
     expect(UNHINGED_PROMPT).not.toContain("Answer exactly what was asked");
   });
 
-  it("gives the default mode a warm, plain-spoken persona and leaves Unhinged byte-for-byte unchanged", () => {
+  it("gives the default mode a funny, plain-spoken persona and leaves Unhinged byte-for-byte unchanged", () => {
     const normal = SYSTEM_PROMPT.toLowerCase();
     for (const phrase of [
       "warm",
@@ -964,15 +965,15 @@ describe("agent turn caps and fallback", () => {
       "plain-spoken",
       "knowledgeable friend",
       "concise",
-      "light dry humor",
-      "casual cussing is fine",
+      "country smooth nerd",
+      "funniest",
+      "at least one genuinely funny line",
+      "cussing is fine",
       "answer exactly what was asked",
       "answer first",
-      "never a ramble",
       "no jargon",
       "corporate help desk",
       "°f",
-      "at most one light quip",
       "andrew gray (youneek)",
     ]) {
       expect(normal).toContain(phrase);
@@ -980,14 +981,14 @@ describe("agent turn caps and fallback", () => {
     expect(normal).not.toContain("swagger");
     expect(normal).not.toContain("smug");
     expect(normal).toContain("user: what's 2+2");
-    expect(agentSystemPrompt("normal", false)).toContain("quick quip");
-    expect(agentSystemPrompt("normal", true)).toContain("quick quip");
+    expect(agentSystemPrompt("normal", false)).toContain("land at least one real joke");
+    expect(agentSystemPrompt("normal", true)).toContain("land at least one real joke");
     expect(agentSystemPrompt("normal", true)).not.toContain("Wit stays light and secondary");
     // Unhinged stays exactly as shipped.
     expect(createHash("sha256").update(UNHINGED_PROMPT).digest("hex")).toBe(UNHINGED_PROMPT_SHA256);
     expect(agentSystemPrompt("unhinged", false).startsWith(UNHINGED_PROMPT)).toBe(true);
-    expect(agentSystemPrompt("unhinged", false)).not.toContain("quick quip");
-    expect(agentSystemPrompt("unhinged", true)).not.toContain("quick quip");
+    expect(agentSystemPrompt("unhinged", false)).not.toContain("land at least one real joke");
+    expect(agentSystemPrompt("unhinged", true)).not.toContain("land at least one real joke");
   });
 
   it("bumps default temperature only on chat-completions and keeps 120B inputs unchanged", () => {
