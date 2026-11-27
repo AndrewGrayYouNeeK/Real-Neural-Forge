@@ -23,11 +23,16 @@ import {
 import { capKey } from "../auth/session";
 import { runAgentTurn, type HistoryMessage } from "./loop";
 import {
+  MEMORY_OFF_PROMPT,
+  autoRemember,
   clearMemory,
+  compactMemoryPrompt,
   deleteMemoryKey,
   listMemory,
+  memoryEnabled,
   memoryPromptBlock,
   resolveMemoryIdentity,
+  setMemoryEnabled,
   upsertMemory,
 } from "./memory";
 import {
@@ -205,12 +210,20 @@ async function answerAgentChat(
   const caps = resolveAiCaps(env);
   // Daily caps are per account once signed in (IP only for anonymous calls).
   const ip = capKey(identity, clientIp(request));
-  let memoryPrompt = memoryPromptBlock([]);
-  try {
-    const facts = await listMemory(env.WORKSPACES_DB, identity.scope);
-    memoryPrompt = memoryPromptBlock(facts);
-  } catch {
-    memoryPrompt = memoryPromptBlock([]);
+  // Memory is per signed-in account only, and the account can turn it off.
+  const memoryOn = identity.signedIn && (await memoryEnabled(env.WORKSPACES_DB, identity.scope));
+  let memoryPrompt = memoryOn ? memoryPromptBlock([]) : MEMORY_OFF_PROMPT;
+  if (memoryOn) {
+    try {
+      await autoRemember(env.WORKSPACES_DB, identity.scope, clean);
+      const facts = await listMemory(env.WORKSPACES_DB, identity.scope);
+      const topics = (await listThreads(env.WORKSPACES_DB, identity.scope))
+        .filter((thread) => thread.id !== threadId)
+        .map((thread) => thread.title);
+      memoryPrompt = compactMemoryPrompt(facts, topics);
+    } catch {
+      memoryPrompt = memoryPromptBlock([]);
+    }
   }
 
   let activeThreadId: string | null = null;
@@ -265,6 +278,7 @@ async function answerAgentChat(
         waitUntil,
         memoryScope: identity.scope,
         owner: identity.owner,
+        memoryOff: !memoryOn,
       },
     });
     if (activeThreadId && result.text) {
@@ -413,8 +427,26 @@ async function handleMemory(
     return json({
       scope: identity.signedIn ? (identity.owner ? "owner" : "user") : "visitor",
       signed_in: identity.signedIn,
+      enabled: identity.signedIn ? await memoryEnabled(db, identity.scope) : false,
       facts,
     });
+  }
+
+  if (keyPath === "settings" && (request.method === "PUT" || request.method === "POST")) {
+    if (!identity.signedIn) return json({ error: "Sign in to use memory." }, 401);
+    let enabled: unknown = undefined;
+    try {
+      enabled = ((await request.json()) as { enabled?: unknown })?.enabled;
+    } catch {
+      enabled = undefined;
+    }
+    if (typeof enabled !== "boolean") return json({ error: "Send enabled: true or false." }, 400);
+    await setMemoryEnabled(db, identity.scope, enabled);
+    return json({ enabled });
+  }
+
+  if (request.method === "PUT" && !keyPath && !identity.signedIn) {
+    return json({ error: "Sign in to use memory." }, 401);
   }
 
   if (request.method === "PUT" && !keyPath) {
