@@ -1,26 +1,33 @@
-"""The black hole is part of the page and keeps moving when Nous is idle."""
+"""The only black hole is the O in the wordmark; only its center moves."""
 
 from fastapi.testclient import TestClient
 
 from src.api import app
 
 
-def test_black_hole_ships_in_the_landing_and_the_app() -> None:
+def test_one_wordmark_black_hole_and_no_second_hole() -> None:
     client = TestClient(app)
     html = client.get("/assets/index.html").text
     assert "/assets/black-hole.css" in html
-    # One on the landing page, one above the app greeting.
-    assert html.count('class="bh"') == 2
-    assert 'class="bh-disk bh-disk-2"' in html
+    # The extra standalone hole above the wordmark is gone.
+    assert 'class="bh"' not in html
+    assert "bh-disk" not in html
+    # Every wordmark, including the app greeting, uses the layered O.
+    assert html.count("nous-o-core") >= 6
+    assert 'class="nous-wordmark greeting-wordmark"' in html
 
 
-def test_black_hole_css_animates_when_idle_and_calms_for_reduce_motion() -> None:
+def test_only_the_o_center_spins_and_reduce_motion_is_static() -> None:
     client = TestClient(app)
     response = client.get("/assets/black-hole.css")
     assert response.status_code == 200
     css = response.text
-    assert ".bh .bh-disk {" in css and "animation: bh-spin" in css
-    assert ".nous-wordmark .nous-o {" in css
+    assert "bh-core-spin" in css
+    assert ".nous-wordmark .nous-o-core" in css
+    # The S must not shimmer, warp, or change shape.
+    assert "nous-s" not in css
+    assert "bh-shimmer" not in css
     assert "prefers-reduced-motion: reduce" in css
-    # Reduce Motion keeps a calm glow instead of going dead.
-    assert "bh-glow" in css
+    # Reduce Motion is fully still (no leftover glow or spin).
+    reduce_block = css.split("prefers-reduced-motion: reduce", 1)[1]
+    assert "animation: none" in reduce_block
