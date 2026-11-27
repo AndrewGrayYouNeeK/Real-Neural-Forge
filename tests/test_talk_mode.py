@@ -131,3 +131,43 @@ def test_talk_mode_remembers_phone_off_switch_and_keeps_unhinged_alone() -> None
     assert "TALK_NO_CREDIT" in section
     assert "TALK_SIGN_IN" in section
     assert "lottery" not in source.lower()
+
+
+def test_there_is_no_listen_button_and_gq_speaks_on_its_own() -> None:
+    source = APP_JS.read_text(encoding="utf-8")
+    css = (REPO_ROOT / "frontend" / "styles.css").read_text(encoding="utf-8")
+    assert "speak-btn" not in source and "speak-btn" not in css
+    assert "Listen to this reply" not in source
+    assert "speakMessage" not in source
+    section = _talk_section(source)
+    # Replies typed while Talk is on are spoken too.
+    assert "speakTalkTurn(replyText)" in source
+    # Audio is unlocked during the Talk tap.
+    assert "unlockTalkAudio();" in section
+
+
+def test_talk_mode_hears_through_the_mic_not_only_browser_recognition() -> None:
+    section = _talk_section(APP_JS.read_text(encoding="utf-8"))
+    assert "function talkMicSupported" in section
+    assert "function openTalkMic" in section
+    assert "function closeTalkMic" in section
+    assert "/agent/transcribe" in section
+    assert "audio/wav" in section
+    assert "createScriptProcessor" in section
+    assert "echoCancellation: true" in section
+    # The AudioContext is created before any await so iPhone allows it.
+    open_mic = section[section.index("async function openTalkMic") :]
+    assert open_mic.index("new AudioCtx()") < open_mic.index("await navigator")
+    # The mic is closed whenever Talk stops.
+    stop = section[section.index("function stopTalk()") :]
+    assert "closeTalkMic();" in stop[:400]
+    # Phones arm Talk when the mic works, even without built-in recognition.
+    assert "if (!talkCanHear()) return;" in section
+
+
+def test_talk_mode_falls_back_to_text_when_voice_runs_out() -> None:
+    section = _talk_section(APP_JS.read_text(encoding="utf-8"))
+    assert "TALK_VOICE_CAPPED" in section
+    assert "response.status === 429" in section
+    assert "talk.voiceOff = true" in section
+    assert "VOICE_RESTING_MESSAGE" in section
