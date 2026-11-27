@@ -167,3 +167,12 @@ def test_youneek_is_spoken_as_unique():
     )
     assert speech_text("YNK and youneek and YOUNEEK") == "unique and unique and unique"
     assert speech_text("Ask Ivy or GQ about Nous") == "Ask Ivy or GQ about Noose"
+
+
+def test_old_name_is_spoken_as_noose() -> None:
+    from src.voice.text import speech_text
+
+    assert speech_text("I'm Neural Forge, aka Real Neural Forge.") == (
+        "I'm Noose, aka Noose."
+    )
+    assert speech_text("neural forgery is not a name") == "neural forgery is not a name"
