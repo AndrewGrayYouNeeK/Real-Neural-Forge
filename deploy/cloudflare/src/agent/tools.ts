@@ -121,6 +121,27 @@ export type ToolContext = {
 };
 
 const STARTER_IDS = new Set(["weather", "stocks", "crypto", "near-earth", "lunar"]);
+/** Plain-English names models send for starter series (e.g. "moon" for lunar). */
+const STARTER_ALIASES: Record<string, string> = {
+  moon: "lunar",
+  "moon illumination": "lunar",
+  "moon phase": "lunar",
+  "lunar illumination": "lunar",
+  temperature: "weather",
+  stock: "stocks",
+  spy: "stocks",
+  bitcoin: "crypto",
+  btc: "crypto",
+  asteroids: "near-earth",
+  "near earth": "near-earth",
+  neo: "near-earth",
+};
+
+export function normalizeStarterId(raw: string): string {
+  const key = raw.trim().toLowerCase().replace(/[_\s]+/g, " ");
+  if (STARTER_IDS.has(key)) return key;
+  return STARTER_ALIASES[key] ?? STARTER_ALIASES[key.replace(/ series$/, "")] ?? raw.trim().toLowerCase();
+}
 
 export const TOOL_DEFINITIONS = [
   {
@@ -1892,7 +1913,7 @@ async function runSimulateWorld(
     ? args.values.filter((v): v is number => typeof v === "number" && Number.isFinite(v))
     : [];
   let body: Record<string, unknown>;
-  let series = stringArg(args, "series", "weather").toLowerCase() || "weather";
+  let series = normalizeStarterId(stringArg(args, "series", "weather")) || "weather";
   const rawDates = Array.isArray(args.dates)
     ? args.dates.filter((d): d is string => typeof d === "string").slice(-2000)
     : [];

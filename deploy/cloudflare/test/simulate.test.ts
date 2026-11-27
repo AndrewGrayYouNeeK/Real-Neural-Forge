@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { AGENT_TOOL_NAMES } from "../src/agent/protocol";
-import { TOOL_DEFINITIONS, dispatchTool, sanitizeSimScenarios, type ToolContext } from "../src/agent/tools";
+import { TOOL_DEFINITIONS, dispatchTool, normalizeStarterId, sanitizeSimScenarios, type ToolContext } from "../src/agent/tools";
 
 function ctxWith(fetchContainer: ToolContext["fetchContainer"]): ToolContext {
   return { question: "simulate", visitor: {}, fetchContainer, authHeaders: {} };
@@ -176,6 +176,25 @@ describe("simulate_world tool", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it("maps plain-English series names to starter ids", async () => {
+    expect(normalizeStarterId("moon")).toBe("lunar");
+    expect(normalizeStarterId("Moon illumination series")).toBe("lunar");
+    expect(normalizeStarterId("Bitcoin")).toBe("crypto");
+    expect(normalizeStarterId("weather")).toBe("weather");
+    expect(normalizeStarterId("my-model")).toBe("my-model");
+    const fetchContainer = vi.fn(async () => new Response(JSON.stringify(fakePayload(14, "")), { status: 200 }));
+    await dispatchTool(
+      "simulate_world",
+      { series: "moon" },
+      ctxWith(fetchContainer as unknown as ToolContext["fetchContainer"]),
+      2000,
+      { coldStartWaitMs: 0 },
+    );
+    expect(fetchContainer).toHaveBeenCalledTimes(1);
+    const [, init] = fetchContainer.mock.calls[0] as unknown as [string, RequestInit];
+    expect(String(init.body)).toContain('"starter_id":"lunar"');
   });
 
   it("clamps scenarios to the API limits", () => {
