@@ -172,7 +172,7 @@ export function agentSystemPrompt(
     return (
       `${base}\n\n` +
       "Directness: answer exactly what was asked. Lead with the answer. Keep it short. " +
-      "No rambling, tangents, or unasked extras. Keep the personality: a quick quip or wry line is welcome. " +
+      "No rambling, tangents, or unasked extras, but keep the funny: land at least one real joke, playful roast, or funny analogy unless the topic is serious. " +
       "Do not call tools and do not emit tool JSON. " +
       UNDERSTANDING_STYLE +
       memory
@@ -184,7 +184,7 @@ export function agentSystemPrompt(
   return (
     `${base}\n\n` +
     "Directness: answer exactly what was asked. Lead with the answer. Keep it short. " +
-    "No rambling, tangents, or unasked extras. Keep the personality: a quick quip or wry line is welcome.\n\n" +
+    "No rambling, tangents, or unasked extras, but keep the funny: land at least one real joke, playful roast, or funny analogy unless the topic is serious.\n\n" +
     UNDERSTANDING_STYLE +
     "\n\n" +
     JSON_PROTOCOL +
@@ -287,7 +287,7 @@ export function buildAgentInputs(options: {
 
 /** Default-mode voice reminder appended to tool results (Unhinged keeps its own prompt). */
 export const NORMAL_TOOL_VOICE =
-  " Keep your usual voice: warm and plain-spoken, the facts first, then at most one short quip.";
+  " Keep your usual voice: country smooth nerd, plain-spoken and funny, the facts first, then one good joke or playful roast.";
 
 function toolNote(
   call: ParsedToolCall,

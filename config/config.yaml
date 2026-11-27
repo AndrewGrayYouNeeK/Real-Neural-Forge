@@ -87,11 +87,13 @@ voice:
   alt_voice_id: EXAVITQu4vr4xnSDxMaL
   alt_voice_name: Ivy
   model_id: eleven_multilingual_v2
-  stability: 0.7
-  similarity_boost: 0.75
+  # Crisp and quick, still Andrew: high stability + similarity, no style
+  # exaggeration, speaker boost on, 10% faster than the natural drawl.
+  stability: 0.75
+  similarity_boost: 0.9
   style: 0
   use_speaker_boost: true
-  speed: 1.0
+  speed: 1.1
   apply_text_normalization: "on"
   free_chars: 5000
   max_chars_per_request: 2000

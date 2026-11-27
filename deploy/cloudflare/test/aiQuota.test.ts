@@ -151,12 +151,12 @@ describe("AI quota", () => {
       expect(text).toContain("illegal instructions");
     }
     expect(SYSTEM_PROMPT.toLowerCase()).toContain("warm");
-    expect(SYSTEM_PROMPT.toLowerCase()).toContain("dry humor");
+    expect(SYSTEM_PROMPT.toLowerCase()).toContain("country smooth nerd");
     expect(SYSTEM_PROMPT.toLowerCase()).toContain("answer first");
     expect(SYSTEM_PROMPT.toLowerCase()).toContain("answer exactly what was asked");
     expect(SYSTEM_PROMPT.toLowerCase()).toContain("lead with the answer");
-    expect(SYSTEM_PROMPT.toLowerCase()).toContain("secondary");
-    expect(SYSTEM_PROMPT.toLowerCase()).toContain("casual cussing is fine");
+    expect(SYSTEM_PROMPT.toLowerCase()).toContain("funniest");
+    expect(SYSTEM_PROMPT.toLowerCase()).toContain("cussing is fine");
     const unhinged = UNHINGED_PROMPT.toLowerCase();
     expect(unhinged).toContain("foul-mouthed comedian");
     expect(unhinged).toContain("cuss a lot");

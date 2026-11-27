@@ -11,7 +11,7 @@ from __future__ import annotations
 import re
 from calendar import month_name
 
-NORMALIZER_VERSION = "3"
+NORMALIZER_VERSION = "4"
 _CHUNK_TARGET = 650
 _CHUNK_LIMIT = 800
 
@@ -35,7 +35,7 @@ _UNIT = re.compile(
 )
 # "Nous" is said "noose" (rhymes with moose). The spoken text spells it that way
 # for every voice; the words on screen are never touched.
-_NOUS = re.compile(r"\bnous\b", flags=re.IGNORECASE)
+_NOUS = re.compile(r"\b(?:(?:real\s+)?neural\s+forge|nous)\b", flags=re.IGNORECASE)
 # "YouNeeK" (and its YNK brand short form) is said "unique". Screen text keeps
 # the spelling; only the spoken text changes. Voice names are not touched.
 _YOUNEEK = re.compile(r"\byouneek\b", flags=re.IGNORECASE)

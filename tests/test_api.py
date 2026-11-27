@@ -1063,10 +1063,9 @@ class TestForecastDashboard:
         assert "/auth/webauthn/login/verify" in app_js
         assert "/auth/mfa/verify" in app_js
         assert "/voice/speak" in app_js
-        assert "let currentAudio" in app_js
-        assert "stopCurrentAudio" in app_js
-        assert "speakToken" in app_js
-        assert 'button.textContent = "Stop"' in app_js
+        assert "Listen to this reply" not in app_js
+        assert "speakMessage" not in app_js
+        assert "/agent/transcribe" in app_js
         assert "toExponential" not in app_js
         assert "/starters/" in app_js
         assert "/live/weather" in app_js
@@ -1074,7 +1073,6 @@ class TestForecastDashboard:
         assert "/live/lottery" not in app_js
         assert "/agent/chat" in app_js
         assert "/live/ask" in app_js
-        assert "/live/budget" in app_js
         assert "Voice is resting for today, text still works." in app_js
         assert "neuralForgeChatMode" in app_js
         assert "mode: chatMode()" in app_js

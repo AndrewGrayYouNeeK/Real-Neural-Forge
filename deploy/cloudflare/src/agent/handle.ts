@@ -21,6 +21,7 @@ import {
   listThreads,
 } from "./chats";
 import { capKey } from "../auth/session";
+import { STT_MAX_BYTES, transcribeAudio } from "./transcribe";
 import { runAgentTurn, type HistoryMessage } from "./loop";
 import {
   MEMORY_OFF_PROMPT,
@@ -905,6 +906,25 @@ async function handleVision(
   return json({ ...result.body, thread_id: threadId }, result.status);
 }
 
+async function handleTranscribe(request: Request, env: AgentEnv): Promise<Response> {
+  if (request.method !== "POST") return json({ error: "Method not allowed." }, 405);
+  if (!env.AI || !env.WORKSPACES_DB) return json({ error: "Voice input isn't set up on this server." }, 503);
+  const declared = Number(request.headers.get("Content-Length") || 0);
+  if (declared > STT_MAX_BYTES + 1024) {
+    return json({ error: "That recording is too long. Try a shorter question." }, 413);
+  }
+  const bytes = new Uint8Array(await request.arrayBuffer());
+  try {
+    const result = await transcribeAudio(
+      { ai: env.AI, db: env.WORKSPACES_DB, ip: clientIp(request), caps: resolveAiCaps(env) },
+      bytes,
+    );
+    return json(result.body, result.status);
+  } catch {
+    return json({ error: "I couldn't hear that. Try again." }, 502);
+  }
+}
+
 export async function handleAgent(
   request: Request,
   env: AgentEnv,
@@ -927,6 +947,7 @@ export async function handleAgent(
   if (path.startsWith("/agent/images/")) {
     return handleImages(request, env, path);
   }
+  if (path === "/agent/transcribe") return handleTranscribe(request, env);
   let body: Record<string, unknown> | null = null;
   if (request.method === "POST" || request.method === "PUT") {
     const text = await request.text();

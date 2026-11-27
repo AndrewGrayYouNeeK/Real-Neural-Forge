@@ -29,9 +29,6 @@ const state = {
 
 const VOICE_RESTING_MESSAGE = "Voice is resting for today, text still works.";
 
-const SPEAK_LABEL = "Listen";
-const SPEAK_BUSY_LABEL = "Loading GQ…";
-
 /* ---------------------------------------------------------------- helpers */
 
 function errorMessage(response, data, text) {
@@ -218,15 +215,9 @@ function addMessage(role, text) {
 
   if (role === "assistant") {
     message.dataset.speech = String(text || "").replace(MARKDOWN_LINK, "$1");
+    // GQ speaks replies on its own in Talk mode, so there is no Listen button.
     const actions = document.createElement("div");
     actions.className = "message-actions";
-    const speak = document.createElement("button");
-    speak.type = "button";
-    speak.className = "speak-btn";
-    speak.textContent = `🔊 ${SPEAK_LABEL}`;
-    speak.setAttribute("aria-label", "Listen to this reply in GQ voice");
-    speak.addEventListener("click", () => speakMessage(message, speak));
-    actions.append(speak);
     message.append(actions);
   }
 
@@ -261,144 +252,8 @@ function showHint(message, text, buttons) {
   scrollToBottom();
 }
 
-let currentAudio = null;
-let speakToken = 0;
-let activeSpeakButton = null;
-
-function resetSpeakButton(button) {
-  if (!button) return;
-  button.disabled = false;
-  button.dataset.state = "idle";
-  button.textContent = `🔊 ${SPEAK_LABEL}`;
-}
-
-function stopCurrentAudio() {
-  const audio = currentAudio;
-  currentAudio = null;
-  if (!audio) return;
-  audio.pause();
-  if (audio.src) URL.revokeObjectURL(audio.src);
-}
-
-function showSpeakStop(button, token) {
-  if (activeSpeakButton && activeSpeakButton !== button) {
-    resetSpeakButton(activeSpeakButton);
-  }
-  activeSpeakButton = button;
-  button.disabled = false;
-  button.dataset.state = "playing";
-  button.dataset.token = String(token);
-  button.textContent = "Stop";
-}
-
 function rememberVoiceBudget(result) {
   if (result && result.voice_resting) state.voiceResting = true;
-}
-
-async function voicePlaybackAllowed() {
-  // Subscribers pay for their own voice, so the free-tier rest day never blocks them.
-  if (state.voiceStatus && state.voiceStatus.subscribed) return true;
-  if (state.voiceResting) return false;
-  try {
-    rememberVoiceBudget(await fetchJson("/live/budget"));
-  } catch {
-    // A missed status check does not block a listen the chat has not marked resting.
-  }
-  return !state.voiceResting;
-}
-
-async function speakMessage(message, speakButton) {
-  if (
-    speakButton.dataset.state === "playing" &&
-    Number(speakButton.dataset.token) === speakToken
-  ) {
-    speakToken += 1;
-    stopCurrentAudio();
-    resetSpeakButton(speakButton);
-    activeSpeakButton = null;
-    return;
-  }
-  const text = (message.dataset.speech || "").trim();
-  if (!text) {
-    showHint(message, "There is nothing in this reply to read aloud.");
-    return;
-  }
-  if (!(await voicePlaybackAllowed())) {
-    showHint(message, VOICE_RESTING_MESSAGE);
-    return;
-  }
-  const token = ++speakToken;
-  stopCurrentAudio();
-  showSpeakStop(speakButton, token);
-  let playing = false;
-  try {
-    const response = await fetch("/voice/speak", {
-      method: "POST",
-      credentials: "same-origin",
-      headers: authHeaders({ "Content-Type": "application/json" }),
-      body: JSON.stringify({ text: text.slice(0, MAX_VOICE_CHARS), voice: selectedVoice() }),
-    });
-    if (token !== speakToken) return;
-    if (response.status === 401) {
-      showHint(
-        message,
-        "GQ voice needs a free account. Reading the chat in text stays free.",
-        [["Sign in", openSignInModal]]
-      );
-      return;
-    }
-    if (response.status === 402) {
-      let detail = "You are out of free GQ voice. Nous Plus includes voice. Text stays free.";
-      try {
-        const data = await response.json();
-        if (typeof data.detail === "string" && data.detail) detail = data.detail;
-      } catch {
-        // Keep the plain message when the body is not JSON.
-      }
-      showHint(message, detail, [["Subscribe", startSubscribe]]);
-      return;
-    }
-    if (!response.ok) {
-      let detail = `GQ voice is unavailable (${response.status}). Text stays free.`;
-      try {
-        const data = await response.json();
-        if (typeof data.detail === "string" && data.detail) detail = data.detail;
-      } catch {
-        // Keep the generic message when the body is not JSON.
-      }
-      showHint(message, detail);
-      return;
-    }
-    const audio = new Audio(URL.createObjectURL(await response.blob()));
-    if (token !== speakToken) {
-      URL.revokeObjectURL(audio.src);
-      return;
-    }
-    currentAudio = audio;
-    playing = true;
-    audio.addEventListener("ended", () => {
-      if (currentAudio !== audio) return;
-      URL.revokeObjectURL(audio.src);
-      currentAudio = null;
-      if (activeSpeakButton === speakButton) {
-        resetSpeakButton(speakButton);
-        activeSpeakButton = null;
-      }
-    });
-    audio.play().catch(() => {
-      if (token !== speakToken) return;
-      showHint(message, "Your browser blocked audio playback.");
-    });
-    refreshVoiceStatus().catch(() => {});
-  } catch (error) {
-    if (token !== speakToken) return;
-    showHint(message, error.message || "GQ voice failed. Text stays free.");
-  } finally {
-    if (!playing && token === speakToken) {
-      resetSpeakButton(speakButton);
-      if (activeSpeakButton === speakButton) activeSpeakButton = null;
-    }
-  }
 }
 
 /* --------------------------------------------------------- topic replies */
@@ -1520,10 +1375,6 @@ async function handleQuestion(question) {
     const replyMessage = addReply(reply.text, reply.chart);
     showToolsUsed(replyMessage, reply.toolsUsed);
     showSources(replyMessage, reply.sources);
-    if (reply.voiceResting && !state.toldVoiceResting) {
-      state.toldVoiceResting = true;
-      showHint(replyMessage, reply.voiceMessage || VOICE_RESTING_MESSAGE);
-    }
     if (reply.actions) {
       const actions = replyMessage.querySelector(".message-actions");
       for (const [label, action] of reply.actions) {
@@ -1532,7 +1383,17 @@ async function handleQuestion(question) {
       scrollToBottom();
     }
     clearNotice();
-    return typeof reply.text === "string" ? reply.text : "";
+    const replyText = typeof reply.text === "string" ? reply.text : "";
+    // Typed while Talk is listening: GQ still speaks the answer on its own.
+    // (A spoken question is in the "thinking" state and speaks from onTalkUtterance.)
+    if (talk.active && talk.state === "listening" && replyText) {
+      const mine = talk.turn;
+      setTalkState("thinking");
+      speakTalkTurn(replyText).catch(() => {
+        if (talk.active && mine === talk.turn) startListening();
+      });
+    }
+    return replyText;
   } catch (error) {
     pending.remove();
     addReply(`Something went wrong on my side. ${error.message || error}`);
@@ -1814,7 +1675,10 @@ async function loadMultimodalAllowance() {
 const TALK_UNSUPPORTED =
   "This browser can't use hands-free speech recognition, so Talk mode stays off. You can still type, and the speaker button reads replies in GQ voice.";
 const TALK_NO_CREDIT =
-  "You are out of GQ voice for now, so Talk mode will keep answering in text. Nous Plus includes voice; reading stays free.";
+  "You've used up your free voice, so I'll answer in text from here. Keep typing, or Nous Plus brings the voice back.";
+const TALK_VOICE_CAPPED =
+  "Voice chat is resting for today, so I'll keep going in text. Keep typing and I'll answer.";
+const TALK_HEARING_FAILED = "I couldn't hear that one. Say it again, or type it.";
 const TALK_MIC_BLOCKED = "The microphone is blocked. Allow it in the browser, or keep typing.";
 const TALK_SIGN_IN =
   "GQ voice needs a free account, so Talk mode will keep answering in text. Tap Account to sign in; reading stays free.";
@@ -1846,7 +1710,34 @@ const talk = {
   armed: false,
   autoBound: false,
   overlayBound: false,
+  mic: null,
+  toldHearing: false,
 };
+
+// Hearing: one open microphone for the whole Talk session. Each spoken turn is cut
+// out with a simple loudness gate, saved as a small 16 kHz WAV, and sent to
+// /agent/transcribe. This works in every browser, including iPhone Safari and
+// installed apps, where the built-in speech recognizer is missing or unreliable.
+const TALK_STT_RATE = 16000;
+const TALK_VAD_MIN_THRESHOLD = 0.012;
+const TALK_VAD_MAX_THRESHOLD = 0.08;
+const TALK_VAD_START_MS = 120;
+const TALK_VAD_END_SILENCE_MS = 1000;
+const TALK_VAD_MAX_TURN_MS = 25000;
+const TALK_VAD_PREROLL_CHUNKS = 4;
+const TALK_MIN_SPEECH_MS = 350;
+
+function talkMicSupported() {
+  return Boolean(
+    navigator.mediaDevices &&
+      navigator.mediaDevices.getUserMedia &&
+      (window.AudioContext || window.webkitAudioContext)
+  );
+}
+
+function talkCanHear() {
+  return talkMicSupported() || Boolean(speechRecognitionCtor());
+}
 
 function speechRecognitionCtor() {
   return window.SpeechRecognition || window.webkitSpeechRecognition || null;
@@ -1891,6 +1782,8 @@ function startTalkPulse() {
 
 function setTalkState(state) {
   talk.state = state;
+  // Only hear while listening; never pick up GQ's own voice or a half-done answer.
+  if (talk.mic && state !== "listening") talk.mic.gate = false;
   if (state === "thinking") setNousMotion("thinking");
   else if (state === "speaking") setNousMotion("talking");
   else if (!nousQuestionBusy) setNousMotion("idle");
@@ -2137,7 +2030,7 @@ function disarmTalk(options = {}) {
 
 function armTalkForPhone() {
   if (!shouldAutoArmTalk()) return;
-  if (!speechRecognitionCtor()) return;
+  if (!talkCanHear()) return;
   talk.armed = true;
   setTalkState("armed");
   bindTalkAutoStart();
@@ -2238,15 +2131,261 @@ function stopTalk() {
   talk.armed = false;
   talk.turn += 1;
   abortTalkRecognition();
+  closeTalkMic();
   stopTalkAudio();
   hideTalkStartOverlay();
   unbindTalkAutoStart();
   setTalkState("idle");
 }
 
+function resetTalkGate(mic) {
+  mic.gate = false;
+  mic.speaking = false;
+  mic.voicedMs = 0;
+  mic.silentMs = 0;
+  mic.speechMs = 0;
+  mic.floorMs = 0;
+  mic.floor = 0;
+  mic.chunks = [];
+  mic.preroll = [];
+}
+
+function openTalkGate() {
+  const mic = talk.mic;
+  if (!mic) return;
+  resetTalkGate(mic);
+  mic.gate = true;
+}
+
+function talkChunkRms(data) {
+  let sum = 0;
+  for (let i = 0; i < data.length; i += 1) sum += data[i] * data[i];
+  return Math.sqrt(sum / Math.max(1, data.length));
+}
+
+function onTalkAudio(event) {
+  const mic = talk.mic;
+  if (!mic || !mic.gate || !talk.active) return;
+  const data = new Float32Array(event.inputBuffer.getChannelData(0));
+  const frameMs = (data.length / mic.rate) * 1000;
+  const rms = talkChunkRms(data);
+  // Learn the room's background level in the first moments of each turn.
+  if (mic.floorMs < 400 && !mic.speaking) {
+    mic.floor = mic.floorMs === 0 ? rms : Math.min(mic.floor, rms);
+    mic.floorMs += frameMs;
+  }
+  const threshold = Math.min(
+    TALK_VAD_MAX_THRESHOLD,
+    Math.max(TALK_VAD_MIN_THRESHOLD, mic.floor * 3)
+  );
+  const loud = rms > threshold;
+  if (!mic.speaking) {
+    mic.preroll.push(data);
+    if (mic.preroll.length > TALK_VAD_PREROLL_CHUNKS) mic.preroll.shift();
+    mic.voicedMs = loud ? mic.voicedMs + frameMs : 0;
+    if (mic.voicedMs >= TALK_VAD_START_MS) {
+      mic.speaking = true;
+      mic.chunks = mic.preroll.slice();
+      mic.preroll = [];
+      mic.speechMs = mic.chunks.length * frameMs;
+      mic.silentMs = 0;
+      setNousMotion("thinking");
+    }
+    return;
+  }
+  mic.chunks.push(data);
+  mic.speechMs += frameMs;
+  mic.silentMs = loud ? 0 : mic.silentMs + frameMs;
+  if (mic.silentMs >= TALK_VAD_END_SILENCE_MS || mic.speechMs >= TALK_VAD_MAX_TURN_MS) {
+    finishTalkTurn();
+  }
+}
+
+function talkWavFromChunks(chunks, rate) {
+  let total = 0;
+  for (const chunk of chunks) total += chunk.length;
+  const merged = new Float32Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    merged.set(chunk, offset);
+    offset += chunk.length;
+  }
+  const ratio = rate / TALK_STT_RATE;
+  const outLength = Math.max(1, Math.floor(merged.length / ratio));
+  const pcm = new Int16Array(outLength);
+  for (let i = 0; i < outLength; i += 1) {
+    const start = Math.floor(i * ratio);
+    const end = Math.min(merged.length, Math.max(start + 1, Math.floor((i + 1) * ratio)));
+    let sum = 0;
+    for (let j = start; j < end; j += 1) sum += merged[j];
+    const value = Math.max(-1, Math.min(1, sum / (end - start)));
+    pcm[i] = value < 0 ? value * 0x8000 : value * 0x7fff;
+  }
+  const buffer = new ArrayBuffer(44 + pcm.length * 2);
+  const view = new DataView(buffer);
+  const write = (at, text) => {
+    for (let i = 0; i < text.length; i += 1) view.setUint8(at + i, text.charCodeAt(i));
+  };
+  write(0, "RIFF");
+  view.setUint32(4, 36 + pcm.length * 2, true);
+  write(8, "WAVE");
+  write(12, "fmt ");
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true);
+  view.setUint16(22, 1, true);
+  view.setUint32(24, TALK_STT_RATE, true);
+  view.setUint32(28, TALK_STT_RATE * 2, true);
+  view.setUint16(32, 2, true);
+  view.setUint16(34, 16, true);
+  write(36, "data");
+  view.setUint32(40, pcm.length * 2, true);
+  new Int16Array(buffer, 44).set(pcm);
+  return new Blob([buffer], { type: "audio/wav" });
+}
+
+function finishTalkTurn() {
+  const mic = talk.mic;
+  if (!mic || !mic.gate) return;
+  const chunks = mic.chunks;
+  const speechMs = mic.speechMs;
+  mic.gate = false;
+  mic.speaking = false;
+  mic.chunks = [];
+  const mine = talk.turn;
+  if (speechMs < TALK_MIN_SPEECH_MS) {
+    // A cough or a click, not a question. Keep listening.
+    window.setTimeout(() => {
+      if (talk.active && mine === talk.turn && talk.state === "listening") openTalkGate();
+    }, 0);
+    return;
+  }
+  setTalkState("thinking");
+  transcribeTalkTurn(talkWavFromChunks(chunks, mic.rate), mine).catch(() => {
+    if (talk.active && mine === talk.turn) startListening();
+  });
+}
+
+async function transcribeTalkTurn(wav, mine) {
+  let response;
+  try {
+    response = await fetch("/agent/transcribe", {
+      method: "POST",
+      credentials: "same-origin",
+      headers: authHeaders({ "Content-Type": "audio/wav" }),
+      body: wav,
+    });
+  } catch {
+    if (!talk.active || mine !== talk.turn) return;
+    if (!talk.toldHearing) {
+      talk.toldHearing = true;
+      addReply(TALK_HEARING_FAILED);
+    }
+    startListening();
+    return;
+  }
+  if (!talk.active || mine !== talk.turn) return;
+  if (response.status === 401) {
+    stopTalk();
+    addReply(TALK_SIGN_IN);
+    return;
+  }
+  if (response.status === 429) {
+    stopTalk();
+    addReply(TALK_VOICE_CAPPED);
+    return;
+  }
+  if (!response.ok) {
+    if (!talk.toldHearing) {
+      talk.toldHearing = true;
+      addReply(TALK_HEARING_FAILED);
+    }
+    startListening();
+    return;
+  }
+  let text = "";
+  try {
+    const data = await response.json();
+    text = data && typeof data.text === "string" ? data.text : "";
+  } catch {
+    text = "";
+  }
+  if (!talk.active || mine !== talk.turn) return;
+  await onTalkUtterance(text);
+}
+
+// Open the microphone and start the audio tap. Call right after the Talk tap so
+// the AudioContext can start on iPhone; the context is created before any await.
+async function openTalkMic() {
+  const AudioCtx = window.AudioContext || window.webkitAudioContext;
+  const ctx = new AudioCtx();
+  try {
+    if (ctx.state === "suspended") ctx.resume();
+  } catch {
+    // The resume below the stream open retries.
+  }
+  let stream;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({
+      audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+    });
+  } catch (error) {
+    try {
+      ctx.close();
+    } catch {
+      // Already closed.
+    }
+    throw error;
+  }
+  try {
+    if (ctx.state === "suspended") await ctx.resume();
+  } catch {
+    // Some browsers resume on their own once audio is flowing.
+  }
+  const source = ctx.createMediaStreamSource(stream);
+  const processor = ctx.createScriptProcessor(4096, 1, 1);
+  const sink = ctx.createGain();
+  sink.gain.value = 0;
+  processor.onaudioprocess = onTalkAudio;
+  source.connect(processor);
+  processor.connect(sink);
+  sink.connect(ctx.destination);
+  const mic = { ctx, stream, source, processor, sink, rate: ctx.sampleRate };
+  resetTalkGate(mic);
+  talk.mic = mic;
+  return mic;
+}
+
+function closeTalkMic() {
+  const mic = talk.mic;
+  talk.mic = null;
+  if (!mic) return;
+  mic.gate = false;
+  try {
+    mic.processor.onaudioprocess = null;
+    mic.source.disconnect();
+    mic.processor.disconnect();
+    mic.sink.disconnect();
+  } catch {
+    // Already disconnected.
+  }
+  for (const track of mic.stream.getTracks()) track.stop();
+  try {
+    mic.ctx.close();
+  } catch {
+    // Already closed.
+  }
+}
+
 function startListening(options = {}) {
   if (!talk.active) return;
   window.clearTimeout(talk.restartTimer);
+  if (talk.mic) {
+    stopTalkAudio();
+    abortTalkRecognition();
+    setTalkState("listening");
+    openTalkGate();
+    return;
+  }
   const Recognition = speechRecognitionCtor();
   if (!Recognition) {
     stopTalk();
@@ -2353,15 +2492,8 @@ async function speakTalkTurn(text) {
     startListening();
     return;
   }
-  if (!(await voicePlaybackAllowed())) {
-    if (!talk.active || mine !== talk.turn) return;
-    if (!state.toldVoiceResting) {
-      state.toldVoiceResting = true;
-      addReply(VOICE_RESTING_MESSAGE);
-    }
-    startListening();
-    return;
-  }
+  // GQ voice is limited by its own balance and daily budget (answered below with
+  // 402 / 429). The Workers AI "rest" line never mutes it.
   setTalkState("speaking");
   let response;
   try {
@@ -2378,11 +2510,18 @@ async function speakTalkTurn(text) {
     return;
   }
   if (!talk.active || mine !== talk.turn) return;
-  if (response.status === 401 || response.status === 402) {
+  if (response.status === 401 || response.status === 402 || response.status === 429) {
+    // Out of voice: keep the conversation going in text with one short note.
     talk.voiceOff = true;
     if (!talk.toldVoice) {
       talk.toldVoice = true;
-      const reply = addReply(response.status === 401 ? TALK_SIGN_IN : TALK_NO_CREDIT);
+      const note =
+        response.status === 401
+          ? TALK_SIGN_IN
+          : response.status === 429
+            ? VOICE_RESTING_MESSAGE
+            : TALK_NO_CREDIT;
+      const reply = addReply(note);
       const actions = reply.querySelector(".message-actions");
       if (actions && response.status === 402) {
         actions.append(makeButton("Subscribe", startSubscribe));
@@ -2442,19 +2581,39 @@ async function onTalkUtterance(transcript) {
 
 async function beginTalk() {
   if (talk.opening || talk.active) return;
-  if (!speechRecognitionCtor()) {
+  if (!talkCanHear()) {
     addReply(TALK_UNSUPPORTED);
     return;
   }
-  // Unlock autoplay and start recognition inside the Talk tap gesture.
+  // Unlock autoplay and open the microphone inside the Talk tap gesture.
   unlockTalkAudio();
   talk.opening = true;
   talk.active = true;
   talk.voiceOff = false;
   talk.toldVoice = false;
   talk.toldPlayback = false;
-  startListening({ immediate: true });
+  talk.toldHearing = false;
   try {
+    if (talkMicSupported()) {
+      setTalkState("listening");
+      try {
+        await openTalkMic();
+      } catch {
+        if (talk.active) {
+          stopTalk();
+          addReply(TALK_MIC_BLOCKED);
+        }
+        return;
+      }
+      if (!talk.active) {
+        closeTalkMic();
+        return;
+      }
+      startListening({ immediate: true });
+      return;
+    }
+    // Older browsers without a microphone API: use the built-in recognizer.
+    startListening({ immediate: true });
     if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
       let stream = null;
       try {

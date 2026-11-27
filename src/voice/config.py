@@ -61,13 +61,18 @@ DEFAULT_PLAN = VoicePlan()
 
 @dataclass(frozen=True)
 class VoiceSettings:
-    """ElevenLabs delivery settings. Higher stability and no style reduce stutter."""
+    """ElevenLabs delivery settings.
 
-    stability: float = 0.7
-    similarity_boost: float = 0.75
+    High stability and no style exaggeration keep every word crisp (no slur or
+    drift), high similarity keeps it sounding like Andrew, and speed 1.1 trims
+    the slow drawl without chipmunking the clone.
+    """
+
+    stability: float = 0.75
+    similarity_boost: float = 0.9
     style: float = 0.0
     use_speaker_boost: bool = True
-    speed: float = 1.0
+    speed: float = 1.1
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -347,15 +352,18 @@ def load_voice_config(config: dict[str, Any] | None = None) -> VoiceConfig:
         ),
         plan=_plan(section.get("plan")),
         settings=VoiceSettings(
-            stability=_unit_float("stability", section.get("stability", 0.7)),
+            stability=_unit_float(
+                "stability", section.get("stability", VoiceSettings.stability)
+            ),
             similarity_boost=_unit_float(
-                "similarity_boost", section.get("similarity_boost", 0.75)
+                "similarity_boost",
+                section.get("similarity_boost", VoiceSettings.similarity_boost),
             ),
             style=_unit_float("style", section.get("style", 0)),
             use_speaker_boost=_bool_value(
                 "use_speaker_boost", section.get("use_speaker_boost", True)
             ),
-            speed=_speed("speed", section.get("speed", 1.0)),
+            speed=_speed("speed", section.get("speed", VoiceSettings.speed)),
         ),
         apply_text_normalization=normalization,
     )
