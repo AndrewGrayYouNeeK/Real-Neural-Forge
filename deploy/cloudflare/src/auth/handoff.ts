@@ -15,7 +15,8 @@
  *     second-factor stamp carries over), sets its own cookie, restores the
  *     settings and goes to the same path and query.
  *
- * Every other request on an old host gets a plain 301 (308 for non-GET).
+ * Other page and asset loads on an old host get a plain 301; API calls are
+ * served in place (see servedOnLegacyHost in gate.ts).
  */
 
 import type { D1Like } from "../live/ai";
@@ -88,7 +89,7 @@ async function liveSession(db: D1Like, tokenHash: string, now: Date): Promise<{ 
 export async function legacyHandoffPage(request: Request, env: HandoffEnv, now: Date = new Date()): Promise<Response | null> {
   const url = new URL(request.url);
   const target = legacyTarget(url);
-  if (!target || servedOnLegacyHost(url) || !wantsPage(request) || !env.WORKSPACES_DB) return null;
+  if (!target || servedOnLegacyHost(url, request) || !wantsPage(request) || !env.WORKSPACES_DB) return null;
   const token = sessionToken(request);
   if (!token) return null;
   try {

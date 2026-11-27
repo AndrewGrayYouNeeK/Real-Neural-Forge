@@ -41,8 +41,10 @@ describe("old hosts move to henad.*", () => {
     }
   });
 
-  it("keeps the method for API calls, serves the Stripe webhook in place, and leaves henad.* alone", () => {
-    expect(legacyRedirect(new Request("https://nous.youneek.dev/agent/chat", { method: "POST", body: "{}" }))!.status).toBe(308);
+  it("serves API calls from installed apps and the Stripe webhook in place, and leaves henad.* alone", () => {
+    expect(legacyRedirect(new Request("https://nous.youneek.dev/agent/chat", { method: "POST", body: "{}" }))).toBeNull();
+    expect(legacyRedirect(new Request("https://nous.youneek.dev/auth/login", { method: "POST", body: "{}" }))).toBeNull();
+    expect(legacyRedirect(new Request("https://nous.youneek.dev/auth/me", { headers: { Authorization: "Bearer abc" } }))).toBeNull();
     expect(legacyRedirect(new Request("https://nous.youneek.xyz/voice/stripe/webhook", { method: "POST", body: "{}" }))).toBeNull();
     expect(legacyRedirect(new Request("https://henad.youneek.dev/app"))).toBeNull();
   });

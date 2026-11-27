@@ -1,6 +1,7 @@
 /**
  * Front door for real-neural-forge-api:
- *  - nous.youneek.* and forge.youneek.* → 301 to henad.youneek.* (same path + query).
+ *  - nous.youneek.* and forge.youneek.* → 301 to henad.youneek.* (same path + query)
+ *    for page and asset loads; API calls from installed apps are served in place.
  *    A signed-in browser visit gets a one-time hand-off instead (see handoff.ts),
  *    because the session cookie is host-only and would not follow the redirect.
  *  - everything except the public pages, docs, health and the auth routes
@@ -30,19 +31,27 @@ export function movedUrl(url: URL, target: string): URL {
   return next;
 }
 
-/** True for old-host paths that are served in place instead of redirected. */
-export function servedOnLegacyHost(url: URL): boolean {
-  return NO_REDIRECT_PATHS.has(url.pathname) || url.pathname.startsWith("/_bindings/");
+/**
+ * True for old-host requests that are served in place instead of redirected:
+ * the Stripe webhook, internal bindings, and API calls from installed apps
+ * (anything that is not a plain GET/HEAD, or that carries a Bearer token).
+ * Death Terminal's `--nous` mode calls https://nous.youneek.dev with a Bearer
+ * session and does not follow redirects; sessions are not tied to a host, so
+ * those calls keep working on the old host.
+ */
+export function servedOnLegacyHost(url: URL, request?: Request): boolean {
+  if (NO_REDIRECT_PATHS.has(url.pathname) || url.pathname.startsWith("/_bindings/")) return true;
+  if (!request) return false;
+  if (request.method !== "GET" && request.method !== "HEAD") return true;
+  return /^Bearer\s+\S/i.test(request.headers.get("Authorization") || "");
 }
 
 export function legacyRedirect(request: Request): Response | null {
   const url = new URL(request.url);
   const target = legacyTarget(url);
-  if (!target || servedOnLegacyHost(url)) return null;
-  // 301 for GET/HEAD; 308 keeps the method and body for API calls.
-  const status = request.method === "GET" || request.method === "HEAD" ? 301 : 308;
+  if (!target || servedOnLegacyHost(url, request)) return null;
   return new Response(null, {
-    status,
+    status: 301,
     // no-store: a browser that cached this redirect would skip the signed-in
     // hand-off on a later visit.
     headers: { Location: movedUrl(url, target).toString(), "Cache-Control": "no-store" },
