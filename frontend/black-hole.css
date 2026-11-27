@@ -1,140 +1,97 @@
-/* The black hole is alive: it always moves, even when Nous is idle.
-   - Idle: the accretion disk swirls slowly and the glow breathes.
-   - Thinking: the swirl speeds up.  Talking: it pulses (see styles.css / app.js).
-   - Reduce Motion: no spinning, but the glow still breathes so it never looks dead. */
+/* One black hole: the O in the Nous wordmark.
+   The outer ring and the letters stay still. Only the accretion
+   around the hole's center slowly turns. Thinking speeds that turn.
+   Reduce Motion: everything stays still. */
 
-.bh {
-  --bh-size: 104px;
+.nous-wordmark .nous-o-wrap {
   position: relative;
-  display: inline-block;
-  width: var(--bh-size);
+  display: block;
+  height: 1.148em;
   aspect-ratio: 287 / 241;
+  width: auto;
+  margin: 0 0.01em 0 -0.01em;
   flex: none;
   isolation: isolate;
-  transform: translateZ(0);
+  transform-origin: 50% 50%;
 }
-.bh::before {
-  /* the glow behind the disk */
-  content: "";
-  position: absolute;
-  inset: -22%;
-  z-index: 0;
-  border-radius: 50%;
-  background:
-    radial-gradient(circle, rgba(255, 150, 40, 0.42) 0%, rgba(150, 90, 255, 0.22) 38%, rgba(0, 0, 0, 0) 68%);
-  animation: bh-breathe 5.5s ease-in-out infinite;
-}
-.bh::after {
-  /* the hole itself: pure black, sits above the glow and under the disk */
-  content: "";
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  width: 54%;
-  height: 54%;
-  z-index: 1;
-  transform: translate(-50%, -50%);
-  border-radius: 50%;
-  background: #000;
-  box-shadow: 0 0 14px 4px rgba(0, 0, 0, 0.9);
-}
-.bh .bh-disk {
+
+.nous-wordmark .nous-o-wrap .nous-o {
   position: absolute;
   inset: 0;
-  z-index: 2;
-  width: 100%;
   height: 100%;
+  width: 100%;
+  margin: 0;
   display: block;
+}
+
+/* Soft halo behind the O; no motion, so the letterform never warps. */
+.nous-wordmark .nous-o-wrap::before {
+  content: "";
+  position: absolute;
+  inset: -18%;
+  z-index: 0;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle,
+    rgba(255, 150, 40, 0.22) 0%,
+    rgba(150, 90, 255, 0.1) 42%,
+    rgba(0, 0, 0, 0) 70%
+  );
+  pointer-events: none;
+}
+
+.nous-wordmark .nous-o-ring {
+  z-index: 1;
+}
+
+.nous-wordmark .nous-o-core {
+  z-index: 2;
   transform-origin: 50% 50%;
-  animation: bh-spin 26s linear infinite;
-}
-.bh .bh-disk-2 {
-  z-index: 3;
-  opacity: 0.55;
-  mix-blend-mode: screen;
-  filter: hue-rotate(-24deg) saturate(1.2);
-  transform: scale(1.07) rotate(40deg);
-  animation: bh-spin-back 41s linear infinite;
-}
-
-.landing-hero .bh {
-  --bh-size: 128px;
-  margin: 0 auto 6px;
-}
-.empty-greeting .bh {
-  --bh-size: 104px;
-  margin-bottom: 4px;
-}
-
-/* The O and S in the wordmark move too. */
-.nous-wordmark .nous-o {
-  transform-origin: 50% 50%;
-  animation: bh-spin 30s linear infinite;
-}
-.nous-wordmark .nous-s {
-  animation: bh-shimmer 7s ease-in-out infinite;
+  pointer-events: none;
+  /* Closest-side is half the O's height. The hole's inner rim is ~43% of
+     that, the bright mid-ring ~70%, and the outer wisps begin ~86%. Only
+     the inner swirl is visible on this layer, so the O's outline stays put. */
+  -webkit-mask-image: radial-gradient(
+    circle closest-side at 50% 50%,
+    transparent 0 42%,
+    #000 50%,
+    #000 64%,
+    transparent 76%
+  );
+  mask-image: radial-gradient(
+    circle closest-side at 50% 50%,
+    transparent 0 42%,
+    #000 50%,
+    #000 64%,
+    transparent 76%
+  );
 }
 
-/* Thinking: faster swirl. Talking: no spin, the pulse takes over. */
-body.nous-thinking .bh .bh-disk,
-body.nous-thinking .nous-wordmark .nous-o {
-  animation-duration: 9s;
-}
-body.nous-thinking .bh .bh-disk-2 {
-  animation-duration: 14s;
-}
-body.nous-talking .nous-wordmark .nous-o {
-  animation: none;
-}
-body.nous-talking .bh {
-  transform: scale(var(--nous-pulse, 1.07));
-  transition: transform 80ms linear;
-}
-body.nous-talking.nous-talk-pulse .bh {
-  animation: nous-pulse 0.85s ease-in-out infinite;
+@media (prefers-reduced-motion: no-preference) {
+  .nous-wordmark .nous-o-core {
+    animation: bh-core-spin 28s linear infinite;
+  }
+  body.nous-thinking .nous-wordmark .nous-o-core {
+    animation-duration: 9s;
+  }
 }
 
-@keyframes bh-spin {
+@keyframes bh-core-spin {
   to { transform: rotate(360deg); }
 }
-@keyframes bh-spin-back {
-  from { transform: scale(1.07) rotate(40deg); }
-  to { transform: scale(1.07) rotate(-320deg); }
+
+/* The app greeting uses the same single wordmark, a bit smaller than the landing hero. */
+.empty-greeting {
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
 }
-@keyframes bh-breathe {
-  0%, 100% { opacity: 0.55; transform: scale(0.94); }
-  50% { opacity: 1; transform: scale(1.06); }
-}
-@keyframes bh-shimmer {
-  0%, 100% { filter: brightness(1) hue-rotate(0deg); }
-  50% { filter: brightness(1.28) hue-rotate(-16deg); }
-}
-@keyframes bh-glow {
-  0%, 100% { filter: brightness(0.95); }
-  50% { filter: brightness(1.25); }
+.greeting-wordmark {
+  font-size: clamp(40px, 9vw, 72px);
 }
 
 @media (prefers-reduced-motion: reduce) {
-  /* No spinning, but a calm glow so it still feels alive. */
-  .bh .bh-disk,
-  .bh .bh-disk-2 {
-    animation: none;
-  }
-  .bh .bh-disk-2 {
-    transform: scale(1.07) rotate(40deg);
-  }
-  .bh::before {
-    animation-duration: 8s;
-  }
-  .nous-wordmark .nous-o {
-    animation: bh-glow 7s ease-in-out infinite;
-  }
-  .nous-wordmark .nous-s {
-    animation-duration: 10s;
-  }
-  body.nous-thinking .bh .bh-disk,
-  body.nous-thinking .bh .bh-disk-2,
-  body.nous-thinking .nous-wordmark .nous-o {
+  .nous-wordmark .nous-o-core {
     animation: none;
   }
 }

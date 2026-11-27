@@ -2351,30 +2351,20 @@ body:not(.has-chat) #chat-log {
   text-align: left;
 }
 
-/* Black hole O: still when idle; slow swirl while thinking; pulse while talking. */
-.nous-wordmark .nous-o,
-.brand-mark {
+/* Black hole O: the outer ring stays still. Only the center (see black-hole.css)
+   turns. Talking pulses the whole O, never the S. */
+.nous-wordmark .nous-o-wrap {
   transform-origin: 50% 50%;
 }
 @media (prefers-reduced-motion: no-preference) {
-  body.nous-thinking .nous-wordmark .nous-o,
-  body.nous-thinking .brand-mark {
-    animation: nous-swirl 10s linear infinite;
-    will-change: transform;
-  }
-  body.nous-talking .nous-wordmark .nous-o,
-  body.nous-talking .brand-mark {
+  body.nous-talking .nous-wordmark .nous-o-wrap {
     transform: scale(var(--nous-pulse, 1.07));
     transition: transform 80ms linear;
     will-change: transform;
   }
-  body.nous-talking.nous-talk-pulse .nous-wordmark .nous-o,
-  body.nous-talking.nous-talk-pulse .brand-mark {
+  body.nous-talking.nous-talk-pulse .nous-wordmark .nous-o-wrap {
     animation: nous-pulse 0.85s ease-in-out infinite;
   }
-}
-@keyframes nous-swirl {
-  to { transform: rotate(360deg); }
 }
 @keyframes nous-pulse {
   50% { transform: scale(1.1); }
