@@ -6,12 +6,18 @@
 
   const FILE_MAX_BYTES = 5 * 1024 * 1024;
   const IMAGE_MARKER = /\[\[image:(img_[a-f0-9]{20})\]\]/g;
+  const REMINDER_MARKER = /\[\[reminder:(rem_[a-f0-9]{20})\]\]/g;
+  const POLL_MS = 60000;
   const pending = { files: [] };
 
   /* ------------------------------------------------------------- replies */
 
   function stripMarkers(text) {
-    return String(text || "").replace(IMAGE_MARKER, "").replace(/[ \t]+\n/g, "\n").trim();
+    return String(text || "")
+      .replace(IMAGE_MARKER, "")
+      .replace(REMINDER_MARKER, "")
+      .replace(/[ \t]+\n/g, "\n")
+      .trim();
   }
 
   function addGeneratedImage(bubble, id) {
@@ -45,13 +51,15 @@
     const bubble = message.querySelector(".bubble");
     if (!bubble) return;
     const ids = [...raw.matchAll(IMAGE_MARKER)].map((match) => match[1]);
-    if (ids.length) {
+    const reminder = /\[\[reminder:rem_[a-f0-9]{20}\]\]/.test(raw);
+    if (ids.length || reminder) {
       const clean = stripMarkers(raw);
       const host = bubble.querySelector(".chart-host");
       bubble.textContent = clean;
       if (host) bubble.append(host);
       message.dataset.speech = clean;
       for (const id of ids) addGeneratedImage(bubble, id);
+      if (reminder) offerNotifications(message);
     }
     for (const hook of decorators) {
       try {
@@ -157,12 +165,96 @@
     return pending.files.length > 0;
   }
 
+  function timeZone() {
+    try {
+      return Intl.DateTimeFormat().resolvedOptions().timeZone || "";
+    } catch {
+      return "";
+    }
+  }
+
   /** Extra fields for the next /agent/chat call; clears the attachment. */
   function takeChatExtras() {
-    if (!pending.files.length) return {};
-    const extras = { file_ids: pending.files.map((file) => file.id) };
+    const extras = {};
+    const tz = timeZone();
+    if (tz) extras.tz = tz;
+    if (!pending.files.length) return extras;
+    extras.file_ids = pending.files.map((file) => file.id);
     clearFiles();
     return extras;
+  }
+
+  /* ----------------------------------------------------------- reminders */
+
+  function offerNotifications(message) {
+    if (!("Notification" in window) || Notification.permission !== "default") return;
+    const actions = message.querySelector(".message-actions");
+    if (!actions || actions.querySelector(".notify-btn")) return;
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "btn secondary btn-small notify-btn";
+    btn.textContent = "🔔 Also notify me on this device";
+    btn.addEventListener("click", async () => {
+      try {
+        await Notification.requestPermission();
+      } catch {
+        // ignore
+      }
+      btn.remove();
+    });
+    actions.append(btn);
+  }
+
+  let polling = false;
+  let pollStopped = false;
+
+  async function pollReminders() {
+    if (polling || pollStopped || document.visibilityState === "hidden" && !("Notification" in window)) return;
+    polling = true;
+    try {
+      const response = await fetch("/agent/reminders/due", { credentials: "same-origin", headers: { Accept: "application/json" } });
+      if (response.status === 401 || response.status === 404) return;
+      if (!response.ok) return;
+      const data = await response.json();
+      const deliveries = Array.isArray(data.deliveries) ? data.deliveries : [];
+      if (!deliveries.length) return;
+      for (const item of deliveries) {
+        const text = String(item.text || "");
+        if (typeof window.addReply === "function") window.addReply(text);
+        if ("Notification" in window && Notification.permission === "granted" && document.visibilityState === "hidden") {
+          try {
+            new Notification("Nous", { body: text, icon: "/assets/brand/icon-192.png", tag: item.id });
+          } catch {
+            // Some browsers only allow notifications from a service worker.
+          }
+        }
+      }
+      if (typeof window.syncHasChatClass === "function") window.syncHasChatClass();
+      await fetch("/agent/reminders/ack", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids: deliveries.map((item) => item.id) }),
+      });
+    } catch {
+      // Try again next minute.
+    } finally {
+      polling = false;
+    }
+  }
+
+  function startReminderPolling() {
+    setTimeout(pollReminders, 4000);
+    setInterval(pollReminders, POLL_MS);
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "visible") void pollReminders();
+    });
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", startReminderPolling);
+  } else {
+    startReminderPolling();
   }
 
   function isImageFile(file) {
