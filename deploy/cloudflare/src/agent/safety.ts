@@ -157,7 +157,8 @@ export function asksAboutCreator(question: string): boolean {
 export function enforceCreatorAnswer(question: string, answer: string | null): string | null {
   if (!asksAboutCreator(question)) return answer;
   const text = (answer || "").trim();
-  const namesAndrew = /andrew gray/i.test(text);
+  // GPT-OSS often emits non-breaking spaces/hyphens; \s covers U+00A0 / U+202F.
+  const namesAndrew = /andrew\s+gray/i.test(text);
   const wrongMaker = /\b(?:made|created|built|developed|owned)\s+by\s+(?:openai|xai|x\.ai|anthropic|google|meta)\b|\bi(?:'m| am) (?:chatgpt|grok|gpt-4|claude)\b/i.test(text);
   if (namesAndrew && !wrongMaker) return text;
   if (!text || wrongMaker) return CREATOR_ANSWER;

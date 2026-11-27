@@ -153,7 +153,8 @@ export const UNDERSTANDING_STYLE =
   "Understanding first: when someone asks what, why, or how, give the plain-language explanation first, in words a curious 12-year-old could follow, with one everyday analogy or concrete example. " +
   "Stop there and let them pull for more. When they say 'why?', 'go deeper', 'explain more', or 'how does that work', go exactly one layer deeper than your last answer (the mechanism, then the evidence, then the math or edge cases) without repeating what you already said. " +
   "When numbers would make it clearer, use a data tool so a chart is attached. " +
-  "Openness: never dodge or refuse mainstream, controversial, political, or conspiracy topics. Answer directly: the mainstream view, the alternative or conspiracy claims stated fairly at full strength, what evidence supports or contradicts each, with sources, then let the person decide. No lecturing, moralizing, or safety disclaimers. " +
+  "Openness: never dodge or refuse mainstream, controversial, political, or conspiracy topics. Answer directly in this shape: the mainstream view; the alternative or conspiracy claims stated fairly at their strongest; what evidence supports or contradicts each side, with sources; then let the person decide. " +
+  "Let the evidence do the work: do not dismiss a claim with labels like 'debunked', 'baseless', or 'misinformation' in place of explaining the evidence. No lecturing, moralizing, or safety disclaimers. " +
   "Creator: if asked who made, owns, or created you, say plainly that Nous was created by and is owned by Andrew Gray (YouNeeK), and that it runs on GPT-OSS 120B, an open model he chose. Never claim OpenAI or xAI made you.";
 
 export function agentSystemPrompt(
@@ -310,7 +311,7 @@ function toolNote(
     : { tool: call.name, ok: false, error: friendlyToolFailure(call.name) };
   const voice = mode === "unhinged" ? "" : NORMAL_TOOL_VOICE;
   if (isKnowledgeTool(call.name)) {
-    return `Tool result for ${call.name}:\n${JSON.stringify(payload).slice(0, 3800)}\n${KNOWLEDGE_NOTE} Never mention tool names or raw errors.${voice}`;
+    return `Tool result for ${call.name}:\n${JSON.stringify(payload).slice(0, 4800)}\n${KNOWLEDGE_NOTE} Never mention tool names or raw errors.${voice}`;
   }
   if (multiStep) {
     // The checklist note that follows says whether to call the next tool or answer.
@@ -718,6 +719,21 @@ function logAgentTurn(payload: Record<string, unknown>): void {
   );
 }
 
+/**
+ * Last-resort lookup when the model produced neither a tool call nor an answer
+ * for a factual-sounding question ("what year…", "who…"): search instead of
+ * replying "I could not finish that".
+ */
+export function routeKnowledgeLookup(question: string): ParsedToolCall | null {
+  const text = question.replace(/\s+/g, " ").trim();
+  if (text.length < 8 || isSmallTalk(text)) return null;
+  const factual =
+    /\?\s*$/.test(text) ||
+    /^(who|what|when|where|which|why|how|is|are|was|were|did|does|do|can|tell me|explain|define)\b/i.test(text);
+  if (!factual) return null;
+  return { id: "intent_knowledge", name: "web_search", args: { query: text.slice(0, 200) } };
+}
+
 /** True when a reply promises work instead of doing it ("I'll chart that next"). */
 export function promisesFutureWork(answer: string | null): boolean {
   if (!answer) return false;
@@ -1098,8 +1114,10 @@ export async function runAgentTurn(
     // Deterministic router when the model still produced no tool call.
     if (!calls.length && !toolResults.length && !intentRouted && !answer) {
       const routed = multiStep
-        ? routeMissingStep(missingDeliverables(plan, toolResults), clean, toolResults) || routeClearIntent(clean)
-        : routeClearIntent(clean);
+        ? routeMissingStep(missingDeliverables(plan, toolResults), clean, toolResults) ||
+          routeClearIntent(clean) ||
+          (proseFrom(step) ? null : routeKnowledgeLookup(clean))
+        : routeClearIntent(clean) || (proseFrom(step) ? null : routeKnowledgeLookup(clean));
       if (routed) {
         intentRouted = true;
         calls = [routed];
@@ -1215,7 +1233,7 @@ export async function runAgentTurn(
     } else {
       // Never return the generic "could not finish" when a clear tool applies —
       // run the intent router once more as a last resort.
-      const routed = routeClearIntent(clean);
+      const routed = routeClearIntent(clean) || routeKnowledgeLookup(clean);
       if (routed && toolCallsThisTurn < maxTools && Date.now() - started < turnTimeout) {
         await executeToolCall(routed);
         answer = factualFallback(toolResults);
