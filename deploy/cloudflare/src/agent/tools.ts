@@ -552,7 +552,7 @@ export const TOOL_DEFINITIONS = [
     type: "function" as const,
     name: "simulate_world",
     description:
-      "Phase 5 world model / simulator. Fits a small learned latent model (PCA state + ridge dynamics + K-Means regime noise; weather also gets an annual seasonal baseline) to a series and rolls a baseline plus up to 3 scenarios forward many steps with p10/p50/p90 ranges and an honest backtest vs persistence. Use for multi-step 'what happens over the next N days if…' questions: a one-off shock, a sustained drift per step, a volatility change, or forcing a value at a step. Pass series (starter id) or values (24+ numbers, e.g. from a chart the user attached). Weather numbers, event values, and results are °F — quote them as °F and never convert.",
+      "Phase 5 world model / simulator. Fits a small learned latent model (PCA state + ridge dynamics + K-Means regime noise; weather also gets an annual seasonal baseline) to a series and rolls a baseline plus up to 3 scenarios forward many steps with p10/p50/p90 ranges (calibrated to cover ~80% in backtests) and an honest backtest vs persistence. Use for multi-step 'what happens over the next N days if…' questions: a one-off shock, a sustained drift per step, a volatility change, or forcing a value at a step. Pass series (starter id) or values (24+ numbers, e.g. from a chart the user attached). Weather numbers, event values, and results are °F — quote them as °F and never convert.",
     parameters: {
       type: "object",
       properties: {
