@@ -153,10 +153,33 @@ export function asksAboutCreator(question: string): boolean {
   );
 }
 
+export const CREATOR_TITLE = "Andrew Gray, founder, owner and CEO of YouNeeK";
+
+/**
+ * However the model words it ("founder and CEO", "Andrew Gray of YouNeeK", "Andrew Gray
+ * (YouNeeK)"), Andrew's title is always: founder, owner and CEO of YouNeeK.
+ */
+export function normalizeCreatorTitle(text: string): string {
+  return text
+    .replace(
+      /Andrew\s+Gray[,\s]+(?:the\s+)?(?:(?:co-?founder|founder|owner|ceo)(?:\s*,\s*|\s+and\s+|\s*&\s*|\s+)?)+\s*(?:of|at)\s+YouNeeK/gi,
+      CREATOR_TITLE,
+    )
+    .replace(/Andrew\s+Gray\s+(?:of|from|at)\s+YouNeeK/gi, CREATOR_TITLE)
+    .replace(/Andrew\s+Gray\s*\(\s*YouNeeK\s*\)/gi, CREATOR_TITLE);
+}
+
 /** Make sure a creator answer names Andrew Gray and never credits OpenAI/xAI as the maker. */
 export function enforceCreatorAnswer(question: string, answer: string | null): string | null {
+  if (answer) answer = normalizeCreatorTitle(answer);
   if (!asksAboutCreator(question)) return answer;
-  const text = (answer || "").trim();
+  let text = (answer || "").trim();
+  if (/andrew\s+gray,\s+founder,\s+owner\s+and\s+ceo\s+of\s+youneek(?!\s*\()/i.test(text) && !/unique/i.test(text)) {
+    text = text.replace(
+      /(Andrew\s+Gray,\s+founder,\s+owner\s+and\s+CEO\s+of\s+YouNeeK)(?!\s*\()/i,
+      '$1 (pronounced "unique")',
+    );
+  }
   // GPT-OSS often emits non-breaking spaces/hyphens; \s covers U+00A0 / U+202F.
   const namesAndrew = /andrew\s+gray/i.test(text);
   const wrongMaker = /\b(?:made|created|built|developed|owned)\s+by\s+(?:openai|xai|x\.ai|anthropic|google|meta)\b|\bi(?:'m| am) (?:chatgpt|grok|gpt-4|claude)\b/i.test(text);

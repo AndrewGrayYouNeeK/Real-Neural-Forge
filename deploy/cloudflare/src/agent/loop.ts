@@ -831,6 +831,23 @@ const NO_MORE_TOOLS_NOTE =
 const FINISH_THE_JOB_NOTE =
   "You stopped before finishing the user's request. Do not answer yet and do not promise to do it later. Reply with ONLY the tool JSON for the next missing step now.";
 
+const NO_TOOL_NEEDED_NOTE =
+  "That question does not need live data or a tool. Answer it directly from what you know, in your usual funny voice. Do not call a tool.";
+
+/** Live space/moon/solar data only when the question is about those things. */
+const SPACE_DATA_ASK =
+  /\b(moon|lunar|space|asteroids?|near-?earth|neos?|solar|sun|flares?|geomagnetic|aurora|kp|cosmic|meteors?|comets?|satellites?|iss|orbit\w*)\b/i;
+
+export function toolFitsQuestion(call: ParsedToolCall, question: string): boolean {
+  const args = (call.args || {}) as Record<string, unknown>;
+  const series = String(args.series ?? args.model_id ?? args.starter ?? "").toLowerCase();
+  if (series === "near-earth" && !/\b(near-?earth|asteroids?|neos?)\b/i.test(question)) return false;
+  if (call.name !== "fetch_live_data") return true;
+  const kind = String(args.kind ?? "").toLowerCase();
+  if (kind === "moon" || kind === "space" || kind === "solar") return SPACE_DATA_ASK.test(question);
+  return true;
+}
+
 const LONG_ANSWER_NOTE =
   "Your last reply ran out of room and was cut off. Write the whole answer now, finished, in your usual funny voice. Do not call a tool.";
 
@@ -870,6 +887,7 @@ export async function runAgentTurn(
   let voiceResting = false;
   let strictRetryUsed = false;
   let longAnswerUsed = false;
+  let droppedTools = 0;
   let truncatedProse: string | null = null;
   let intentRouted = false;
   let lastStepTruncated = false;
@@ -1089,6 +1107,18 @@ export async function runAgentTurn(
     }
 
     let calls = step.calls;
+    // General asks (lists, writing, explanations) must never trigger a space/moon/solar
+    // data dump. Drop a live-data call the question did not ask for and answer directly.
+    const fitting = calls.filter((item) => toolFitsQuestion(item, clean));
+    if (fitting.length < calls.length) {
+      calls = fitting;
+      if (!calls.length && droppedTools < 2) {
+        droppedTools += 1;
+        pendingExtra = NO_TOOL_NEEDED_NOTE;
+        answer = null;
+        continue;
+      }
+    }
 
     // One stricter retry when nothing parsed but the model clearly tried a tool,
     // or when the reply is empty/degenerate and a clear intent applies.

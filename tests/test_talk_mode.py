@@ -104,7 +104,9 @@ def test_talk_mode_defaults_on_for_phones_and_stays_manual_on_desktop() -> None:
     assert 'isPhoneSurface() && talkPreference() !== "off"' in section
     assert "function armTalkForPhone" in section
     assert "function startTalkFromGesture" in section
-    assert "function talkGestureRequired" in section
+    assert "function talkGestureRequired" not in section
+    assert "event.isTrusted !== true" in section
+    assert "userActivation" not in section
     assert "function disarmTalk" in section
     assert "armTalkForPhone();" in source
     assert 'id="talk-start-overlay"' in html
@@ -114,7 +116,7 @@ def test_talk_mode_defaults_on_for_phones_and_stays_manual_on_desktop() -> None:
     assert 'id="talk-status"' in html
     assert "Talk is on. Tap anywhere to start listening." in section
     assert "pointerdown" in section
-    assert 'input.addEventListener("focus", onTalkAutoStartFocus)' in section
+    assert "onTalkAutoStartFocus" not in section
     assert 'data-state="armed"' in css or '.mode-pill[data-state="armed"]' in css
     # Desktop keeps the manual Talk click path and does not auto-arm.
     assert "function onTalkClick" in section

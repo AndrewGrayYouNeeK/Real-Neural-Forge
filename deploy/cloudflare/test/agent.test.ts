@@ -27,6 +27,7 @@ import {
   NORMAL_TOOL_VOICE,
   runAgentTurn,
   trimDanglingFragment,
+  toolFitsQuestion,
 } from "../src/agent/loop";
 import {
   collectToolCalls,
@@ -1127,6 +1128,32 @@ describe("agent turn caps and fallback", () => {
     const sent = JSON.parse(seen[0]) as { input: Array<{ role: string; content: string }> };
     const assistant = sent.input.filter((item) => item.role === "assistant").map((item) => item.content);
     expect(assistant).toEqual(["I'm Nous, the Nous bot."]);
+  });
+
+  it("does not dump space data for a general ask like listing planets", async () => {
+    expect(toolFitsQuestion({ id: "1", name: "fetch_live_data", args: { kind: "space" } }, "List three planets, each on its own line")).toBe(false);
+    expect(toolFitsQuestion({ id: "1", name: "fetch_live_data", args: { kind: "space" } }, "any asteroids near earth today?")).toBe(true);
+    expect(toolFitsQuestion({ id: "1", name: "forecast", args: { series: "near-earth" } }, "write me a poem")).toBe(false);
+    expect(toolFitsQuestion({ id: "1", name: "fetch_live_data", args: { kind: "weather" } }, "weather in Paris")).toBe(true);
+    const db = new MemoryD1();
+    let calls = 0;
+    const ai = {
+      async run() {
+        calls += 1;
+        if (calls === 1) return { response: '{"tool":"fetch_live_data","args":{"kind":"space"}}' };
+        return { response: "Mercury\nVenus\nMars" };
+      },
+    };
+    const result = await runAgentTurn("List three planets, each on its own line", "normal", [], {
+      ai,
+      db,
+      ip: "6.6.6.6",
+      owner: false,
+      toolContext: toolContext(),
+      models: { primary: PRIMARY_MODEL, fallback: FALLBACK_MODEL },
+    });
+    expect(result.toolsUsed).toEqual([]);
+    expect(result.text).toBe("Mercury\nVenus\nMars");
   });
 
   it("asks again with the full answer budget when a long answer was cut off", async () => {
