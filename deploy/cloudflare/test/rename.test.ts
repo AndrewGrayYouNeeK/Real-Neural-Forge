@@ -77,6 +77,7 @@ describe("signed-in hand-off from an old host", () => {
     expect(html).toContain('action="https://henad.youneek.dev/auth/handoff"');
     const code = /name="code" value="([^"]+)"/.exec(html)![1];
     expect(html).toContain('name="next" value="/app?tab=1"');
+    expect(html).toContain('<footer class="site-legal">YouNeeK™ · © 2026 Andrew Gray</footer>');
 
     const post = (origin: string, codeValue = code) =>
       new Request("https://henad.youneek.dev/auth/handoff", {
@@ -107,6 +108,7 @@ describe("signed-in hand-off from an old host", () => {
     expect(body).toContain('"neuralForgeTalkPref":"on"');
     expect(body).not.toContain("evil");
     expect(body).toContain('"next":"/app?tab=1"');
+    expect(body).toContain("YouNeeK™ · © 2026 Andrew Gray");
 
     const newToken = /^nf_session=([^;]+);/.exec(cookie)![1];
     const rows = db.rows(

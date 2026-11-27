@@ -58,7 +58,7 @@ function page(body: string, nonce: string, formAction: string | null, status = 2
     formAction ? `form-action ${formAction}` : "form-action 'none'",
     "frame-ancestors 'none'",
   ].join("; ");
-  const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="referrer" content="no-referrer"><title>Henad</title><style>body{background:#000;color:#ddd;font-family:-apple-system,Segoe UI,Roboto,sans-serif;display:flex;min-height:100vh;align-items:center;justify-content:center;margin:0}a{color:#f5a54a}</style></head><body>${body}</body></html>`;
+  const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="referrer" content="no-referrer"><title>Henad</title><style>body{background:#000;color:#ddd;font-family:-apple-system,Segoe UI,Roboto,sans-serif;display:flex;flex-direction:column;min-height:100vh;min-height:100dvh;align-items:center;justify-content:center;margin:0;padding:0 16px;box-sizing:border-box;text-align:center}a{color:#f5a54a}.site-legal{position:fixed;left:0;right:0;bottom:max(14px,env(safe-area-inset-bottom));margin:0;color:#9aa3b2;opacity:.8;font-size:12px;letter-spacing:.02em}</style></head><body>${body}<footer class="site-legal">YouNeeK™ · © 2026 Andrew Gray</footer></body></html>`;
   return new Response(html, {
     status,
     headers: {
