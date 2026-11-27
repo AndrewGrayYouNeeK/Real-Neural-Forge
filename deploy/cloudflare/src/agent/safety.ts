@@ -141,7 +141,7 @@ export async function checkOutput(ai: AiLike, question: string, answer: string):
 // Creator honesty (default mode never claims another maker).
 
 export const CREATOR_ANSWER =
-  "Nous was created by, and is owned by, Andrew Gray, founder, owner and CEO of YouNeeK (pronounced \"unique\"). It runs on GPT-OSS 120B, an open model Andrew chose; OpenAI released that model, but OpenAI and xAI didn't make Nous.";
+  "Nous was created by and is owned by Andrew Gray, founder, owner and CEO of YouNeeK (pronounced \"unique\"). It runs on GPT-OSS 120B, an open model Andrew chose; OpenAI released that model, but OpenAI and xAI didn't make Nous.";
 
 export function asksAboutCreator(question: string): boolean {
   const q = question.toLowerCase();
@@ -183,7 +183,14 @@ export function enforceCreatorAnswer(question: string, answer: string | null): s
   // GPT-OSS often emits non-breaking spaces/hyphens; \s covers U+00A0 / U+202F.
   const namesAndrew = /andrew\s+gray/i.test(text);
   const wrongMaker = /\b(?:made|created|built|developed|owned)\s+by\s+(?:openai|xai|x\.ai|anthropic|google|meta)\b|\bi(?:'m| am) (?:chatgpt|grok|gpt-4|claude)\b/i.test(text);
-  if (namesAndrew && !wrongMaker) return text;
-  if (!text || wrongMaker) return CREATOR_ANSWER;
+  // Smart quotes/dashes and nbsp are folded before checking the exact canonical phrase.
+  const folded = text
+    .replace(/[\u201c\u201d]/g, '"')
+    .replace(/[\u2018\u2019]/g, "'")
+    .replace(/[\u00a0\u202f]/g, " ");
+  const canonical = folded.includes(`created by and is owned by ${CREATOR_TITLE} (pronounced "unique")`);
+  if (namesAndrew && !wrongMaker && canonical) return text;
+  // Named Andrew but not in the canonical wording (e.g. "I was built and is owned by"): use it.
+  if (!text || wrongMaker || namesAndrew) return CREATOR_ANSWER;
   return `${CREATOR_ANSWER} ${text}`;
 }
