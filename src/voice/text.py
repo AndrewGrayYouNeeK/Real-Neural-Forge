@@ -11,7 +11,7 @@ from __future__ import annotations
 import re
 from calendar import month_name
 
-NORMALIZER_VERSION = "2"
+NORMALIZER_VERSION = "3"
 _CHUNK_TARGET = 650
 _CHUNK_LIMIT = 800
 
@@ -33,6 +33,9 @@ _UNIT = re.compile(
     r"(km/h|mph|km|cm|mm|kg|lb|ft|mi|AU|GB|MB|KB)\b",
     flags=re.IGNORECASE,
 )
+# "Nous" is said "noose" (rhymes with moose). The spoken text spells it that way
+# for every voice; the words on screen are never touched.
+_NOUS = re.compile(r"\bnous\b", flags=re.IGNORECASE)
 _TICKER = re.compile(r"\b[A-Z]{2,10}\b")
 _MARKDOWN = re.compile(r"[*_#~`|>]+")
 _SPACE = re.compile(r"\s+")
@@ -113,6 +116,7 @@ def speech_text(raw: str) -> str:
     text = _SCIENCE.sub(_science, text)
     text = _THOUSANDS.sub("", text)
     text = _UNIT.sub(_unit, text)
+    text = _NOUS.sub("Noose", text)
     text = _TICKER.sub(_ticker, text)
     text = _MARKDOWN.sub(" ", text)
     return _SPACE.sub(" ", text).strip()

@@ -239,7 +239,7 @@ def test_the_second_voice_shares_the_quota_and_gq_stays_the_default(
         {"key": "gq", "name": "GQ"},
         {"key": "female", "name": "Ivy"},
     ]
-    text = "Hello from Nous."
+    text = "Hello from the other side."
     default = client.post("/voice/speak", json={"text": text})
     gq = client.post("/voice/speak", json={"text": text, "voice": "gq"})
     assert default.status_code == gq.status_code == 200
