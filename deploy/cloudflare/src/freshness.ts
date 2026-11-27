@@ -14,7 +14,9 @@ export function needsRevalidation(method: string, pathname: string, response: Re
   if (response.status !== 200 && response.status !== 304) return false;
   if (response.headers.get("Cache-Control")) return false;
   const type = response.headers.get("Content-Type") || "";
-  return FRESH_TYPES.test(type) || /\.webmanifest$/.test(pathname);
+  // Everything the page itself ships under /assets (the container labels .webp as a
+  // generic download) plus the other page-level types.
+  return pathname.startsWith("/assets/") || FRESH_TYPES.test(type) || /\.webmanifest$/.test(pathname);
 }
 
 export function withFreshness(request: Request, response: Response): Response {
@@ -22,5 +24,7 @@ export function withFreshness(request: Request, response: Response): Response {
   if (!needsRevalidation(request.method, pathname, response)) return response;
   const headers = new Headers(response.headers);
   headers.set("Cache-Control", "no-cache");
+  const type = headers.get("Content-Type") || "";
+  if (/\.webp$/.test(pathname) && (!type || /octet-stream/i.test(type))) headers.set("Content-Type", "image/webp");
   return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
 }
