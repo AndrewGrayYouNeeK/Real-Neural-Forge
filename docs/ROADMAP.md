@@ -73,12 +73,14 @@ Interactive multi-step simulator for rolling scenarios forward.
    replies. No new Workers AI calls, no D1 migration, no container change.
    Landing **Live**.
 5. **Self-supervised world model (JEPA)** — the JEPA item from the original
-   Phase 5 plan. `encoder: "auto"` on `/analysis/simulate` trains a small JEPA
-   encoder on the CPU (it predicts the EMA-target embedding of a future window,
-   with a variance/covariance anti-collapse penalty) and appends its bounded
-   features to the PCA state. It backtests PCA vs JEPA on the same rolling
-   holdouts and uses JEPA only when it wins by 2% or more, which is the "evaluate
-   transfer before any production swap" rule applied per series. Caps: one fit at
-   a time and 600 fits/day, with no Workers AI, D1, or container change. Panel
-   **JEPA world model** and agent `simulate_world` `encoder: "auto"`. Landing
-   **Live**.
+   Phase 5 plan. `encoder: "auto"` on `/analysis/simulate` trains a 3-seed
+   ensemble of small JEPA encoders on the CPU (each predicts the EMA-target
+   embedding of a future window, with a variance/covariance anti-collapse
+   penalty) and appends their bounded features to the PCA state. Fitting is
+   deterministic, so the pick doesn't flip between runs. JEPA is chosen only
+   when it beats PCA by 5% or more on older **validation** windows, and both
+   encoders are graded on separate, newer holdouts. 80% ranges are calibrated
+   with split conformal (graded leave-one-window-out). Caps: one training at a
+   time and 3,000 trainings/day, with no Workers AI, D1, or container change.
+   Panel **JEPA world model** and agent `simulate_world` `encoder: "auto"`.
+   Landing **Live**.
