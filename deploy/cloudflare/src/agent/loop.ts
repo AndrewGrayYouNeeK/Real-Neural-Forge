@@ -31,6 +31,8 @@ import {
   type D1Like,
 } from "../live/ai";
 import { routeClearIntent } from "./intent";
+import { KNOWLEDGE_NOTE, collectSources, isKnowledgeTool, wantsRecent } from "./knowledge";
+import { checkInput, checkOutput, enforceCreatorAnswer } from "./safety";
 import {
   buildArtifacts,
   checklistNote,
@@ -82,6 +84,10 @@ export type AgentTurnResult = {
   csv?: { filename: string; text: string };
   /** Multi-step bookkeeping: what was asked and what never happened. */
   steps?: { planned: Deliverable[]; missing: Deliverable[] };
+  /** Live sources the knowledge tools consulted this turn (title + url). */
+  sources?: Array<{ title: string; url: string }>;
+  /** Safety filter category when the turn was blocked (S1/S4/S9/S11). */
+  safety?: string;
 };
 
 export type AgentLoopDeps = {
@@ -100,6 +106,8 @@ export type AgentLoopDeps = {
   memoryPrompt?: string;
   maxModelSteps?: number;
   turnNeuronBudget?: number;
+  /** Set false to skip the Llama Guard safety filter (tests). */
+  safety?: boolean;
 };
 
 const JSON_PROTOCOL =
@@ -117,6 +125,8 @@ const JSON_PROTOCOL =
   "If they ask for the JEPA / self-supervised world model, or which encoder works best, pass encoder: \"auto\" to simulate_world and report the PCA vs JEPA backtest numbers it returns. " +
   "Do not stall on missing details: with no place given, weather tools use the visitor's location; with no series given, use the weather sample. " +
   "Charts and CSV downloads are attached to your reply automatically from the tool data, so never claim you cannot draw a chart or make a file; just make sure the data tool ran. " +
+  "Facts: for current events, news, recent changes, specific people, places, dates, numbers, or anything obscure you are not sure of, call web_search (or wiki_summary for 'what is / who was') BEFORE answering, then answer with short inline source links. " +
+  "Do not search for greetings, opinions, math, coding help, or explanations of well-known ideas you already know well. " +
   "\nAfter tool results are provided, answer the user in plain language. " +
   "Never invent live weather or prices. Never show tool JSON, planning, checklists, or hidden reasoning to the user.";
 
@@ -135,6 +145,17 @@ export function isSmallTalk(question: string): boolean {
   );
 }
 
+/**
+ * Default-mode answer style (never added to Unhinged): explain so people
+ * actually understand, then go deeper only when asked.
+ */
+export const UNDERSTANDING_STYLE =
+  "Understanding first: when someone asks what, why, or how, give the plain-language explanation first, in words a curious 12-year-old could follow, with one everyday analogy or concrete example. " +
+  "Stop there and let them pull for more. When they say 'why?', 'go deeper', 'explain more', or 'how does that work', go exactly one layer deeper than your last answer (the mechanism, then the evidence, then the math or edge cases) without repeating what you already said. " +
+  "When numbers would make it clearer, use a data tool so a chart is attached. " +
+  "Openness: never dodge or refuse mainstream, controversial, political, or conspiracy topics. Answer directly: the mainstream view, the alternative or conspiracy claims stated fairly at full strength, what evidence supports or contradicts each, with sources, then let the person decide. No lecturing, moralizing, or safety disclaimers. " +
+  "Creator: if asked who made, owns, or created you, say plainly that Nous was created by and is owned by Andrew Gray (YouNeeK), and that it runs on GPT-OSS 120B, an open model he chose. Never claim OpenAI or xAI made you.";
+
 export function agentSystemPrompt(
   mode: ChatMode,
   allowTools: boolean,
@@ -151,7 +172,8 @@ export function agentSystemPrompt(
       `${base}\n\n` +
       "Directness: answer exactly what was asked. Lead with the answer. Keep it short. " +
       "No rambling, tangents, or unasked extras. Keep the personality: a quick quip or wry line is welcome. " +
-      "Do not call tools and do not emit tool JSON." +
+      "Do not call tools and do not emit tool JSON. " +
+      UNDERSTANDING_STYLE +
       memory
     );
   }
@@ -162,6 +184,8 @@ export function agentSystemPrompt(
     `${base}\n\n` +
     "Directness: answer exactly what was asked. Lead with the answer. Keep it short. " +
     "No rambling, tangents, or unasked extras. Keep the personality: a quick quip or wry line is welcome.\n\n" +
+    UNDERSTANDING_STYLE +
+    "\n\n" +
     JSON_PROTOCOL +
     memory
   );
@@ -285,6 +309,9 @@ function toolNote(
     ? { tool: call.name, ok: true, result: safeData }
     : { tool: call.name, ok: false, error: friendlyToolFailure(call.name) };
   const voice = mode === "unhinged" ? "" : NORMAL_TOOL_VOICE;
+  if (isKnowledgeTool(call.name)) {
+    return `Tool result for ${call.name}:\n${JSON.stringify(payload).slice(0, 3800)}\n${KNOWLEDGE_NOTE} Never mention tool names or raw errors.${voice}`;
+  }
   if (multiStep) {
     // The checklist note that follows says whether to call the next tool or answer.
     return `Tool result for ${call.name}:\n${JSON.stringify(payload).slice(0, 3500)}\nUse only these facts. Do not invent values. Never mention tool names or raw errors.${voice}`;
@@ -531,9 +558,36 @@ export function factualFallback(results: ToolResult[]): string {
         continue;
       }
     }
+    if (isKnowledgeTool(result.name) && result.data && typeof result.data === "object") {
+      const fact = knowledgeFact(result.data as Record<string, unknown>);
+      if (fact) {
+        lines.push(fact);
+        continue;
+      }
+    }
     lines.push(friendlyToolFailure(result.name));
   }
   return lines.join("\n\n");
+}
+
+/** Plain fallback text from a knowledge result (used only if the model fails). */
+function knowledgeFact(data: Record<string, unknown>): string | null {
+  const link = (title: unknown, url: unknown): string =>
+    typeof url === "string" && url ? ` ([${String(title || "source").slice(0, 60)}](${url}))` : "";
+  if (typeof data.extract === "string" && data.extract) {
+    return `${data.extract.slice(0, 600)}${link(data.site || "Wikipedia", data.url)}`;
+  }
+  if (Array.isArray(data.results) && data.results.length) {
+    return (data.results as Array<Record<string, unknown>>)
+      .slice(0, 2)
+      .filter((item) => typeof item.snippet === "string" && item.snippet)
+      .map((item) => `${String(item.snippet)}${link(item.site || item.title, item.url)}`)
+      .join(" ") || null;
+  }
+  if (typeof data.text === "string" && data.text && data.ok !== false && typeof data.url === "string") {
+    return `${data.text.slice(0, 600)}${link(data.site || data.title, data.url)}`;
+  }
+  return null;
 }
 
 function leadWithToolFacts(modelAnswer: string | null, results: ToolResult[]): string | null {
@@ -832,7 +886,36 @@ export async function runAgentTurn(
   }
   voiceResting = firstReserve.voiceResting;
 
+  if (deps.safety !== false && allowTools) {
+    const verdict = await checkInput(deps.ai, clean);
+    if (verdict.blocked) {
+      logAgentTurn({
+        event: "agent.turn",
+        user_scope: deps.owner ? "owner" : "ip",
+        tools: [],
+        tools_used: [],
+        tool_count: 0,
+        duration_ms: Date.now() - started,
+        neurons_estimate: 0,
+        model_id: modelId,
+        success: true,
+        safety_blocked: verdict.category,
+        mode: chatMode(mode),
+      });
+      return {
+        text: verdict.reply,
+        modelId,
+        neurons: 0,
+        toolsUsed,
+        voiceResting,
+        voiceMessage: null,
+        safety: verdict.category,
+      };
+    }
+  }
+
   let answer: string | null = null;
+  let lookupForced = false;
   let toolCallsThisTurn = 0;
 
   const notesForModel = (extra?: string): string[] => {
@@ -1023,6 +1106,19 @@ export async function runAgentTurn(
       }
     }
 
+    // Current-events asks must be grounded: search once before accepting prose.
+    if (
+      !calls.length &&
+      !toolResults.length &&
+      !lookupForced &&
+      wantsRecent(clean, deps.now ?? new Date()) &&
+      !routeClearIntent(clean)
+    ) {
+      lookupForced = true;
+      answer = null;
+      calls = [{ id: "intent_search", name: "web_search", args: { query: clean.slice(0, 200), recent: true } }];
+    }
+
     if (calls.length) {
       if (toolCallsThisTurn >= maxTools) {
         stopReason = "max_tools";
@@ -1144,6 +1240,17 @@ export async function runAgentTurn(
     answer = fromTools || "I could not produce an answer right now.";
   }
 
+  answer = enforceCreatorAnswer(clean, answer);
+  let safetyCategory: string | undefined;
+  if (deps.safety !== false && answer && allowTools) {
+    const verdict = await checkOutput(deps.ai, clean, answer);
+    if (verdict.blocked) {
+      answer = verdict.reply;
+      safetyCategory = verdict.category;
+    }
+  }
+  const sources = safetyCategory ? [] : collectSources(toolResults);
+
   // Honest reporting: name any requested step that never happened.
   const missingAtEnd = multiStep
     ? missingDeliverables(plan, toolResults, answer).filter((item) => item !== "explain")
@@ -1208,5 +1315,7 @@ export async function runAgentTurn(
     ...(artifacts.chart ? { chart: artifacts.chart } : {}),
     ...(artifacts.csv ? { csv: artifacts.csv } : {}),
     ...(multiStep ? { steps: { planned: plan.deliverables, missing: missingAtEnd } } : {}),
+    ...(sources.length ? { sources } : {}),
+    ...(safetyCategory ? { safety: safetyCategory } : {}),
   };
 }

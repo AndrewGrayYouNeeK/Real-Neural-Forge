@@ -112,6 +112,7 @@ class SimulateRequest(BaseModel):
     seed: int = Field(default=0, ge=0, le=1_000_000)
     scenarios: list[SimScenario] = Field(default_factory=list, max_length=3)
     encoder: Literal["pca", "jepa", "auto"] = "pca"
+    calibrate: bool = True
 
 
 @router.post("/analysis/pca")
@@ -289,6 +290,7 @@ def run_simulation(body: SimulateRequest) -> dict[str, Any]:
                 seed=body.seed,
                 display_unit=body.display_unit,
                 encoder=body.encoder,
+                calibrate=body.calibrate,
             )
         except WorkspaceError as exc:
             raise HTTPException(status_code=exc.status, detail=exc.detail) from exc
@@ -306,6 +308,7 @@ def run_simulation(body: SimulateRequest) -> dict[str, Any]:
             unit=body.unit,
             dates=body.dates,
             encoder=body.encoder,
+            calibrate=body.calibrate,
         )
     except JepaBusyError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc

@@ -181,17 +181,38 @@ function makeButton(label, action) {
   return button;
 }
 
+const MARKDOWN_LINK = /\[([^\]\n]{1,120})\]\((https?:\/\/[^\s)]+)\)/g;
+
+/** Render text with [label](https://…) source links as safe anchors (no innerHTML). */
+function appendLinkedText(host, text) {
+  const value = String(text || "");
+  let last = 0;
+  for (const match of value.matchAll(MARKDOWN_LINK)) {
+    if (match.index > last) host.append(value.slice(last, match.index));
+    const anchor = document.createElement("a");
+    anchor.href = match[2];
+    anchor.textContent = match[1];
+    anchor.target = "_blank";
+    anchor.rel = "noopener noreferrer nofollow";
+    anchor.className = "source-link";
+    host.append(anchor);
+    last = match.index + match[0].length;
+  }
+  if (last < value.length) host.append(value.slice(last));
+}
+
 function addMessage(role, text) {
   const message = document.createElement("div");
   message.className = `message ${role}`;
 
   const bubble = document.createElement("div");
   bubble.className = "bubble";
-  bubble.textContent = text;
+  if (role === "assistant") appendLinkedText(bubble, text);
+  else bubble.textContent = text;
   message.append(bubble);
 
   if (role === "assistant") {
-    message.dataset.speech = text;
+    message.dataset.speech = String(text || "").replace(MARKDOWN_LINK, "$1");
     const actions = document.createElement("div");
     actions.className = "message-actions";
     const speak = document.createElement("button");
@@ -1325,7 +1346,7 @@ function chatHistoryPayload() {
         : null;
     if (!role) continue;
     const bubble = message.querySelector(".bubble");
-    const text = bubble ? bubble.textContent.trim() : "";
+    const text = bubble ? String(message.dataset.speech || bubble.textContent).trim() : "";
     if (!text || text === "One moment — checking…") continue;
     history.push({ role, content: text.slice(0, 500) });
   }
@@ -1414,6 +1435,7 @@ function agentReplyExtras(result) {
   if (result && result.chart && Array.isArray(result.chart.labels) && Array.isArray(result.chart.series)) {
     extras.chart = result.chart;
   }
+  if (result && Array.isArray(result.sources) && result.sources.length) extras.sources = result.sources;
   const csv = result && result.csv;
   if (csv && typeof csv.text === "string" && csv.text) {
     const filename = typeof csv.filename === "string" && csv.filename ? csv.filename : "neural-forge-data.csv";
@@ -1438,11 +1460,37 @@ async function answer(question) {
   return { ...factual, text: rewritten.text, toolsUsed: rewritten.toolsUsed };
 }
 
+const KNOWLEDGE_TOOLS = new Set(["web_search", "wiki_summary", "read_page"]);
+
+/** Tiny "Searched N sources" line; tap to see the links. */
+function showSources(message, sources) {
+  if (!message || !Array.isArray(sources) || !sources.length) return;
+  const bubble = message.querySelector(".bubble");
+  if (!bubble) return;
+  const details = document.createElement("details");
+  details.className = "sources-line";
+  const summary = document.createElement("summary");
+  summary.textContent = `Searched ${sources.length} source${sources.length === 1 ? "" : "s"}`;
+  details.append(summary);
+  for (const item of sources.slice(0, 8)) {
+    if (!item || typeof item.url !== "string" || !/^https?:\/\//.test(item.url)) continue;
+    const anchor = document.createElement("a");
+    anchor.href = item.url;
+    anchor.textContent = String(item.title || item.url).slice(0, 120);
+    anchor.target = "_blank";
+    anchor.rel = "noopener noreferrer nofollow";
+    details.append(anchor);
+  }
+  bubble.append(details);
+}
+
 function showToolsUsed(message, toolsUsed) {
   if (!message || !Array.isArray(toolsUsed) || !toolsUsed.length) return;
   const actions = message.querySelector(".message-actions");
   if (!actions) return;
-  const unique = [...new Set(toolsUsed.map((name) => String(name).trim()).filter(Boolean))];
+  const unique = [...new Set(toolsUsed.map((name) => String(name).trim()).filter(Boolean))].filter(
+    (name) => !KNOWLEDGE_TOOLS.has(name)
+  );
   for (const name of unique.slice(0, 4)) {
     const chip = document.createElement("span");
     chip.className = "tool-used-chip";
@@ -1459,6 +1507,7 @@ async function handleQuestion(question) {
     pending.remove();
     const replyMessage = addReply(reply.text, reply.chart);
     showToolsUsed(replyMessage, reply.toolsUsed);
+    showSources(replyMessage, reply.sources);
     if (reply.voiceResting && !state.toldVoiceResting) {
       state.toldVoiceResting = true;
       showHint(replyMessage, reply.voiceMessage || VOICE_RESTING_MESSAGE);

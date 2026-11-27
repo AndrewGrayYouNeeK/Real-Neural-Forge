@@ -24,6 +24,7 @@ is worth trusting on their series.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import math
 from collections import Counter, OrderedDict
@@ -34,7 +35,13 @@ import numpy as np
 import pandas as pd
 from sklearn.cluster import KMeans
 
-from src.analysis.jepa_world import JepaBusyError, JepaEncoder, train_jepa_encoder
+from src.analysis.jepa_world import (
+    JepaBusyError,
+    JepaEncoder,
+    jepa_fits_left,
+    train_jepa_encoder,
+    train_jepa_ensemble,
+)
 from src.workspace.errors import WorkspaceError
 from src.workspace.starter_forecast import STARTER_UNITS
 from src.workspace.starters import starter_by_id
@@ -110,6 +117,25 @@ class _Fitted:
         return nxt, regimes
 
 
+_SVD_CACHE: OrderedDict[bytes, tuple[np.ndarray, np.ndarray]] = OrderedDict()
+
+
+def _cached_svd(scaled: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """SVD of the windows. Ensemble members and both encoders share one."""
+    key = hashlib.blake2b(
+        np.ascontiguousarray(scaled).tobytes(), digest_size=16
+    ).digest()
+    hit = _SVD_CACHE.get(key)
+    if hit is not None:
+        _SVD_CACHE.move_to_end(key)
+        return hit
+    _, sing, vt = np.linalg.svd(scaled, full_matrices=False)
+    _SVD_CACHE[key] = (sing, vt)
+    while len(_SVD_CACHE) > 24:
+        _SVD_CACHE.popitem(last=False)
+    return sing, vt
+
+
 def _window_size(n: int) -> int:
     return int(min(_MAX_WINDOW, max(4, n // 6)))
 
@@ -161,6 +187,8 @@ def fit_world_model(
     seed: int = 0,
     floor: float | None = None,
     encoder: str = "pca",
+    jepa_encoder: JepaEncoder | None = None,
+    kmeans_init: int = 4,
 ) -> _Fitted:
     """Fit encoder, dynamics, and regime noise on a 1-D series.
 
@@ -177,7 +205,7 @@ def fit_world_model(
     std = xs.std(axis=0)
     std = np.where(std < 1e-9, 1.0, std)
     scaled = (xs - mean) / std
-    _, sing, vt = np.linalg.svd(scaled, full_matrices=False)
+    sing, vt = _cached_svd(scaled)
     var = sing**2
     total = float(var.sum()) or 1.0
     cumulative = np.cumsum(var) / total
@@ -187,7 +215,7 @@ def fit_world_model(
     latent = scaled @ components.T
     jepa: JepaEncoder | None = None
     if encoder == "jepa":
-        jepa = train_jepa_encoder(scaled, seed=seed)
+        jepa = jepa_encoder or train_jepa_encoder(scaled, seed=seed)
         latent = np.hstack([latent, jepa.encode(scaled)])
     design = np.hstack([latent, np.ones((len(latent), 1))])
     reg = _RIDGE * (1.0 if jepa is None else 10.0) * np.eye(design.shape[1])
@@ -231,7 +259,7 @@ def fit_world_model(
 
     k = 3 if len(latent) >= 90 else (2 if len(latent) >= 30 else 1)
     if k > 1:
-        km = KMeans(n_clusters=k, n_init=4, random_state=seed)
+        km = KMeans(n_clusters=k, n_init=kmeans_init, random_state=seed)
         labels = km.fit_predict(latent)
         pools = [residuals[labels == c] for c in range(k)]
         if any(len(pool) < 5 for pool in pools):
@@ -411,6 +439,197 @@ def _floor_for(values: np.ndarray) -> float | None:
     return 0.0 if float(np.min(values)) >= 0.0 else None
 
 
+# JEPA trains a small ensemble (different seeds, pooled paths) so one unlucky
+# seed cannot flip the pick or the forecast. PCA is deterministic, so one fit.
+_ENSEMBLE = {"pca": 1, "jepa": 3}
+_MAX_ORIGINS = 9
+_SCORED_ORIGINS = 6
+_MIN_CAL_POINTS = 12
+_COVERAGE_TARGET = 0.8
+_SCALE_MIN, _SCALE_MAX = 0.5, 8.0
+_JEPA_MIN_GAIN_PCT = 5.0
+# Model fitting (and so the encoder pick and range calibration) is deterministic:
+# the request ``seed`` only changes the Monte-Carlo draws of the final rollout.
+_FIT_SEED = 0
+
+
+def ensemble_size(encoder: str) -> int:
+    return _ENSEMBLE.get(encoder, 1)
+
+
+def planned_jepa_fits(encoder: str) -> int:
+    """JEPA trainings one request needs (backtest origins + the final fit)."""
+    if encoder not in {"jepa", "auto"}:
+        return 0
+    return (_MAX_ORIGINS + 1) * _ENSEMBLE["jepa"]
+
+
+def _scaled_windows(values: np.ndarray) -> np.ndarray:
+    """The standardised windows fit_world_model feeds its encoders."""
+    values = np.asarray(values, dtype=np.float64)
+    xs, _ = _make_windows(values, _window_size(len(values)))
+    std = xs.std(axis=0)
+    std = np.where(std < 1e-9, 1.0, std)
+    return np.asarray((xs - xs.mean(axis=0)) / std)
+
+
+def _fit_ensemble(
+    hist: np.ndarray,
+    *,
+    seed: int,
+    floor: float | None,
+    encoder: str,
+    kmeans_init: int = 4,
+) -> list[_Fitted]:
+    seeds = [seed + 1000 * m for m in range(ensemble_size(encoder))]
+    if encoder != "jepa":
+        return [
+            fit_world_model(
+                hist, seed=sd, floor=floor, encoder=encoder, kmeans_init=kmeans_init
+            )
+            for sd in seeds
+        ]
+    encoders = train_jepa_ensemble(_scaled_windows(hist), seeds=seeds)
+    return [
+        fit_world_model(
+            hist,
+            seed=sd,
+            floor=floor,
+            encoder="jepa",
+            jepa_encoder=enc,
+            kmeans_init=kmeans_init,
+        )
+        for sd, enc in zip(seeds, encoders, strict=True)
+    ]
+
+
+def _make_uniforms(
+    seed: int, n_models: int, n_paths: int, horizon: int
+) -> list[np.ndarray]:
+    per = int(math.ceil(n_paths / n_models))
+    return [
+        np.random.default_rng(seed + 31 * m).random((per, horizon))
+        for m in range(n_models)
+    ]
+
+
+def _rollout_ensemble(
+    fits: list[_Fitted],
+    history: np.ndarray,
+    *,
+    horizon: int,
+    uniforms: list[np.ndarray],
+    events: list[dict[str, Any]],
+    offset: np.ndarray | None,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Pool paths from every model: (paths, regime label per path and step)."""
+    all_paths: list[np.ndarray] = []
+    all_labels: list[np.ndarray] = []
+    for fitted, uni in zip(fits, uniforms, strict=True):
+        paths, regimes = _rollout(
+            fitted, history, horizon=horizon, uniforms=uni, events=events, offset=offset
+        )
+        names = np.asarray(fitted.regime_labels, dtype=object)
+        all_paths.append(paths)
+        all_labels.append(names[regimes])
+    return np.concatenate(all_paths, axis=0), np.concatenate(all_labels, axis=0)
+
+
+def _backtest_records(
+    values: np.ndarray,
+    dates: list[str] | None,
+    hold: int,
+    n_paths: int,
+    seed: int,
+    encoder: str,
+) -> list[dict[str, Any]]:
+    """Rolling-origin forecasts: origin k ends ``hold * (k + 1)`` points early."""
+    records: list[dict[str, Any]] = []
+    floor = _floor_for(values)
+    for k in range(_MAX_ORIGINS):
+        cut = len(values) - hold * (k + 1)
+        train = values[:cut]
+        if len(train) < MIN_POINTS * 2:
+            break
+        actual = values[cut : cut + hold]
+        train_dates = dates[:cut] if dates else None
+        hist, clim, _ = _decompose(train, train_dates, hold)
+        fits = _fit_ensemble(
+            hist, seed=seed, floor=floor, encoder=encoder, kmeans_init=1
+        )
+        uniforms = _make_uniforms(seed + 7 + k, len(fits), n_paths, hold)
+        paths, _ = _rollout_ensemble(
+            fits, hist, horizon=hold, uniforms=uniforms, events=[], offset=clim
+        )
+        q10, q50, q90 = np.quantile(paths, [0.1, 0.5, 0.9], axis=0)
+        records.append(
+            {
+                "k": k,
+                "actual": actual,
+                "q10": q10,
+                "q50": q50,
+                "q90": q90,
+                "persist": float(train[-1]),
+            }
+        )
+    return records
+
+
+def _split_records(
+    records: list[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """(scored holdouts, validation origins). Validation is strictly older."""
+    n = len(records)
+    if n >= _SCORED_ORIGINS + 2:
+        return records[:_SCORED_ORIGINS], records[_SCORED_ORIGINS:]
+    if n >= 4:
+        return records[:-2], records[-2:]
+    return records, []
+
+
+def _band_scores(records: list[dict[str, Any]], span: float) -> np.ndarray:
+    """How many "band halves" each actual sits from the median (<=1: inside)."""
+    eps = max(span, 1e-9) * 1e-4
+    scores: list[float] = []
+    for rec in records:
+        q10, q50, q90 = rec["q10"], rec["q50"], rec["q90"]
+        actual = rec["actual"]
+        down = (q50 - actual) / np.maximum(q50 - q10, eps)
+        up = (actual - q50) / np.maximum(q90 - q50, eps)
+        scores.extend(np.where(actual < q50, down, up).tolist())
+    return np.asarray(scores, dtype=np.float64)
+
+
+def _conformal_scale(records: list[dict[str, Any]], span: float) -> float | None:
+    """Split-conformal width multiplier from the validation origins."""
+    scores = _band_scores(records, span)
+    n = len(scores)
+    if n < _MIN_CAL_POINTS:
+        return None
+    level = min(1.0, math.ceil((n + 1) * _COVERAGE_TARGET) / n)
+    scale = float(np.quantile(scores, level, method="higher"))
+    return float(min(_SCALE_MAX, max(_SCALE_MIN, scale)))
+
+
+def _coverage(records: list[dict[str, Any]], scale: float) -> float:
+    inside: list[float] = []
+    for rec in records:
+        lo = rec["q50"] - scale * (rec["q50"] - rec["q10"])
+        hi = rec["q50"] + scale * (rec["q90"] - rec["q50"])
+        inside.extend(
+            ((rec["actual"] >= lo) & (rec["actual"] <= hi)).astype(float).tolist()
+        )
+    return float(np.mean(inside)) if inside else float("nan")
+
+
+def _mae(records: list[dict[str, Any]], persistence: bool = False) -> float:
+    errs: list[float] = []
+    for rec in records:
+        ref = rec["persist"] if persistence else rec["q50"]
+        errs.extend(np.abs(ref - rec["actual"]).tolist())
+    return float(np.mean(errs)) if errs else float("nan")
+
+
 def _backtest(
     values: np.ndarray,
     dates: list[str] | None,
@@ -419,83 +638,126 @@ def _backtest(
     seed: int,
     encoder: str = "pca",
 ) -> dict[str, Any]:
-    """Rolling-origin holdout: up to 6 origins, model p50 vs persistence."""
+    """Rolling-origin backtest with a separate, older validation split.
+
+    The newest origins are the scored holdouts. The older ones are validation:
+    they pick the encoder and calibrate the 80% range (split conformal), so
+    neither choice has seen the holdouts it is graded on.
+    """
     hold = int(min(horizon, max(3, len(values) // 10), 14))
-    model_err: list[float] = []
-    persist_err: list[float] = []
-    inside: list[float] = []
-    origins = 0
-    for k in range(6):
-        cut = len(values) - hold * (k + 1)
-        train = values[:cut]
-        actual = values[cut : cut + hold]
-        if len(train) < MIN_POINTS * 2:
-            break
-        train_dates = dates[:cut] if dates else None
-        hist, clim, _ = _decompose(train, train_dates, hold)
-        fitted = fit_world_model(
-            hist, seed=seed, floor=_floor_for(values), encoder=encoder
-        )
-        rng = np.random.default_rng(seed + 7 + k)
-        uniforms = rng.random((n_paths, hold))
-        paths, _ = _rollout(
-            fitted, hist, horizon=hold, uniforms=uniforms, events=[], offset=clim
-        )
-        q10, q50, q90 = np.quantile(paths, [0.1, 0.5, 0.9], axis=0)
-        model_err.extend(np.abs(q50 - actual).tolist())
-        persist_err.extend(np.abs(train[-1] - actual).tolist())
-        inside.extend(((actual >= q10) & (actual <= q90)).astype(float).tolist())
-        origins += 1
-    if not origins:
+    records = _backtest_records(values, dates, hold, n_paths, seed, encoder)
+    if not records:
         return {"holdout": 0, "text": "Series too short for a holdout backtest."}
-    mae_model = float(np.mean(model_err))
-    mae_persist = float(np.mean(persist_err))
-    return {
+    scored, val = _split_records(records)
+    span = float(np.ptp(values)) or 1.0
+    # Calibrate on every origin (more data = steadier width). The coverage we
+    # report is leave-one-window-out: each scored holdout is graded with a scale
+    # computed from the *other* origins, so it never calibrates itself.
+    scale = _conformal_scale(records, span)
+    cov_raw = _coverage(scored, 1.0)
+    cov_cal = cov_raw
+    if scale is not None:
+        hits: list[float] = []
+        for rec in scored:
+            rest = [r for r in records if r is not rec]
+            loo = _conformal_scale(rest, span)
+            use = loo if loo is not None else 1.0
+            hits.append(_coverage([rec], use))
+        cov_cal = float(np.mean(hits))
+    mae_model = _mae(scored)
+    mae_persist = _mae(scored, persistence=True)
+    out: dict[str, Any] = {
         "encoder": encoder,
+        "ensemble": ensemble_size(encoder),
         "holdout": hold,
-        "origins": origins,
+        "origins": len(scored),
         "mae_model": round(mae_model, 4),
         "mae_persistence": round(mae_persist, 4),
         "beats_persistence": bool(mae_model < mae_persist),
-        "coverage_80": round(float(np.mean(inside)), 3),
+        "coverage_80": round(cov_cal, 3),
+        "coverage_80_raw": round(cov_raw, 3),
+        "calibration": {
+            "applied": scale is not None,
+            "scale": round(scale, 3) if scale is not None else 1.0,
+            "calibration_points": int(len(records) * hold),
+            "method": "split conformal, graded leave-one-window-out",
+        },
     }
+    if val:
+        out["validation"] = {
+            "origins": len(val),
+            "mae_model": round(_mae(val), 4),
+            "mae_persistence": round(_mae(val, persistence=True), 4),
+            "coverage_80_raw": round(_coverage(val, 1.0), 3),
+        }
+    return out
 
 
-_JEPA_MIN_GAIN_PCT = 2.0
+def _apply_scale(
+    q: dict[str, list[float]], scale: float, floor: float | None
+) -> dict[str, list[float]]:
+    """Widen/narrow p10 and p90 around p50 by the conformal scale."""
+    if abs(scale - 1.0) < 1e-9:
+        return q
+    p50 = np.asarray(q["p50"])
+    lo = p50 - scale * (p50 - np.asarray(q["p10"]))
+    hi = p50 + scale * (np.asarray(q["p90"]) - p50)
+    if floor is not None:
+        lo = np.maximum(lo, floor)
+    out = dict(q)
+    out["p10"] = [round(float(v), 4) for v in lo]
+    out["p90"] = [round(float(v), 4) for v in hi]
+    return out
 
 
 def _compare(pca_bt: dict[str, Any], jepa_bt: dict[str, Any] | None) -> dict[str, Any]:
-    """Head-to-head holdout numbers for the PCA and JEPA encoders."""
+    """Head-to-head numbers. The winner is chosen on validation, not holdouts."""
+
+    def side(bt: dict[str, Any]) -> dict[str, Any]:
+        val = bt.get("validation") or {}
+        return {
+            "mae": bt.get("mae_model"),
+            "validation_mae": val.get("mae_model"),
+            "coverage_80": bt.get("coverage_80"),
+            "coverage_80_raw": bt.get("coverage_80_raw"),
+            "calibration_scale": (bt.get("calibration") or {}).get("scale"),
+            "beats_persistence": bt.get("beats_persistence"),
+        }
+
     out: dict[str, Any] = {
         "holdout": pca_bt.get("holdout", 0),
         "origins": pca_bt.get("origins", 0),
+        "validation_origins": (pca_bt.get("validation") or {}).get("origins", 0),
         "mae_persistence": pca_bt.get("mae_persistence"),
-        "pca": {
-            "mae": pca_bt.get("mae_model"),
-            "coverage_80": pca_bt.get("coverage_80"),
-            "beats_persistence": pca_bt.get("beats_persistence"),
-        },
+        "pca": side(pca_bt),
         "jepa": None,
         "winner": "pca",
         "improvement_pct": None,
+        "validation_improvement_pct": None,
+        "jepa_ensemble": ensemble_size("jepa"),
         "selection_note": (
-            "JEPA is only used when it beats PCA by at least "
-            f"{_JEPA_MIN_GAIN_PCT:g}% on these holdouts. The pick is made on the "
-            "same holdouts it is scored on, so small gaps are close to a tie."
+            f"JEPA is used only when it beats PCA by at least {_JEPA_MIN_GAIN_PCT:g}% "
+            "on validation; it is a 3-seed ensemble, so one lucky seed can't win. "
+            "Coverage is graded leave-one-window-out, so no window calibrates itself."
         ),
     }
     if jepa_bt is None or not jepa_bt.get("holdout") or not pca_bt.get("holdout"):
         return out
-    out["jepa"] = {
-        "mae": jepa_bt.get("mae_model"),
-        "coverage_80": jepa_bt.get("coverage_80"),
-        "beats_persistence": jepa_bt.get("beats_persistence"),
-    }
+    out["jepa"] = side(jepa_bt)
     pca_mae = float(pca_bt["mae_model"])
     jepa_mae = float(jepa_bt["mae_model"])
     if pca_mae > 0:
-        gain = (pca_mae - jepa_mae) / pca_mae * 100.0
-        out["improvement_pct"] = round(gain, 1)
+        out["improvement_pct"] = round((pca_mae - jepa_mae) / pca_mae * 100.0, 1)
+    pv = (pca_bt.get("validation") or {}).get("mae_model")
+    jv = (jepa_bt.get("validation") or {}).get("mae_model")
+    if pv is None or jv is None:
+        out["note"] = (
+            "Too little history for a separate validation split, so Nous kept PCA."
+        )
+        return out
+    if float(pv) > 0:
+        gain = (float(pv) - float(jv)) / float(pv) * 100.0
+        out["validation_improvement_pct"] = round(gain, 1)
         if gain >= _JEPA_MIN_GAIN_PCT:
             out["winner"] = "jepa"
     return out
@@ -507,17 +769,29 @@ def _comparison_text(comparison: dict[str, Any], unit: str | None) -> str:
     if not jepa:
         note = comparison.get("note") or "JEPA could not be scored on this series."
         return f"Encoder check: {note} Used PCA."
-    gain = comparison.get("improvement_pct")
     chosen = comparison.get("chosen") or comparison.get("winner")
     winner = "JEPA" if chosen == "jepa" else "PCA"
+    gain = comparison.get("validation_improvement_pct")
     gap = ""
     if gain is not None:
         word = "better" if float(gain) > 0 else "worse"
-        gap = f" ({abs(float(gain)):.1f}% {word} for JEPA)"
+        gap = f" on validation ({abs(float(gain)):.1f}% {word} for JEPA)"
+    if comparison.get("note") and gain is None:
+        return f"Encoder check: {comparison['note']} Used {winner}."
     return (
-        f"Encoder check: JEPA MAE {_fmt(float(jepa['mae']), unit)} vs PCA "
-        f"{_fmt(float(pca['mae']), unit)}{gap}; "
-        f"Nous uses {winner} here (JEPA needs a 2%+ win)."
+        f"Encoder check: holdout MAE JEPA {_fmt(float(jepa['mae']), unit)} vs PCA "
+        f"{_fmt(float(pca['mae']), unit)}; picked {winner}{gap}."
+    )
+
+
+def _calibration_clause(backtest: dict[str, Any], applied: bool) -> str:
+    cal = backtest.get("calibration") or {}
+    if not applied or not cal.get("applied"):
+        return ""
+    raw = float(backtest.get("coverage_80_raw") or 0.0)
+    return (
+        f" (raw ranges covered {round(raw * 100)}%; widened x{cal['scale']:g} "
+        "by conformal calibration)"
     )
 
 
@@ -565,8 +839,12 @@ def simulate_series(
     unit: str | None = None,
     dates: list[str] | None = None,
     encoder: str = "pca",
+    calibrate: bool = True,
 ) -> dict[str, Any]:
     """Fit the world model to ``values`` and roll baseline + scenarios forward.
+
+    ``calibrate`` rescales the p10/p90 band so the 80% range covered about 80%
+    of the older validation windows (split conformal); ``False`` keeps raw bands.
 
     ``encoder`` picks the latent state: ``"pca"`` (linear, the default),
     ``"jepa"`` (PCA + self-supervised JEPA features), or ``"auto"`` (backtest
@@ -593,55 +871,58 @@ def simulate_series(
         raise ValueError("encoder must be pca, jepa, or auto.")
 
     bt_paths = min(n_paths, 128)
+    floor = _floor_for(series)
     comparison: dict[str, Any] | None = None
     chosen = "pca"
-    backtest: dict[str, Any] | None = None
     busy_note = ""
+    pca_bt = _backtest(series, dates, horizon, bt_paths, _FIT_SEED, encoder="pca")
+    backtest = pca_bt
     if encoder in {"jepa", "auto"}:
-        pca_bt = _backtest(series, dates, horizon, bt_paths, seed, encoder="pca")
+        jepa_bt: dict[str, Any] | None = None
         try:
-            jepa_bt: dict[str, Any] | None = _backtest(
-                series, dates, horizon, bt_paths, seed, encoder="jepa"
+            if jepa_fits_left() < planned_jepa_fits(encoder):
+                raise JepaBusyError(
+                    "The JEPA encoder hit today's CPU cap. The PCA encoder still works."
+                )
+            jepa_bt = _backtest(
+                series, dates, horizon, bt_paths, _FIT_SEED, encoder="jepa"
             )
         except JepaBusyError as exc:
             if encoder == "jepa":
                 raise
-            jepa_bt = None
             busy_note = str(exc)
         comparison = _compare(pca_bt, jepa_bt)
         if jepa_bt is None:
             comparison["note"] = busy_note
-        if encoder == "jepa":
+        if encoder == "jepa" and jepa_bt is not None:
             chosen = "jepa"
-        else:
+        elif encoder == "auto":
             chosen = str(comparison.get("winner") or "pca")
-            if chosen not in {"pca", "jepa"}:
-                chosen = "pca"
-        backtest = jepa_bt if chosen == "jepa" else pca_bt
+        backtest = jepa_bt if (chosen == "jepa" and jepa_bt) else pca_bt
         comparison["chosen"] = chosen
 
     hist, clim, seasonal = _decompose(series, dates, horizon)
     try:
-        fitted = fit_world_model(
-            hist, seed=seed, floor=_floor_for(series), encoder=chosen
-        )
+        fits = _fit_ensemble(hist, seed=_FIT_SEED, floor=floor, encoder=chosen)
     except JepaBusyError as exc:
         if encoder != "auto":
             raise
-        fitted = fit_world_model(hist, seed=seed, floor=_floor_for(series))
-        backtest = None
+        chosen = "pca"
+        fits = _fit_ensemble(hist, seed=_FIT_SEED, floor=floor, encoder="pca")
+        backtest = pca_bt
         if comparison is not None:
             comparison["chosen"] = "pca"
             comparison["note"] = str(exc)
-    rng = np.random.default_rng(seed)
-    uniforms = rng.random((n_paths, horizon))
-    base_paths, base_regimes = _rollout(
-        fitted, hist, horizon=horizon, uniforms=uniforms, events=[], offset=clim
+    fitted = fits[0]
+    cal = backtest.get("calibration") or {}
+    scale = float(cal.get("scale", 1.0)) if (calibrate and cal.get("applied")) else 1.0
+    uniforms = _make_uniforms(seed, len(fits), n_paths, horizon)
+    base_paths, base_labels = _rollout_ensemble(
+        fits, hist, horizon=horizon, uniforms=uniforms, events=[], offset=clim
     )
-    baseline: dict[str, Any] = dict(_quantiles(base_paths))
+    baseline: dict[str, Any] = dict(_apply_scale(_quantiles(base_paths), scale, floor))
     baseline["regime"] = [
-        fitted.regime_labels[Counter(base_regimes[:, t].tolist()).most_common(1)[0][0]]
-        for t in range(horizon)
+        Counter(base_labels[:, t].tolist()).most_common(1)[0][0] for t in range(horizon)
     ]
     sample_paths = [[round(float(v), 4) for v in row] for row in base_paths[:3]]
 
@@ -650,12 +931,12 @@ def simulate_series(
     for index, spec in enumerate(scenarios):
         name = str(spec.get("name") or f"Scenario {chr(65 + index)}")[:40]
         events = _validate_events(list(spec.get("events") or []), horizon)
-        paths, regimes = _rollout(
-            fitted, hist, horizon=horizon, uniforms=uniforms, events=events, offset=clim
+        paths, labels = _rollout_ensemble(
+            fits, hist, horizon=horizon, uniforms=uniforms, events=events, offset=clim
         )
-        q = _quantiles(paths)
+        q = _apply_scale(_quantiles(paths), scale, floor)
         delta = [round(float(v), 4) for v in np.median(paths - base_paths, axis=0)]
-        end_regimes = Counter(regimes[:, -1].tolist())
+        end_regimes = Counter(labels[:, -1].tolist())
         out_scenarios.append(
             {
                 "name": name,
@@ -663,7 +944,7 @@ def simulate_series(
                 **q,
                 "delta_p50": delta,
                 "end_delta": delta[-1],
-                "end_regime": fitted.regime_labels[end_regimes.most_common(1)[0][0]],
+                "end_regime": end_regimes.most_common(1)[0][0],
                 "summary": _scenario_text(
                     name,
                     delta[-1],
@@ -676,8 +957,6 @@ def simulate_series(
             }
         )
 
-    if backtest is None:
-        backtest = _backtest(series, dates, horizon, bt_paths, seed)
     tail = series[-HISTORY_POINTS:]
     offset = len(series) - len(tail)
     tail_dates = (dates or [])[-len(tail) :] if dates else []
@@ -701,7 +980,9 @@ def simulate_series(
             f"it {verdict} "
             f"persistence (MAE {_fmt(backtest['mae_model'], unit)} vs "
             f"{_fmt(backtest['mae_persistence'], unit)}); "
-            f"{round(backtest['coverage_80'] * 100)}% landed inside the 80% range."
+            f"{round(backtest['coverage_80'] * 100)}% landed inside the 80% range"
+            + _calibration_clause(backtest, calibrate)
+            + "."
         )
     else:
         bt_text = str(backtest.get("text", ""))
@@ -720,7 +1001,7 @@ def simulate_series(
             "description": (
                 ("Annual seasonal baseline + " if seasonal else "")
                 + (
-                    "PCA + self-supervised JEPA encoder"
+                    f"PCA + self-supervised JEPA encoder ({len(fits)}-seed ensemble)"
                     if fitted.jepa is not None
                     else "PCA encoder"
                 )
@@ -730,6 +1011,12 @@ def simulate_series(
             ),
             "encoder": fitted.encoder,
             "pca_dim": fitted.pca_dim,
+            "ensemble": len(fits),
+            "calibration": {
+                "applied": scale != 1.0,
+                "scale": round(scale, 3),
+                "method": "split conformal on older validation windows",
+            },
             **({"jepa": fitted.jepa.describe()} if fitted.jepa is not None else {}),
             "seasonal": seasonal,
             "window": fitted.window,
@@ -769,6 +1056,7 @@ def starter_simulation(
     seed: int = 0,
     display_unit: str | None = None,
     encoder: str = "pca",
+    calibrate: bool = True,
 ) -> dict[str, Any]:
     """Run the world model on a shipped starter series.
 
@@ -790,6 +1078,8 @@ def starter_simulation(
             seed,
             display_unit,
             encoder,
+            calibrate,
+            "v2",
         ],
         sort_keys=True,
         default=str,
@@ -822,6 +1112,7 @@ def starter_simulation(
             unit=unit,
             dates=dates,
             encoder=encoder,
+            calibrate=calibrate,
         )
     except JepaBusyError as exc:
         raise WorkspaceError(503, str(exc)) from exc

@@ -23,16 +23,31 @@
     return number == null ? "—" : `${Math.round(number * 100)}%`;
   }
 
-  function row(label, mae, coverage, unit, winner) {
+  function row(label, side, unit, winner, persistenceMae) {
     const tr = document.createElement("tr");
     const name = document.createElement("th");
     name.scope = "row";
     name.textContent = winner ? `${label} ✓` : label;
+    const valCell = document.createElement("td");
     const maeCell = document.createElement("td");
-    maeCell.textContent = simFormat(mae, unit);
     const covCell = document.createElement("td");
-    covCell.textContent = coverage == null ? "—" : pct(coverage);
-    tr.append(name, maeCell, covCell);
+    if (persistenceMae != null) {
+      valCell.textContent = "—";
+      maeCell.textContent = simFormat(persistenceMae, unit);
+      covCell.textContent = "—";
+    } else if (!side) {
+      valCell.textContent = "—";
+      maeCell.textContent = "—";
+      covCell.textContent = "—";
+    } else {
+      valCell.textContent = side.validation_mae == null ? "—" : simFormat(side.validation_mae, unit);
+      maeCell.textContent = simFormat(side.mae, unit);
+      const raw = side.coverage_80_raw;
+      const cal = side.coverage_80;
+      covCell.textContent =
+        raw == null || cal == null || raw === cal ? pct(cal) : `${pct(raw)} → ${pct(cal)}`;
+    }
+    tr.append(name, valCell, maeCell, covCell);
     return tr;
   }
 
@@ -46,30 +61,28 @@
     const verdict = el("wenc-verdict");
     if (verdict) {
       const gain = asNumber(cmp.improvement_pct);
+      const vgain = asNumber(cmp.validation_improvement_pct);
+      const name = payload.name || "this series";
       let text;
       if (!cmp.jepa) {
         text = cmp.note || "JEPA could not be scored on this series, so Nous used PCA.";
+      } else if (vgain == null) {
+        text = `${cmp.note || "Too little history for a separate validation split."} Nous used PCA.`;
       } else if (chosen === "jepa") {
-        text = `JEPA wins on ${payload.name || "this series"}: ${Math.abs(gain || 0).toFixed(1)}% lower holdout error than PCA, so the simulation below uses the self-supervised encoder.`;
-      } else if (gain != null && gain > 0) {
-        text = `JEPA was only ${gain.toFixed(1)}% better than PCA here (under the 2% bar), so Nous kept the simpler PCA encoder.`;
+        text = `JEPA wins on ${name}: ${Math.abs(vgain).toFixed(1)}% lower error than PCA on the validation windows, and ${gain != null && gain > 0 ? `${gain.toFixed(1)}% lower` : "no better"} on the untouched holdouts. The simulation below uses the self-supervised encoder.`;
+      } else if (vgain > 0) {
+        text = `JEPA was only ${vgain.toFixed(1)}% better than PCA on validation (it needs 5%), so Nous kept the simpler PCA encoder.`;
       } else {
-        text = `PCA wins on ${payload.name || "this series"}: JEPA was ${Math.abs(gain || 0).toFixed(1)}% worse, so Nous kept PCA. Learned features don't help every series.`;
+        text = `PCA wins on ${name}: JEPA was ${Math.abs(vgain).toFixed(1)}% worse on validation, so Nous kept PCA. Learned features don't help every series.`;
       }
       verdict.textContent = text;
     }
     const table = el("wenc-table");
     if (table) {
       table.replaceChildren(
-        row("Persistence (tomorrow = today)", cmp.mae_persistence, null, unit, false),
-        row("PCA encoder", cmp.pca && cmp.pca.mae, cmp.pca && cmp.pca.coverage_80, unit, chosen === "pca"),
-        row(
-          "JEPA encoder",
-          cmp.jepa ? cmp.jepa.mae : null,
-          cmp.jepa ? cmp.jepa.coverage_80 : null,
-          unit,
-          chosen === "jepa",
-        ),
+        row("Persistence (tomorrow = today)", null, unit, false, cmp.mae_persistence),
+        row("PCA encoder", cmp.pca, unit, chosen === "pca"),
+        row("JEPA encoder (3-seed ensemble)", cmp.jepa, unit, chosen === "jepa"),
       );
     }
     const host = el("wenc-chart");
@@ -88,8 +101,13 @@
     }
     const note = el("wenc-note");
     if (note) {
-      const holdouts = cmp.origins ? `${cmp.origins} holdouts of ${cmp.holdout} steps. ` : "";
-      note.textContent = `${holdouts}${cmp.selection_note || ""}`.trim();
+      const holdouts = cmp.origins
+        ? `${cmp.origins} newest holdouts of ${cmp.holdout} steps are graded; ${cmp.validation_origins || 0} older validation windows pick the encoder. `
+        : "";
+      const cal = payload.model && payload.model.calibration;
+      const widen =
+        cal && cal.applied ? `Ranges were widened x${Number(cal.scale).toFixed(2)} (conformal calibration). ` : "";
+      note.textContent = `${holdouts}${widen}${cmp.selection_note || ""}`.trim();
     }
   }
 

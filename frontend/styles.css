@@ -687,13 +687,18 @@ body.has-chat #suggestion-chips {
 }
 
 .chart-frame {
-  height: 280px;
+  /* Size to the SVG. A fixed 280px height let the scaled SVG spill over the
+     "View data" toggle on wide panels. */
   width: 100%;
+}
+
+.chart-block > details {
+  margin-top: 4px;
 }
 
 .chart-svg {
   width: 100%;
-  height: 100%;
+  height: auto;
   display: block;
   color: var(--muted);
 }
@@ -2093,4 +2098,33 @@ body:not(.has-chat) #chat-log {
 .unhinged-switch:focus-visible {
   outline: 2px solid #fff;
   outline-offset: 2px;
+}
+
+/* Live sources: inline links + a tiny "Searched N sources" line. */
+.bubble a.source-link {
+  color: inherit;
+  opacity: 0.75;
+  font-size: 0.9em;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.sources-line {
+  margin-top: 6px;
+  font-size: 0.78rem;
+  opacity: 0.65;
+}
+.sources-line summary {
+  cursor: pointer;
+  list-style: none;
+}
+.sources-line summary::-webkit-details-marker {
+  display: none;
+}
+.sources-line a {
+  display: block;
+  margin-top: 4px;
+  color: inherit;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
