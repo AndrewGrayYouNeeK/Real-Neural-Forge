@@ -2,6 +2,8 @@ import { Container, ContainerProxy, getContainer, type State } from "@cloudflare
 import { authRequired, isPublicPath, legacyRedirect } from "./auth/gate";
 import { handleAuthRoute } from "./auth/routes";
 import { resolveSession } from "./auth/session";
+import type { EmailBinding } from "./auth/email";
+import { handleOwnerRoute } from "./owner/usage";
 
 import { BINDINGS_HOST, containerEnv } from "./containerEnv";
 import { isAllowedObjectKey } from "./objectKey";
@@ -76,6 +78,10 @@ interface Env {
   NEURAL_FORGE_AI_RESERVE_NEURONS?: string;
   STRIPE_SECRET_KEY?: string;
   STRIPE_WEBHOOK_SECRET?: string;
+  NEURAL_FORGE_PUBLIC_URL?: string;
+  /** Cloudflare Email Sending binding (account emails only). */
+  EMAIL?: EmailBinding;
+  NOUS_EMAIL_FROM?: string;
 }
 
 // Binding uploads stop here even if a limit env var is set higher.
@@ -404,8 +410,10 @@ export default {
     const moved = legacyRedirect(request);
     if (moved) return moved;
     const forward = (next: Request) => forwardToContainer(next, env);
-    const authResponse = await handleAuthRoute(request, env, forward);
+    const authResponse = await handleAuthRoute(request, env, forward, ctx.waitUntil.bind(ctx));
     if (authResponse) return authResponse;
+    const ownerResponse = await handleOwnerRoute(request, env);
+    if (ownerResponse) return ownerResponse;
     if (!isPublicPath(request.method, url.pathname)) {
       const session = await resolveSession(request, env.WORKSPACES_DB);
       if (!session) return authRequired();

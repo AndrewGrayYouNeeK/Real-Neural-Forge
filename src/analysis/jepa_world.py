@@ -34,7 +34,8 @@ import numpy as np
 
 # Cost caps: the encoder trains on the container CPU only (no Workers AI).
 MAX_TRAIN_WINDOWS = 1200
-TRAIN_STEPS = 240
+TRAIN_STEPS = 150
+LR = 5e-3
 BATCH = 128
 HIDDEN = 48
 LATENT = 6
@@ -177,7 +178,7 @@ def train_jepa_ensemble(scaled: np.ndarray, *, seeds: list[int]) -> list[JepaEnc
             tw1, tb1 = w1.detach().clone(), b1.detach().clone()
             tw2, tb2 = w2.detach().clone(), b2.detach().clone()
             params = [w1, b1, w2, b2, p1, pb1, p2, pb2]
-            opt = torch.optim.Adam(params, lr=3e-3)
+            opt = torch.optim.Adam(params, lr=LR, foreach=True)
 
             def encode(x: Any, a1: Any, c1: Any, a2: Any, c2: Any) -> Any:
                 hidden = torch.relu(torch.baddbmm(c1, x, a1))

@@ -9,9 +9,10 @@ import { EMAIL_LIMIT, IP_LIMIT, MFA_LIMIT, clearFailures, lockedFor, lockedRespo
 import { resolveSession, type SessionInfo } from "./session";
 import { base32Encode, otpauthUrl, verifyTotp } from "./totp";
 import { clientIp, json, nowIso, randomBytes, sha256Hex, b64urlEncode, bytesToHex } from "./util";
+import { afterSignup, handleRecoveryRoute, type RecoveryEnv, type WaitUntil } from "./recovery";
 import { expectedOrigin, rpIdFor, verifyAssertion, verifyRegistration, type StoredCredential } from "./webauthn";
 
-export type AuthEnv = { WORKSPACES_DB?: D1Like };
+export type AuthEnv = RecoveryEnv;
 export type Forward = (request: Request) => Promise<Response>;
 
 const CHALLENGE_SECONDS = 5 * 60;
@@ -38,7 +39,14 @@ async function ipKey(request: Request): Promise<string> {
   return `ip:${(await sha256Hex(`auth-ip:${clientIp(request) || "unknown"}`)).slice(0, 32)}`;
 }
 
-async function passwordRoute(request: Request, db: D1Like, forward: Forward, kind: "login" | "signup"): Promise<Response> {
+async function passwordRoute(
+  request: Request,
+  db: D1Like,
+  forward: Forward,
+  kind: "login" | "signup",
+  env: AuthEnv,
+  waitUntil?: WaitUntil,
+): Promise<Response> {
   const body = await readJson(request.clone());
   const email = str(body.email, 320);
   const keys = [await ipKey(request)];
@@ -56,11 +64,13 @@ async function passwordRoute(request: Request, db: D1Like, forward: Forward, kin
   } else if (!response.ok) {
     // Failed signups (taken email, bad input) count against the IP only.
     await recordFailure(db, keys[0], IP_LIMIT);
+  } else {
+    await afterSignup(response, env, db, waitUntil);
   }
   return response;
 }
 
-async function mfaEnrolled(db: D1Like, userId: string): Promise<{ totp: boolean; passkeys: number; recovery: number }> {
+export async function mfaEnrolled(db: D1Like, userId: string): Promise<{ totp: boolean; passkeys: number; recovery: number }> {
   const row = await db
     .prepare(
       `SELECT
@@ -145,15 +155,15 @@ async function mfaFailure(db: D1Like, session: SessionInfo, message: string): Pr
   return json({ detail: message }, 401);
 }
 
-async function verifyCode(db: D1Like, session: SessionInfo, code: string): Promise<string | null> {
+export async function verifyCode(db: D1Like, userId: string, code: string): Promise<string | null> {
   const totp = await db
     .prepare("SELECT secret, last_step FROM mfa_totp WHERE user_id = ? AND secret IS NOT NULL")
-    .bind(session.userId)
+    .bind(userId)
     .first<{ secret?: string; last_step?: number }>();
   if (totp?.secret) {
     const step = await verifyTotp(totp.secret, code, Number(totp.last_step || 0));
     if (step !== null) {
-      await db.prepare("UPDATE mfa_totp SET last_step = ? WHERE user_id = ?").bind(step, session.userId).run();
+      await db.prepare("UPDATE mfa_totp SET last_step = ? WHERE user_id = ?").bind(step, userId).run();
       return "totp";
     }
   }
@@ -162,20 +172,28 @@ async function verifyCode(db: D1Like, session: SessionInfo, code: string): Promi
     const hash = await sha256Hex(`rc:${normalized}`);
     const result = await db
       .prepare("UPDATE mfa_recovery_codes SET used_at = ? WHERE user_id = ? AND code_hash = ? AND used_at IS NULL")
-      .bind(nowIso(), session.userId, hash)
+      .bind(nowIso(), userId, hash)
       .run();
     if (Number(result.meta?.changes || 0) > 0) return "recovery";
   }
   return null;
 }
 
-export async function handleAuthRoute(request: Request, env: AuthEnv, forward: Forward): Promise<Response | null> {
+export async function handleAuthRoute(
+  request: Request,
+  env: AuthEnv,
+  forward: Forward,
+  waitUntil?: WaitUntil,
+): Promise<Response | null> {
   const url = new URL(request.url);
   const path = url.pathname;
   const db = env.WORKSPACES_DB;
   if (!db) return null;
-  if (request.method === "POST" && path === "/auth/login") return passwordRoute(request, db, forward, "login");
-  if (request.method === "POST" && path === "/auth/signup") return passwordRoute(request, db, forward, "signup");
+  if (request.method === "POST" && path === "/auth/login") return passwordRoute(request, db, forward, "login", env);
+  if (request.method === "POST" && path === "/auth/signup") return passwordRoute(request, db, forward, "signup", env, waitUntil);
+  if (path.startsWith("/auth/password/") || path.startsWith("/auth/email/")) {
+    return (await handleRecoveryRoute(request, env, db, waitUntil)) ?? json({ detail: "Not found." }, 404);
+  }
   if (!path.startsWith("/auth/mfa/") && !path.startsWith("/auth/webauthn/")) return null;
 
   const session = await resolveSession(request, db);
@@ -230,7 +248,7 @@ export async function handleAuthRoute(request: Request, env: AuthEnv, forward: F
   }
 
   if (path === "/auth/mfa/verify") {
-    const method = await verifyCode(db, session, str(body.code, 64));
+    const method = await verifyCode(db, session.userId, str(body.code, 64));
     if (!method) return mfaFailure(db, session, "That code did not work.");
     await markSessionMfa(db, session, method);
     await clearFailures(db, `mfa:${session.userId}`);
