@@ -111,6 +111,8 @@ export type ToolContext = {
   memoryScope?: string;
   /** Owner session (higher daily knowledge-lookup allowance). */
   owner?: boolean;
+  /** True when the account turned memory off in Settings. */
+  memoryOff?: boolean;
 };
 
 const STARTER_IDS = new Set(["weather", "stocks", "crypto", "near-earth", "lunar"]);
@@ -1636,6 +1638,7 @@ function requireMemoryDb(ctx: ToolContext): { db: D1Like; scope: string } {
 }
 
 async function runRememberFact(ctx: ToolContext, args: Record<string, unknown>): Promise<ToolResult["data"]> {
+  if (ctx.memoryOff) return { ok: false, error: "Memory is off.", text: "Memory is turned off for this account." };
   const { db, scope } = requireMemoryDb(ctx);
   const key = stringArg(args, "key");
   const value = stringArg(args, "value");
@@ -1651,6 +1654,7 @@ async function runRememberFact(ctx: ToolContext, args: Record<string, unknown>):
 }
 
 async function runRecallMemory(ctx: ToolContext, args: Record<string, unknown>): Promise<ToolResult["data"]> {
+  if (ctx.memoryOff) return { ok: true, facts: [], text: "Memory is turned off for this account." };
   const { db, scope } = requireMemoryDb(ctx);
   const facts = await listMemory(db, scope);
   const key = stringArg(args, "key");
