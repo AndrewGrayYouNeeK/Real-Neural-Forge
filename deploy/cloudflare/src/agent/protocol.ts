@@ -383,7 +383,38 @@ export function sanitizeAgentAnswer(text: string): string {
     "",
   );
   value = value.replace(/\bforecast\s+failed\s*:\s*[^\n]*/gi, "");
-  return stripLeadingPlanning(value.replace(/\s{2,}/g, " ").trim());
+  return stripLeadingPlanning(tidyAnswerWhitespace(value));
+}
+
+// C0/C1 control characters except tab and newline, plus invisible format characters
+// (zero-width space, word joiner, BOM, soft hyphen, bidi overrides/isolates).
+// Zero-width joiner/non-joiner are kept: emoji sequences and some scripts need them.
+const CONTROL_CHARS = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F\u00AD\u180E\u200B\u200E\u200F\u202A-\u202E\u2060-\u2064\u2066-\u2069\uFEFF]/g;
+
+/**
+ * Normalize whitespace without flattening the answer: line breaks, paragraphs, lists,
+ * tables, and fenced code (with its indentation) survive. Runs of spaces inside prose
+ * lines collapse to one, trailing spaces go, and 3+ blank lines become one blank line.
+ */
+export function tidyAnswerWhitespace(text: string): string {
+  const unified = text
+    .replace(/\r\n?/g, "\n")
+    .replace(/[\u2028\u2029]/g, "\n")
+    .replace(CONTROL_CHARS, "");
+  let inFence = false;
+  const lines = unified.split("\n").map((line) => {
+    if (/^\s*(```|~~~)/.test(line)) {
+      inFence = !inFence;
+      return line.trim();
+    }
+    if (inFence) return line.replace(/\s+$/, "");
+    const indent = line.match(/^[ \t]*/)?.[0] ?? "";
+    const body = line.slice(indent.length).replace(/[ \t\u00A0]{2,}/g, " ").replace(/\s+$/, "");
+    // Keep up to 4 spaces of indent so nested lists stay nested.
+    const keptIndent = body ? indent.replace(/\t/g, "  ").slice(0, 4) : "";
+    return keptIndent + body;
+  });
+  return lines.join("\n").replace(/\n{3,}/g, "\n\n").trim();
 }
 
 /**
