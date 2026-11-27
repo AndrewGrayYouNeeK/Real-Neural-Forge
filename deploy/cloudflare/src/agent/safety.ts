@@ -141,7 +141,7 @@ export async function checkOutput(ai: AiLike, question: string, answer: string):
 // Creator honesty (default mode never claims another maker).
 
 export const CREATOR_ANSWER =
-  "Nous was created by, and is owned by, Andrew Gray (YouNeeK). It runs on GPT-OSS 120B, an open model Andrew chose; OpenAI released that model, but OpenAI and xAI didn't make Nous.";
+  "Nous was created by, and is owned by, Andrew Gray, founder, owner and CEO of YouNeeK (pronounced \"unique\"). It runs on GPT-OSS 120B, an open model Andrew chose; OpenAI released that model, but OpenAI and xAI didn't make Nous.";
 
 export function asksAboutCreator(question: string): boolean {
   const q = question.toLowerCase();

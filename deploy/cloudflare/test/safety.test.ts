@@ -138,3 +138,12 @@ describe("creator honesty with model typography", () => {
     expect(enforceCreatorAnswer("Who made you?", answer)).toBe(answer);
   });
 });
+
+describe("creator answer wording", () => {
+  it("names Andrew Gray as founder, owner and CEO of YouNeeK", async () => {
+    const { CREATOR_ANSWER } = await import("../src/agent/safety");
+    expect(CREATOR_ANSWER).toContain("Andrew Gray, founder, owner and CEO of YouNeeK");
+    expect(CREATOR_ANSWER).toContain("created by, and is owned by");
+    expect(CREATOR_ANSWER).not.toMatch(/OpenAI made|xAI made/);
+  });
+});
