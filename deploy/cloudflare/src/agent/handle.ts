@@ -231,6 +231,7 @@ async function answerAgentChat(
         db: env.WORKSPACES_DB,
         waitUntil,
         memoryScope: identity.scope,
+        owner: identity.owner,
       },
     });
     if (activeThreadId && result.text) {
@@ -254,6 +255,7 @@ async function answerAgentChat(
       ...(result.chart ? { chart: result.chart } : {}),
       ...(result.csv ? { csv: result.csv } : {}),
       ...(result.steps ? { steps: result.steps } : {}),
+      ...(result.sources ? { sources: result.sources } : {}),
     });
   } catch {
     return json({
