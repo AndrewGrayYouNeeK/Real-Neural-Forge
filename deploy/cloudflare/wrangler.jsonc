@@ -79,6 +79,10 @@
   "ai": {
     "binding": "AI"
   },
+  // Every minute: fire due reminders/check-ins; hourly cleanup of old files.
+  "triggers": {
+    "crons": ["* * * * *"]
+  },
   "vars": {
     "NEURAL_FORGE_CONFIG": "config/config.yaml",
     "NEURAL_FORGE_CHECKPOINT_URL": "https://github.com/AndrewGrayYouNeeK/Nous/releases/download/champions/champion-default.pt",

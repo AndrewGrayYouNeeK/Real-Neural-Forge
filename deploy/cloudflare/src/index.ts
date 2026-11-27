@@ -7,6 +7,7 @@ import { BINDINGS_HOST, containerEnv } from "./containerEnv";
 import { isAllowedObjectKey } from "./objectKey";
 import { handleAgent } from "./agent/handle";
 import { handleLive } from "./live/handle";
+import { runScheduledAbilities } from "./abilities/scheduled";
 
 export { ContainerProxy };
 
@@ -390,6 +391,11 @@ async function forwardToContainer(request: Request, env: Env): Promise<Response>
 }
 
 export default {
+  async scheduled(controller: { scheduledTime: number; cron: string }, env: Env, ctx: ExecutionContext): Promise<void> {
+    ctx.waitUntil(
+      runScheduledAbilities(env as unknown as Record<string, unknown>, controller.scheduledTime || Date.now()),
+    );
+  },
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
     if (url.pathname === "/_bindings/sql" || url.pathname === "/_bindings/object") {
