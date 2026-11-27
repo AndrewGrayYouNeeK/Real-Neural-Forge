@@ -1142,6 +1142,15 @@ class TestLunarEndpoints:
         assert client.get("/lottery/lunar-analysis").status_code == 404
         assert client.get("/starters/lottery/forecast").status_code == 404
 
+    def test_every_page_has_the_legal_line(self, client):
+        line = "YouNeeK™ · © 2026 Andrew Gray"
+        html = client.get("/").text
+        # Landing, sign-in/sign-up gate, and the signed-in app each show it once.
+        for where in ("landing-legal", "gate-legal", "app-legal"):
+            assert f'<footer class="site-legal {where}">{line}</footer>' in html
+        assert html.count(line) == 3
+        assert line in client.get("/docs").text
+
     def test_api_docs_page_is_public(self, client):
         page = client.get("/docs")
         assert page.status_code == 200
@@ -1158,6 +1167,10 @@ class TestLunarEndpoints:
         assert '"mode":"unhinged"' in html
         assert "/openapi.json" in html
         assert "Henad Plus subscription" in html
+        assert (
+            '<footer class="site-legal docs-legal">YouNeeK™ · © 2026 Andrew Gray</footer>'
+            in html
+        )
         assert "lottery" not in html.lower()
         schema = client.get("/openapi.json")
         assert schema.status_code == 200

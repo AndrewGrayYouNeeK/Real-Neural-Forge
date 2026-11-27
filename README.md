@@ -1757,3 +1757,7 @@ The input window is 36 months, shorter than an ~11-year solar cycle. The test bl
 | Training mean | 6.703 | 7.629 |
 
 The model and persistence are close (the model is slightly better on RMSE and slightly worse on MAE). Both follow the solar cycle. The log-linear fit on the training window has R² 0.021 and a slope of 0.0007 nats per year, so its doubling time of 979 years is not a physical timescale. A straight exponential is the wrong baseline for this series.
+
+---
+
+YouNeeK™ · © 2026 Andrew Gray

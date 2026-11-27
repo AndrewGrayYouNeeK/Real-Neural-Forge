@@ -2496,3 +2496,41 @@ body:not(.has-chat) #chat-log {
 .bubble-text {
   white-space: pre-wrap;
 }
+
+/* Legal line, one per page: subtle, centered, clear of the iPhone home bar. */
+.site-legal {
+  margin: 0;
+  padding: 10px 16px;
+  color: var(--muted);
+  opacity: 0.75;
+  font-size: 0.75rem;
+  line-height: 1.4;
+  letter-spacing: 0.02em;
+  text-align: center;
+}
+
+.landing-legal {
+  padding-bottom: 0;
+}
+
+.gate-legal {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: max(12px, env(safe-area-inset-bottom, 0px));
+  padding: 0 16px;
+}
+
+.app-legal {
+  padding: 2px 16px max(10px, env(safe-area-inset-bottom, 0px));
+}
+
+.docs-legal {
+  max-width: 860px;
+  margin: 0 auto;
+  padding: 0 20px max(28px, env(safe-area-inset-bottom, 0px));
+}
+
+.auth-gate {
+  padding-bottom: 56px;
+}
