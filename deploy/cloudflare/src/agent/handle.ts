@@ -59,13 +59,25 @@ import {
   type VisionEnv,
 } from "../vision/vision";
 import {
+  attachFilesToThread,
+  fileIdsFrom,
+  filePromptBlock,
+  filesForTurn,
+  loadFileTexts,
+  uploadFile,
+  type FilesAi,
+} from "../abilities/files";
+import { generateImage, isImageRequest, serveImage } from "../abilities/imagegen";
+import { abilityAllowance, abilityCaps, type R2Like } from "../abilities/limits";
+import {
   authHeadersFromRequest,
   visitorFromRequest,
   type ContainerFetcher,
 } from "./tools";
 
 export type AgentEnv = AiQuotaEnv & VisionEnv & {
-  AI?: AiLike;
+  AI?: AiLike & FilesAi;
+  WORKSPACES?: R2Like;
   WORKSPACES_DB?: D1Like;
   NEURAL_FORGE_API_TOKEN?: string;
   NEURAL_FORGE_AI_MODEL?: string;
@@ -181,6 +193,7 @@ async function answerAgentChat(
   history: HistoryMessage[],
   threadId: string | null,
   waitUntil?: (promise: Promise<unknown>) => void,
+  fileIds: string[] = [],
 ): Promise<Response> {
   const clean = question.replace(/\s+/g, " ").trim();
   if (!clean) {
@@ -225,6 +238,26 @@ async function answerAgentChat(
   } catch {
     // Persistence is best-effort; chat still answers without a saved thread.
     activeThreadId = null;
+  }
+
+  if (env.WORKSPACES && !fileIds.length && isImageRequest(clean)) {
+    return answerImageRequest(env, identity, ip, clean, activeThreadId);
+  }
+
+  if (env.WORKSPACES) {
+    try {
+      const files = await filesForTurn(env.WORKSPACES_DB, identity.scope, fileIds, activeThreadId);
+      if (files.length) {
+        const texts = await loadFileTexts(env.WORKSPACES, files);
+        const block = filePromptBlock(texts, clean);
+        if (block) memoryPrompt = `${memoryPrompt}\n\n${block}`;
+        if (activeThreadId && fileIds.length) {
+          await attachFilesToThread(env.WORKSPACES_DB, identity.scope, fileIds, activeThreadId);
+        }
+      }
+    } catch {
+      // A missing file never blocks the chat answer.
+    }
   }
 
   try {
@@ -276,6 +309,105 @@ async function answerAgentChat(
       text: "I could not reach the language model right now. Please try again in a moment, or ask about the weather, a market price, the moon, or space.",
     });
   }
+}
+
+async function answerImageRequest(
+  env: AgentEnv,
+  identity: Awaited<ReturnType<typeof identityFor>>,
+  capKeyValue: string | null,
+  question: string,
+  threadId: string | null,
+): Promise<Response> {
+  const db = env.WORKSPACES_DB as D1Like;
+  let text: string;
+  let capped = false;
+  try {
+    const result = await generateImage(
+      {
+        ai: env.AI as AiLike,
+        db,
+        bucket: env.WORKSPACES as R2Like,
+        scope: identity.scope,
+        owner: identity.owner,
+        capKey: capKeyValue,
+        env,
+        aiCaps: resolveAiCaps(env),
+      },
+      question,
+    );
+    text = result.text;
+    capped = Boolean(result.capped);
+  } catch {
+    text = "The image didn't come out this time. Give it another try in a moment.";
+  }
+  if (threadId) {
+    try {
+      await appendMessage(db, threadId, "assistant", text);
+    } catch {
+      // Persistence is best-effort.
+    }
+  }
+  return json({ text, model: true, capped, tools_used: [], thread_id: threadId });
+}
+
+async function handleFiles(request: Request, env: AgentEnv, path: string): Promise<Response> {
+  if (!env.WORKSPACES_DB || !env.WORKSPACES) {
+    return json({ error: "File reading isn't set up on this server yet." }, 503);
+  }
+  const identity = await identityFor(request, env);
+  if (path === "/agent/files/limits" && request.method === "GET") {
+    const allowance = await abilityAllowance({
+      db: env.WORKSPACES_DB,
+      kind: "files",
+      scope: identity.scope,
+      owner: identity.owner,
+      caps: abilityCaps("files", env),
+    });
+    return json({ allowance });
+  }
+  if (path !== "/agent/files") return json({ error: "Not found." }, 404);
+  if (request.method !== "POST") return json({ error: "Method not allowed." }, 405);
+  const declared = Number(request.headers.get("Content-Length") || 0);
+  if (declared > 5 * 1024 * 1024 + 1024) {
+    return json({ error: "That file is too big. Keep it under 5 MB." }, 413);
+  }
+  const bytes = await request.arrayBuffer();
+  try {
+    const result = await uploadFile(
+      {
+        db: env.WORKSPACES_DB,
+        bucket: env.WORKSPACES,
+        ai: env.AI,
+        scope: identity.scope,
+        owner: identity.owner,
+        env,
+      },
+      request.headers.get("X-File-Name"),
+      request.headers.get("Content-Type"),
+      bytes,
+    );
+    return json(result.body, result.status);
+  } catch {
+    return json({ error: "I couldn't save that file right now. Try again in a moment." }, 500);
+  }
+}
+
+async function handleImages(request: Request, env: AgentEnv, path: string): Promise<Response> {
+  if (!env.WORKSPACES_DB || !env.WORKSPACES) return json({ error: "Not found." }, 404);
+  const identity = await identityFor(request, env);
+  if (path === "/agent/images/limits" && request.method === "GET") {
+    const allowance = await abilityAllowance({
+      db: env.WORKSPACES_DB,
+      kind: "images",
+      scope: identity.scope,
+      owner: identity.owner,
+      caps: abilityCaps("images", env),
+    });
+    return json({ allowance });
+  }
+  if (request.method !== "GET") return json({ error: "Method not allowed." }, 405);
+  const id = path.replace(/^\/agent\/images\//, "");
+  return serveImage(env.WORKSPACES_DB, env.WORKSPACES, identity.scope, id);
 }
 
 async function handleMemory(
@@ -709,6 +841,12 @@ export async function handleAgent(
   if (path === "/agent/memory" || path.startsWith("/agent/memory/")) {
     return handleMemory(request, env, path);
   }
+  if (path === "/agent/files" || path.startsWith("/agent/files/")) {
+    return handleFiles(request, env, path);
+  }
+  if (path.startsWith("/agent/images/")) {
+    return handleImages(request, env, path);
+  }
   let body: Record<string, unknown> | null = null;
   if (request.method === "POST" || request.method === "PUT") {
     const text = await request.text();
@@ -747,6 +885,7 @@ export async function handleAgent(
       historyFrom(body),
       threadIdFrom(body),
       ctx?.waitUntil?.bind(ctx),
+      fileIdsFrom(body),
     );
   }
   return json({ error: "Not found." }, 404);
