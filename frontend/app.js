@@ -236,6 +236,9 @@ function addReply(text, chartSpec) {
     scrollToBottom();
   }
   if (window.nousAbilities) window.nousAbilities.decorateReply(message, text);
+  // Owner-only Save / Fix it / That was bad buttons (training.js).
+  message.dataset.replyText = String(text || "");
+  if (window.nousTraining) window.nousTraining.decorateReply(message, text);
   return message;
 }
 
@@ -2910,6 +2913,8 @@ function refreshAuthModal() {
     if (security) security.hidden = true;
     button.textContent = "Log in";
   }
+  // training.js re-checks owner powers with the server.
+  window.dispatchEvent(new Event("nous:account"));
 }
 
 async function refreshAccount() {

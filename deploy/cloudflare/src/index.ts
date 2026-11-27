@@ -4,6 +4,7 @@ import { handleAuthRoute } from "./auth/routes";
 import { resolveSession } from "./auth/session";
 import type { EmailBinding } from "./auth/email";
 import { handleOwnerRoute } from "./owner/usage";
+import { handleTrainingRoute } from "./owner/training";
 
 import { BINDINGS_HOST, containerEnv } from "./containerEnv";
 import { isAllowedObjectKey } from "./objectKey";
@@ -83,6 +84,8 @@ interface Env {
   /** Cloudflare Email Sending binding (account emails only). */
   EMAIL?: EmailBinding;
   NOUS_EMAIL_FROM?: string;
+  /** Read-only bearer token for the weekly training-example backup (export only). */
+  NOUS_TRAINING_EXPORT_TOKEN?: string;
 }
 
 // Binding uploads stop here even if a limit env var is set higher.
@@ -413,6 +416,8 @@ export default {
     const forward = (next: Request) => forwardToContainer(next, env);
     const authResponse = await handleAuthRoute(request, env, forward, ctx.waitUntil.bind(ctx));
     if (authResponse) return authResponse;
+    const trainingResponse = await handleTrainingRoute(request, env);
+    if (trainingResponse) return trainingResponse;
     const ownerResponse = await handleOwnerRoute(request, env);
     if (ownerResponse) return ownerResponse;
     if (!isPublicPath(request.method, url.pathname)) {
