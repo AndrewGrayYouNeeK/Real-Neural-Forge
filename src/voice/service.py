@@ -1,7 +1,7 @@
 """GQ voice: metered read-aloud in the owner's cloned voice.
 
-Text on Nous is always free. Only audio playback spends characters. Each
-account gets a small one-time free allowance. The paid Nous Plus subscription
+Text on Henad is always free. Only audio playback spends characters. Each
+account gets a small one-time free allowance. The paid Henad Plus subscription
 includes a monthly voice allowance, so there is nothing else to buy and voice
 just works once someone subscribes. Checkout may run in Stripe test mode and
 will not charge a real card. Signed-out visitors get no GQ. The owner account
@@ -322,7 +322,7 @@ def _refresh_from_stripe(
         sub = stripe.Subscription.retrieve(str(sub_id))
         apply_stripe_subscription(store, cfg, sub, str(row["user_id"]))
     except stripe.StripeError:
-        logger.warning("Could not refresh a Nous Plus subscription from Stripe")
+        logger.warning("Could not refresh a Henad Plus subscription from Stripe")
         store.touch_plan(str(row["user_id"]))
 
 
@@ -401,7 +401,7 @@ def voice_status(actor: Actor | None, config: dict[str, Any] | None) -> dict[str
         message = f"{cfg.plan.name} includes GQ voice. Text is always free."
     else:
         message = (
-            f"Text on Nous is always free. {cfg.plan.name} adds GQ voice: "
+            f"Text on Henad is always free. {cfg.plan.name} adds GQ voice: "
             f"{cfg.plan.monthly_chars:,} characters every month."
         )
     return {
@@ -438,12 +438,12 @@ def _out_of_voice(cfg: VoiceConfig, sub: dict[str, Any] | None) -> str:
         when = f" It renews on {renews}." if renews else ""
         return (
             f"You have used this month's {cfg.plan.monthly_chars:,} characters of "
-            f"GQ voice.{when} Text on Nous stays free."
+            f"GQ voice.{when} Text on Henad stays free."
         )
     return (
         "You are out of free GQ voice. Subscribe to "
         f"{cfg.plan.name} (${cfg.plan.price_usd:.0f}/month) and voice is included. "
-        "Text on Nous stays free."
+        "Text on Henad stays free."
     )
 
 
@@ -589,7 +589,7 @@ def create_checkout_session(
                         "name": plan.name,
                         "description": (
                             f"GQ voice included: {plan.monthly_chars:,} characters "
-                            "every month. Text on Nous is always free."
+                            "every month. Text on Henad is always free."
                         ),
                     },
                 },

@@ -752,7 +752,7 @@ def _compare(pca_bt: dict[str, Any], jepa_bt: dict[str, Any] | None) -> dict[str
     jv = (jepa_bt.get("validation") or {}).get("mae_model")
     if pv is None or jv is None:
         out["note"] = (
-            "Too little history for a separate validation split, so Nous kept PCA."
+            "Too little history for a separate validation split, so Henad kept PCA."
         )
         return out
     if float(pv) > 0:

@@ -18,7 +18,7 @@ from typing import cast
 
 from src.utils.paths import resolve_repo_path
 
-USER_AGENT = "Nous/1.0 (Oulu NM monthly means; research)"
+USER_AGENT = "Henad/1.0 (Oulu NM monthly means; research)"
 ACKNOWLEDGEMENT = (
     "We acknowledge the NMDB database (www.nmdb.eu), founded under the "
     "European Union's FP7 programme (contract no. 213007), and the PIs of "

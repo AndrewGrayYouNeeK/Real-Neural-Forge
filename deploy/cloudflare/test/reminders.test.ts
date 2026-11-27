@@ -213,7 +213,7 @@ describe("storing and firing reminders", () => {
       threadId: null,
       tz: TZ,
       now: NOW,
-      env: { NOUS_REMINDERS_MEMBER_DAILY: "1" },
+      env: { HENAD_REMINDERS_MEMBER_DAILY: "1" },
     };
     expect((await createReminder(deps, "remind me to water the plants")).text).toContain("when should I remind you");
     expect((await createReminder(deps, "remind me in 5 minutes to breathe")).text).toContain("Got it");

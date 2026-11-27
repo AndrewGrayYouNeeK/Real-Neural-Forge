@@ -33,7 +33,7 @@ export const RESET_FAIL_LIMIT = 10;
 export const VERIFY_SEND_LIMIT = 3;
 
 export const FORGOT_SENT =
-  "If that email has a Nous account, a reset link is on its way. It works once and expires in 30 minutes.";
+  "If that email has a Henad account, a reset link is on its way. It works once and expires in 30 minutes.";
 export const EMAIL_UNAVAILABLE =
   "Password reset by email isn't working yet. Please email andrewgray@youneek.xyz from your account's address and we'll help you get back in.";
 
@@ -297,7 +297,7 @@ export async function resendVerification(request: Request, env: RecoveryEnv, db:
   if (!session) return json({ detail: "Sign in to continue.", auth_required: true }, 401);
   if (await isEmailVerified(db, session.userId, session.email)) return json({ ok: true, verified: true, detail: "Your email is already confirmed." });
   if ((await emailState(db, env)) !== "on") {
-    return json({ ok: false, email_unavailable: true, detail: "Email isn't set up yet. You can keep using Nous." }, 503);
+    return json({ ok: false, email_unavailable: true, detail: "Email isn't set up yet. You can keep using Henad." }, 503);
   }
   const key = `verify-send:${session.userId}`;
   const locked = await lockedFor(db, [key]);

@@ -1,8 +1,8 @@
 FROM python:3.11-slim
 
-LABEL org.opencontainers.image.source="https://github.com/AndrewGrayYouNeeK/Nous"
-LABEL org.opencontainers.image.url="https://github.com/AndrewGrayYouNeeK/Nous"
-LABEL org.opencontainers.image.title="Nous"
+LABEL org.opencontainers.image.source="https://github.com/AndrewGrayYouNeeK/Henad"
+LABEL org.opencontainers.image.url="https://github.com/AndrewGrayYouNeeK/Henad"
+LABEL org.opencontainers.image.title="Henad"
 LABEL org.opencontainers.image.description="Transformer pipeline for time-series prediction (PyTorch + FastAPI)"
 
 ENV PYTHONDONTWRITEBYTECODE=1 \

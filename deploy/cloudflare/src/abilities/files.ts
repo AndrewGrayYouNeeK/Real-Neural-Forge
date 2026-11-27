@@ -280,7 +280,7 @@ export async function uploadFile(
         error:
           claim.reason === "user"
             ? `You've attached ${claim.limit} files today, which is the daily limit. It resets at midnight UTC.`
-            : "File reading is resting for today to keep Nous free. Text chat still works.",
+            : "File reading is resting for today to keep Henad free. Text chat still works.",
         capped: true,
       },
     };

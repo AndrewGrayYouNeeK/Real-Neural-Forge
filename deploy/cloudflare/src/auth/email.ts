@@ -21,7 +21,7 @@ export type EmailBinding = {
 
 export type EmailEnv = {
   EMAIL?: EmailBinding;
-  NOUS_EMAIL_FROM?: string;
+  HENAD_EMAIL_FROM?: string;
   NEURAL_FORGE_PUBLIC_URL?: string;
 };
 
@@ -42,7 +42,7 @@ export function emailConfigured(env: EmailEnv): boolean {
 }
 
 export function senderAddress(env: EmailEnv): string {
-  const from = (env.NOUS_EMAIL_FROM || "").trim();
+  const from = (env.HENAD_EMAIL_FROM || "").trim();
   return /^[^@\s]+@youneek\.(dev|xyz)$/i.test(from) ? from : "";
 }
 
@@ -104,7 +104,7 @@ export async function sendAccountEmail(
   try {
     await env.EMAIL!.send({
       to,
-      from: { email: senderAddress(env), name: "Nous" },
+      from: { email: senderAddress(env), name: "Henad" },
       subject: message.subject,
       text: message.text,
       html: message.html,
@@ -132,7 +132,7 @@ function escapeHtml(value: string): string {
 }
 
 function layout(title: string, lead: string, button: string, link: string, foot: string): { text: string; html: string } {
-  const text = `${title}\n\n${lead}\n\n${link}\n\n${foot}\n\n— Nous · The architecture of understanding.`;
+  const text = `${title}\n\n${lead}\n\n${link}\n\n${foot}\n\n— Henad · The architecture of understanding.`;
   const html = `<!doctype html><html><body style="margin:0;background:#0b0b10;font-family:-apple-system,Segoe UI,Roboto,sans-serif;color:#eee">
 <div style="max-width:480px;margin:0 auto;padding:32px 24px">
 <p style="font-size:22px;font-weight:700;margin:0 0 16px">${escapeHtml(title)}</p>
@@ -140,27 +140,27 @@ function layout(title: string, lead: string, button: string, link: string, foot:
 <p style="margin:0 0 24px"><a href="${escapeHtml(link)}" style="display:inline-block;background:#fff;color:#000;text-decoration:none;font-weight:600;padding:12px 20px;border-radius:999px">${escapeHtml(button)}</a></p>
 <p style="font-size:13px;line-height:1.5;color:#aaa;margin:0 0 8px">${escapeHtml(foot)}</p>
 <p style="font-size:12px;color:#777;word-break:break-all;margin:0 0 24px">${escapeHtml(link)}</p>
-<p style="font-size:12px;color:#777;margin:0">Nous · The architecture of understanding.</p>
+<p style="font-size:12px;color:#777;margin:0">Henad · The architecture of understanding.</p>
 </div></body></html>`;
   return { text, html };
 }
 
 export function verifyEmailMessage(link: string): { subject: string; text: string; html: string } {
   return {
-    subject: "Confirm your email for Nous",
+    subject: "Confirm your email for Henad",
     ...layout(
       "Confirm your email",
-      "Tap the button to confirm this is your email address for Nous.",
+      "Tap the button to confirm this is your email address for Henad.",
       "Confirm email",
       link,
-      "If you didn't make a Nous account, you can ignore this email.",
+      "If you didn't make a Henad account, you can ignore this email.",
     ),
   };
 }
 
 export function resetEmailMessage(link: string): { subject: string; text: string; html: string } {
   return {
-    subject: "Reset your Nous password",
+    subject: "Reset your Henad password",
     ...layout(
       "Reset your password",
       "Tap the button to choose a new password. The link works once and expires in 30 minutes.",
@@ -173,16 +173,16 @@ export function resetEmailMessage(link: string): { subject: string; text: string
 
 export function testEmailMessage(): { subject: string; text: string; html: string } {
   return {
-    subject: "Nous email test",
-    text: "This is a test from Nous. Email is working.\n\n— Nous",
-    html: "<p>This is a test from Nous. Email is working.</p><p>— Nous</p>",
+    subject: "Henad email test",
+    text: "This is a test from Henad. Email is working.\n\n— Henad",
+    html: "<p>This is a test from Henad. Email is working.</p><p>— Henad</p>",
   };
 }
 
 /** Links always point at the public site, never at the request's Host header. */
 export function publicBase(env: EmailEnv): string {
   const raw = (env.NEURAL_FORGE_PUBLIC_URL || "").trim().replace(/\/+$/, "");
-  return /^https:\/\/nous\.youneek\.(dev|xyz)$/.test(raw) ? raw : "https://nous.youneek.dev";
+  return /^https:\/\/henad\.youneek\.(dev|xyz)$/.test(raw) ? raw : "https://henad.youneek.dev";
 }
 
 /**

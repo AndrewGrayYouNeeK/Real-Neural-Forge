@@ -148,14 +148,14 @@ def test_concat_mp3_drops_later_id3_tags() -> None:
     assert concat_mp3([first, second]) == first + b"two"
 
 
-def test_nous_is_spoken_as_noose_for_every_voice():
+def test_henad_is_spoken_as_hen_add_for_every_voice():
     from src.voice.text import speech_text
 
-    assert speech_text("Nous can help. NOUS and nous too.") == (
-        "Noose can help. Noose and Noose too."
+    assert speech_text("Henad can help. HENAD and henad too.") == (
+        "Hen-add can help. Hen-add and Hen-add too."
     )
-    assert speech_text("Ask Nous's team about nousy things") == (
-        "Ask Noose's team about nousy things"
+    assert speech_text("Ask Henad's team about henady things") == (
+        "Ask Hen-add's team about henady things"
     )
 
 
@@ -166,13 +166,15 @@ def test_youneek_is_spoken_as_unique():
         "Andrew Gray, founder, owner and C E O of unique."
     )
     assert speech_text("YNK and youneek and YOUNEEK") == "unique and unique and unique"
-    assert speech_text("Ask Ivy or GQ about Nous") == "Ask Ivy or GQ about Noose"
+    assert speech_text("Ask Ivy or GQ about Henad") == "Ask Ivy or GQ about Hen-add"
 
 
-def test_old_name_is_spoken_as_noose() -> None:
+def test_old_names_are_spoken_as_henad() -> None:
     from src.voice.text import speech_text
 
     assert speech_text("I'm Neural Forge, aka Real Neural Forge.") == (
-        "I'm Noose, aka Noose."
+        "I'm Hen-add, aka Hen-add."
     )
+    assert speech_text("I used to be Nous.") == "I used to be Hen-add."
+    assert speech_text("Nous Research makes Hermes.") == "Nous Research makes Hermes."
     assert speech_text("neural forgery is not a name") == "neural forgery is not a name"

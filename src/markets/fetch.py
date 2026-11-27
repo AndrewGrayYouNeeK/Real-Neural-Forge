@@ -76,7 +76,7 @@ STOOQ_SYMBOLS = {
     "stock-nvda": "nvda.us",
 }
 HEADERS = {
-    "User-Agent": "Nous/1.0 (research; market-history fetch)",
+    "User-Agent": "Henad/1.0 (research; market-history fetch)",
     "Accept": "application/json,text/csv,*/*",
 }
 BINANCE_START_MS = 1_483_228_800_000  # 2017-01-01 UTC

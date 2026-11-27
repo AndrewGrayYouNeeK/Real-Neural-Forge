@@ -1,4 +1,4 @@
-/* Nous code runner: runs one Python snippet in Pyodide, in this browser only.
+/* Henad code runner: runs one Python snippet in Pyodide, in this browser only.
  *
  * A fresh worker is started for every run and thrown away afterwards, so runs
  * never share state. Python packages the snippet imports are fetched from the

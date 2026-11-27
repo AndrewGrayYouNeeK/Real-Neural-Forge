@@ -1,18 +1,18 @@
-# Nous LoRA starter kit
+# Henad LoRA starter kit
 
-Teach a small, fast AI model to talk like Nous (funny, short, honest, spoken-friendly), then run it on Cloudflare Workers AI next to GPT-OSS 120B.
+Teach a small, fast AI model to talk like Henad (funny, short, honest, spoken-friendly), then run it on Cloudflare Workers AI next to GPT-OSS 120B.
 
-**The plan:** keep GPT-OSS 120B for hard questions. Add one small model with a Nous LoRA on it for everyday chat and Talk mode.
+**The plan:** keep GPT-OSS 120B for hard questions. Add one small model with a Henad LoRA on it for everyday chat and Talk mode.
 
-> **Name swap:** if Nous gets renamed (for example Tholun), nothing here breaks. Set `APP_NAME` in the notebook's first cell and it swaps the name in every example before training. See [Renaming](#renaming-the-app).
+> **Name swap:** if Henad gets renamed (for example Tholun), nothing here breaks. Set `APP_NAME` in the notebook's first cell and it swaps the name in every example before training. See [Renaming](#renaming-the-app).
 
 ## What's in this folder
 
 | File | What it is |
 | --- | --- |
-| `nous_chat.jsonl` | 256 training chats in the Nous voice, one per line |
+| `henad_chat.jsonl` | 256 training chats in the Henad voice, one per line |
 | `system_prompt.txt` | The short persona prompt every example starts with (use the same one at chat time) |
-| `nous_lora_colab.ipynb` | The Colab notebook that trains and saves the LoRA |
+| `henad_lora_colab.ipynb` | The Colab notebook that trains and saves the LoRA |
 | `tools/validate_dataset.py` | Checks the examples file before you train |
 
 ## Which model, and why
@@ -49,11 +49,11 @@ Cloudflare's docs say the base model it runs for LoRA must not be quantized, and
 
 ### 1. Train in Colab (free, about 20 minutes)
 
-1. Open the notebook: **[Open in Colab](https://colab.research.google.com/github/AndrewGrayYouNeeK/Nous/blob/main/training/nous_lora_colab.ipynb)**
+1. Open the notebook: **[Open in Colab](https://colab.research.google.com/github/AndrewGrayYouNeeK/Henad/blob/main/training/henad_lora_colab.ipynb)**
 2. Sign in with a Google account.
 3. Top menu: **Runtime → Change runtime type → T4 GPU → Save**.
 4. Top menu: **Runtime → Run all**. Wait for it. When it asks permission to download a file at the end, allow it.
-5. Read the test chats near the bottom. Does it sound like Nous? If so, you're done. A file called `nous-lora.zip` downloads to your computer.
+5. Read the test chats near the bottom. Does it sound like Henad? If so, you're done. A file called `henad-lora.zip` downloads to your computer.
 
 If it doesn't sound right, see [Making it better](#making-it-better).
 
@@ -62,10 +62,10 @@ Note: Colab's free GPU isn't guaranteed, and Unsloth changes often. If the insta
 ### 2. Unzip and check the files
 
 ```bash
-unzip nous-lora.zip -d nous-lora
-ls nous-lora
+unzip henad-lora.zip -d henad-lora
+ls henad-lora
 # adapter_config.json  adapter_model.safetensors
-grep -E '"r"|model_type' nous-lora/adapter_config.json
+grep -E '"r"|model_type' henad-lora/adapter_config.json
 # "r": 8   and   "model_type": "mistral"
 ```
 
@@ -75,11 +75,11 @@ You'll need to be logged in to Cloudflare once (`npx wrangler login`). The accou
 
 ```bash
 export CLOUDFLARE_ACCOUNT_ID=d74b0de637f4d9d9eb3efb9e13142784
-npx wrangler ai finetune create @cf/mistral/mistral-7b-instruct-v0.2-lora nous-chat-v1 ./nous-lora
+npx wrangler ai finetune create @cf/mistral/mistral-7b-instruct-v0.2-lora henad-chat-v1 ./henad-lora
 npx wrangler ai finetune list
 ```
 
-`nous-chat-v1` is the name you'll use in code. You can't edit an adapter after upload, so for a new version upload a new one (`nous-chat-v2`) and switch the name.
+`henad-chat-v1` is the name you'll use in code. You can't edit an adapter after upload, so for a new version upload a new one (`henad-chat-v2`) and switch the name.
 
 The same upload also works through Cloudflare's REST API if you prefer curl (token needs `Workers AI: Edit`). Wrangler is simpler.
 
@@ -93,7 +93,7 @@ curl -s "https://api.cloudflare.com/client/v4/accounts/d74b0de637f4d9d9eb3efb9e1
   -H "Authorization: Bearer $TOKEN" \
   -d "$(jq -n --arg p "<s>[INST] $SYSTEM
 
-Who made you? [/INST]" '{prompt:$p, raw:true, lora:"nous-chat-v1", max_tokens:160, temperature:0.8}')"
+Who made you? [/INST]" '{prompt:$p, raw:true, lora:"henad-chat-v1", max_tokens:160, temperature:0.8}')"
 ```
 
 In a Worker it looks like this:
@@ -102,7 +102,7 @@ In a Worker it looks like this:
 const result = await env.AI.run("@cf/mistral/mistral-7b-instruct-v0.2-lora", {
   prompt: `<s>[INST] ${system}\n\n${question} [/INST]`, // same format as training
   raw: true,                                           // we supply the chat template ourselves
-  lora: "nous-chat-v1",                                // the finetune name (or id) from wrangler
+  lora: "henad-chat-v1",                                // the finetune name (or id) from wrangler
   max_tokens: 160,
   temperature: 0.8,
 });
@@ -112,7 +112,7 @@ Cloudflare's docs show `raw: true` together with a `messages` array. We use `pro
 
 ## Making it better
 
-- **Too robotic or bland?** Add more funny examples to `nous_chat.jsonl` and train again. 200 to 1,000 good examples beats thousands of sloppy ones.
+- **Too robotic or bland?** Add more funny examples to `henad_chat.jsonl` and train again. 200 to 1,000 good examples beats thousands of sloppy ones.
 - **Repeats examples word for word?** It's overtrained. Set `EPOCHS = 2` in the notebook.
 - **Barely changed?** Add more examples, or try `EPOCHS = 4`.
 - Add examples the same way as the others, as one JSON object per line:
@@ -127,37 +127,37 @@ The creator answer must stay word for word: *created by and is owned by Andrew G
 
 ## Collecting examples in the app (owner only)
 
-Signed in as the owner (with a passkey or authenticator code), every Nous reply gets three buttons:
+Signed in as the owner (with a passkey or authenticator code), every Henad reply gets three buttons:
 
 - **👍 Save**: saves your question and that answer, as-is, as a good example.
-- **✏️ Fix it**: opens an editor with the answer filled in. Rewrite it the way Nous should have said it and save.
+- **✏️ Fix it**: opens an editor with the answer filled in. Rewrite it the way Henad should have said it and save.
 - **👎 That was bad**: one tap saves the question and the bad answer as a **rejected** example. Then **Fix it now?** lets you write the right answer, saved as a good example and linked to the bad one.
 
-The **🧠** button next to the attach buttons opens **Add example**: type a question and the perfect answer from scratch (add more turns if you want) and save. **See all examples** (also under Account → Owner → Training examples) lists everything with counts, a Good/Rejected filter, search, tags, edit and delete, plus **Export JSONL** (good examples, same format as `nous_chat.jsonl`) and **Export rejected**.
+The **🧠** button next to the attach buttons opens **Add example**: type a question and the perfect answer from scratch (add more turns if you want) and save. **See all examples** (also under Account → Owner → Training examples) lists everything with counts, a Good/Rejected filter, search, tags, edit and delete, plus **Export JSONL** (good examples, same format as `henad_chat.jsonl`) and **Export rejected**.
 
-Rejected examples are exported separately (`rejected.jsonl`, each line has `"label": "rejected"`) and are never mixed into the SFT data. Don't append them to `nous_chat.jsonl`.
+Rejected examples are exported separately (`rejected.jsonl`, each line has `"label": "rejected"`) and are never mixed into the SFT data. Don't append them to `henad_chat.jsonl`.
 
-Examples live in the D1 table `training_examples`. Anything that looks like a key or token is refused. A weekly GitHub Action in the **private** repo `AndrewGrayYouNeeK/nous-training-data` backs both files up to `training/collected/examples.jsonl` and `training/collected/rejected.jsonl` there. It's a private repo because the examples come from real chats and this repo is public.
+Examples live in the D1 table `training_examples`. Anything that looks like a key or token is refused. A weekly GitHub Action in the **private** repo `AndrewGrayYouNeeK/henad-training-data` backs both files up to `training/collected/examples.jsonl` and `training/collected/rejected.jsonl` there. It's a private repo because the examples come from real chats and this repo is public.
 
-To train with them: download **Export JSONL**, run `cat examples.jsonl >> training/nous_chat.jsonl` on a local copy (or upload it to Colab and point `DATA_URL` at it), then run `python3 training/tools/validate_dataset.py`.
+To train with them: download **Export JSONL**, run `cat examples.jsonl >> training/henad_chat.jsonl` on a local copy (or upload it to Colab and point `DATA_URL` at it), then run `python3 training/tools/validate_dataset.py`.
 
 ## Renaming the app
 
-1. In the notebook's settings cell, set `APP_NAME = "Tholun"` (or the new name). The notebook swaps `Nous` for it in every example and in the system prompt before training.
-2. Fix by hand in `nous_chat.jsonl` and `system_prompt.txt` any lines that depend on how the old name sounds. Search for `noose`. The "What's your name?" examples spell out the pronunciation.
-3. Train again and upload as a new finetune name (`tholun-chat-v1`), then change the name in the routing code. Keep the system prompt identical in training and in the Worker.
+1. In the notebook's settings cell, set `APP_NAME` to the new name. The notebook swaps `Henad` for it in every example and in the system prompt before training.
+2. Fix by hand in `henad_chat.jsonl` and `system_prompt.txt` any lines that depend on how the old name sounds. Search for `HEN-add`. The "What's your name?" examples spell out the pronunciation. (The app was renamed from Nous to Henad on Nov 27, 2026; the data was updated then.)
+3. Train again and upload as a new finetune name (for example `newname-chat-v1`), then change the name in the routing code. Keep the system prompt identical in training and in the Worker.
 
 ## What this doesn't cover (on purpose)
 
 - **Unhinged mode** isn't in the training data. It stays on GPT-OSS 120B, off by default, as it is today.
-- **Live data answers** (weather, markets, space, forecasts) still come from the app's own tools. The data includes a few examples of rewriting a factual reply in the Nous voice without changing any numbers, but the app should still check that every number survived (it already does for 120B).
+- **Live data answers** (weather, markets, space, forecasts) still come from the app's own tools. The data includes a few examples of rewriting a factual reply in the Henad voice without changing any numbers, but the app should still check that every number survived (it already does for 120B).
 - **The chat code is not changed.** Nothing in `deploy/cloudflare/` is touched by this kit.
 
 ## Code change needed later (not done yet)
 
 When the adapter is uploaded and tested, the routing change lives in `deploy/cloudflare/src/live/ai.ts` plus its tests:
 
-1. **Add constants** next to `PRIMARY_MODEL` and `FALLBACK_MODEL`: `LORA_MODEL = "@cf/mistral/mistral-7b-instruct-v0.2-lora"`, and read the finetune name from an env var (for example `NOUS_LORA_NAME`, default empty). If the name is empty, routing stays exactly as it is today, so the change ships safely off.
+1. **Add constants** next to `PRIMARY_MODEL` and `FALLBACK_MODEL`: `LORA_MODEL = "@cf/mistral/mistral-7b-instruct-v0.2-lora"`, and read the finetune name from an env var (for example `HENAD_LORA_NAME`, default empty). If the name is empty, routing stays exactly as it is today, so the change ships safely off.
 2. **Add a LoRA system prompt:** import the exact text of `training/system_prompt.txt`. The LoRA model must see the same persona text it was trained on, not the long `SYSTEM_PROMPT`. Keep the `HARD_LIMITS` rules too.
 3. **Add a branch in `chatInputs`** for `LORA_MODEL`: return `{ prompt: "<s>[INST] " + system + "\n\n" + content + " [/INST]", raw: true, lora: name, max_tokens, temperature }` instead of `messages`. Multi-turn history needs the `[INST] ... [/INST] answer</s>` format, built like `to_mistral_text` in the notebook.
 4. **Add a small router**, for example `pickChatModel({ mode, talk, question, hasTools })`:
@@ -165,7 +165,7 @@ When the adapter is uploaded and tested, the routing change lives in `deploy/clo
    - Keep on GPT-OSS 120B: Unhinged mode, tool and agent-loop calls, code, math and anything that needs live data, long or research-style questions, and controversial topics where sources matter.
 5. **Fallback in both directions:** if the LoRA call errors or returns empty text, retry on 120B. Strip stray `[INST]`, `[/INST]`, `<s>` and `</s>` from the output before showing or speaking it.
 6. **Quota accounting:** `usageNeurons` and the neuron constants are written for 120B. LoRA inference is free during Cloudflare's open beta, so count it at zero for now and recheck pricing when beta ends. Update `deploy/cloudflare/test/aiQuota.test.ts`, and add tests for the router and for the fallback.
-7. **Voice:** Talk mode's speech substitutions (Nous spoken as "Noose", YouNeeK as "unique") are applied after the model answers, so they don't change.
+7. **Voice:** Talk mode's speech substitutions (Henad spoken as "Hen-add", YouNeeK as "unique") are applied after the model answers, so they don't change.
 8. **Roll out behind the env var,** compare 120B and LoRA answers side by side on the same questions, then turn it on. Don't redeploy an older image to roll back, just clear the env var.
 
 Worker-only changes need no container image or pin, but do follow the normal deploy flow for the Worker.

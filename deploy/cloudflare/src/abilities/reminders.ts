@@ -47,7 +47,7 @@ export function reminderIntent(question: string): "create" | "list" | "cancel" |
     return "list";
   }
   if (
-    /^(?:(?:hey )?nous,?\s+)?(?:(?:can|could|would|will) you\s+|please\s+)*(remind me|set (?:a |an )?reminder|check in (?:with|on) me|ping me|nudge me)\b/.test(q) ||
+    /^(?:(?:hey )?henad,?\s+)?(?:(?:can|could|would|will) you\s+|please\s+)*(remind me|set (?:a |an )?reminder|check in (?:with|on) me|ping me|nudge me)\b/.test(q) ||
     /\b(remind me (to|about|that|in|at|on|tomorrow|tonight|every)|set (?:a |an )?reminder (to|for)|check in (with|on) me)\b/.test(q)
   ) {
     return "create";
@@ -312,7 +312,7 @@ export function parseReminder(question: string, tz: string, now: number): Parsed
 
 export function cleanReminderText(raw: string, checkIn = false): string {
   let text = raw
-    .replace(/^\s*(?:(?:hey )?nous,?\s+)?(?:(?:can|could|would|will) you\s+|please\s+)*/i, "")
+    .replace(/^\s*(?:(?:hey )?henad,?\s+)?(?:(?:can|could|would|will) you\s+|please\s+)*/i, "")
     .replace(/\b(remind me|set (?:a |an )?reminder|ping me|nudge me|check in (?:with|on) me)\b/i, " ")
     .replace(/^\s*(to|that|about|for|on|at)\b/i, " ")
     .replace(/\s+(to|that|about|for|on|at|in|and)\s*$/i, " ")
@@ -457,7 +457,7 @@ export async function createReminder(deps: ReminderDeps, question: string): Prom
   const when = formatWhen(parsed.dueAt, deps.tz, now);
   const what = parsed.checkIn ? `check in with you about ${parsed.text}` : `remind you to ${parsed.text}`;
   return {
-    text: `Got it. I'll ${what} ${when}${repeatLabel(parsed.repeat)}. It'll pop up here in Nous.\n[[reminder:${id}]]`,
+    text: `Got it. I'll ${what} ${when}${repeatLabel(parsed.repeat)}. It'll pop up here in Henad.\n[[reminder:${id}]]`,
     reminderId: id,
   };
 }
@@ -551,8 +551,8 @@ export async function emailReminder(
     const base = publicBase(mailEnv);
     const result = await sendToVerifiedUser(db, mailEnv, "reminder", userId, {
       subject: message.replace(/^\S+\s/, "").slice(0, 120),
-      text: `${message}\n\nOpen Nous: ${base}\n\n— Nous · The architecture of understanding.`,
-      html: `<!doctype html><html><body style="font-family:-apple-system,Segoe UI,Roboto,sans-serif;background:#0b0b10;color:#eee;margin:0"><div style="max-width:480px;margin:0 auto;padding:32px 24px"><p style="font-size:20px;font-weight:700;margin:0 0 20px">${escapeHtml(message)}</p><p><a href="${escapeHtml(base)}" style="display:inline-block;background:#fff;color:#000;text-decoration:none;font-weight:600;padding:12px 20px;border-radius:999px">Open Nous</a></p><p style="font-size:12px;color:#777;margin-top:24px">Nous · The architecture of understanding.</p></div></body></html>`,
+      text: `${message}\n\nOpen Henad: ${base}\n\n— Henad · The architecture of understanding.`,
+      html: `<!doctype html><html><body style="font-family:-apple-system,Segoe UI,Roboto,sans-serif;background:#0b0b10;color:#eee;margin:0"><div style="max-width:480px;margin:0 auto;padding:32px 24px"><p style="font-size:20px;font-weight:700;margin:0 0 20px">${escapeHtml(message)}</p><p><a href="${escapeHtml(base)}" style="display:inline-block;background:#fff;color:#000;text-decoration:none;font-weight:600;padding:12px 20px;border-radius:999px">Open Henad</a></p><p style="font-size:12px;color:#777;margin-top:24px">Henad · The architecture of understanding.</p></div></body></html>`,
     });
     return result.ok;
   } catch {

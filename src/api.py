@@ -264,7 +264,7 @@ async def lifespan(app: FastAPI):  # noqa: ARG001
 
 
 app = FastAPI(
-    title="Nous",
+    title="Henad",
     description="Production-ready transformer pipeline for time-series prediction.",
     version=__version__,
     lifespan=lifespan,

@@ -1,4 +1,4 @@
-/* Nous chat abilities: reading attached files and showing images Nous made.
+/* Henad chat abilities: reading attached files and showing images Henad made.
  * Everything triggers from normal chat; the only control is the attach button.
  */
 (function () {
@@ -25,7 +25,7 @@
     figure.className = "gen-image";
     const img = document.createElement("img");
     img.src = `/agent/images/${id}`;
-    img.alt = "Image made by Nous";
+    img.alt = "Image made by Henad";
     img.loading = "lazy";
     img.decoding = "async";
     img.addEventListener("load", () => {
@@ -37,7 +37,7 @@
     });
     const save = document.createElement("a");
     save.href = `/agent/images/${id}`;
-    save.download = `nous-${id}.jpg`;
+    save.download = `henad-${id}.jpg`;
     save.className = "gen-image-save";
     save.textContent = "Save image";
     figure.append(img, save);
@@ -223,7 +223,7 @@
         if (typeof window.addReply === "function") window.addReply(text);
         if ("Notification" in window && Notification.permission === "granted" && document.visibilityState === "hidden") {
           try {
-            new Notification("Nous", { body: text, icon: "/assets/brand/icon-192.png", tag: item.id });
+            new Notification("Henad", { body: text, icon: "/assets/brand/icon-192.png", tag: item.id });
           } catch {
             // Some browsers only allow notifications from a service worker.
           }
@@ -261,7 +261,7 @@
     return Boolean(file && typeof file.type === "string" && file.type.startsWith("image/"));
   }
 
-  window.nousAbilities = {
+  window.henadAbilities = {
     attach,
     hasPendingFile,
     takeChatExtras,

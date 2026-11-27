@@ -7,12 +7,12 @@ services:
     plan: standard
     healthCheckPath: /health
     image:
-      url: ghcr.io/andrewgrayyouneek/nous:latest
+      url: ghcr.io/andrewgrayyouneek/henad:latest
     envVars:
       - key: NEURAL_FORGE_CONFIG
         value: config/config.yaml
       - key: NEURAL_FORGE_CHECKPOINT_URL
-        value: https://github.com/AndrewGrayYouNeeK/Nous/releases/download/champions/champion-default.pt
+        value: https://github.com/AndrewGrayYouNeeK/Henad/releases/download/champions/champion-default.pt
       - key: NEURAL_FORGE_API_TOKEN
         sync: false
       - key: NEURAL_FORGE_CHECKPOINT_TOKEN

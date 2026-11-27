@@ -23,14 +23,14 @@ describe("freshness", () => {
   });
 
   it("covers every file under /assets and labels webp images", () => {
-    expect(needsRevalidation("GET", "/assets/brand/nous-o.webp", page("application/octet-stream"))).toBe(true);
-    const out = withFreshness(new Request("https://nous.youneek.dev/assets/brand/nous-o.webp"), page("application/octet-stream"));
+    expect(needsRevalidation("GET", "/assets/brand/henad-o.webp", page("application/octet-stream"))).toBe(true);
+    const out = withFreshness(new Request("https://henad.youneek.dev/assets/brand/henad-o.webp"), page("application/octet-stream"));
     expect(out.headers.get("Content-Type")).toBe("image/webp");
     expect(out.headers.get("Cache-Control")).toBe("no-cache");
   });
 
   it("adds no-cache and keeps the rest of the reply", async () => {
-    const out = withFreshness(new Request("https://nous.youneek.dev/"), page("text/html", { ETag: '"abc"' }));
+    const out = withFreshness(new Request("https://henad.youneek.dev/"), page("text/html", { ETag: '"abc"' }));
     expect(out.headers.get("Cache-Control")).toBe("no-cache");
     expect(out.headers.get("ETag")).toBe('"abc"');
     expect(await out.text()).toBe("x");

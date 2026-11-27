@@ -2,7 +2,7 @@
 //
 // The container sends the site's HTML, CSS, JS and images with only an ETag and
 // Last-Modified. With no Cache-Control, Safari and Chrome may reuse their saved
-// copy for hours without asking, so a phone can keep showing an older Nous after a
+// copy for hours without asking, so a phone can keep showing an older Henad after a
 // deploy. `no-cache` still lets them keep the file, but they must check first, and
 // an unchanged file costs a tiny 304 reply.
 

@@ -79,7 +79,7 @@ export async function verifyTotp(
   return null;
 }
 
-export function otpauthUrl(secretBase32: string, account: string, issuer = "Nous"): string {
+export function otpauthUrl(secretBase32: string, account: string, issuer = "Henad"): string {
   const label = encodeURIComponent(`${issuer}:${account}`);
   return `otpauth://totp/${label}?secret=${secretBase32}&issuer=${encodeURIComponent(issuer)}&algorithm=SHA1&digits=6&period=${TOTP_PERIOD}`;
 }

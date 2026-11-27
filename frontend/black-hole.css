@@ -1,35 +1,14 @@
-/* One black hole: the O in the Nous wordmark.
-   The outer ring and the letters stay still. Only the accretion
-   around the hole's center slowly turns. Thinking speeds that turn.
-   Reduce Motion: everything stays still. */
+/* One black hole: the counter of the A in the HENAD wordmark.
+   Layout lives in styles.css. The letters, the A's legs and the hole's outer
+   ring stay still. Only the accretion around the hole's center slowly turns.
+   Thinking speeds that turn. Reduce Motion: everything stays still. */
 
-.nous-wordmark .nous-o-wrap {
-  position: relative;
-  display: block;
-  height: 1.148em;
-  aspect-ratio: 287 / 241;
-  width: auto;
-  margin: 0 0.01em 0 -0.01em;
-  flex: none;
-  isolation: isolate;
-  transform-origin: 50% 50%;
-}
-
-.nous-wordmark .nous-o-wrap .nous-o {
-  position: absolute;
-  inset: 0;
-  height: 100%;
-  width: 100%;
-  margin: 0;
-  display: block;
-}
-
-/* Soft halo behind the O; no motion, so the letterform never warps. */
-.nous-wordmark .nous-o-wrap::before {
+/* Soft halo behind the hole; no motion, so nothing warps. */
+.henad-wordmark .henad-o-wrap::before {
   content: "";
   position: absolute;
   inset: -18%;
-  z-index: 0;
+  z-index: -1;
   border-radius: 50%;
   background: radial-gradient(
     circle,
@@ -40,17 +19,13 @@
   pointer-events: none;
 }
 
-.nous-wordmark .nous-o-ring {
-  z-index: 1;
-}
-
-.nous-wordmark .nous-o-core {
+.henad-wordmark .henad-o-core {
   z-index: 2;
   transform-origin: 50% 50%;
   pointer-events: none;
-  /* Closest-side is half the O's height. The hole's inner rim is ~43% of
-     that, the bright mid-ring ~70%, and the outer wisps begin ~86%. Only
-     the inner swirl is visible on this layer, so the O's outline stays put. */
+  /* Closest-side is half the hole's height. The inner rim is ~43% of that,
+     the bright mid-ring ~70%, and the outer wisps begin ~86%. Only the inner
+     swirl is visible on this layer, so the ring's outline stays put. */
   -webkit-mask-image: radial-gradient(
     circle closest-side at 50% 50%,
     transparent 0 42%,
@@ -68,10 +43,10 @@
 }
 
 @media (prefers-reduced-motion: no-preference) {
-  .nous-wordmark .nous-o-core {
+  .henad-wordmark .henad-o-core {
     animation: bh-core-spin 28s linear infinite;
   }
-  body.nous-thinking .nous-wordmark .nous-o-core {
+  body.henad-thinking .henad-wordmark .henad-o-core {
     animation-duration: 9s;
   }
 }
@@ -91,7 +66,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .nous-wordmark .nous-o-core {
+  .henad-wordmark .henad-o-core {
     animation: none;
   }
 }

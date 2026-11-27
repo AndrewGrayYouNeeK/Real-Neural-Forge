@@ -1,5 +1,5 @@
 /**
- * Future-proof tool registry for the Nous shell.
+ * Future-proof tool registry for the Henad shell.
  * Add a tool later: one entry here + optional panel markup with data-tool-view.
  * Landing "Tools & Roadmap" is driven by ROADMAP (statuses: live | in-progress | coming-soon).
  */
@@ -9,7 +9,7 @@
       id: "chat",
       name: "Chat",
       icon: "◇",
-      description: "Ask in plain English. Nous uses the right tool when it needs to.",
+      description: "Ask in plain English. Henad uses the right tool when it needs to.",
       status: "live",
       view: "chat",
     },
@@ -65,7 +65,7 @@
       id: "talk",
       name: "Talk (GQ voice)",
       icon: "♫",
-      description: "Hands-free Talk mode in GQ voice, included with Nous Plus.",
+      description: "Hands-free Talk mode in GQ voice, included with Henad Plus.",
       status: "live",
       view: "voice",
     },
@@ -332,7 +332,7 @@
         },
         {
           name: "Self-supervised world model (JEPA)",
-          description: "Nous learns its own latent state, then keeps it only if the backtest says it helps.",
+          description: "Henad learns its own latent state, then keeps it only if the backtest says it helps.",
           toolId: "world-encoder",
         },
       ],
@@ -349,7 +349,7 @@
     return STATUS_LABELS[status] || status;
   }
 
-  global.NousTools = {
+  global.HenadTools = {
     TOOL_REGISTRY,
     ROADMAP,
     STATUS_LABELS,

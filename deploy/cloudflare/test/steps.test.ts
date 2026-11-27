@@ -446,7 +446,7 @@ describe("artifacts", () => {
     expect(csv.split("\n")[0]).toBe("label,Actual (°F),Forecast (°F)");
     expect(csv.split("\n")[3]).toBe("+1,,53");
     const plan = planRequest("chart it then export a csv");
-    expect(buildArtifacts(plan, results).csv?.filename).toBe("neural-forge-data.csv");
+    expect(buildArtifacts(plan, results).csv?.filename).toBe("henad-data.csv");
     expect(missingDeliverables(plan, [])).toEqual(["chart", "csv"]);
   });
 

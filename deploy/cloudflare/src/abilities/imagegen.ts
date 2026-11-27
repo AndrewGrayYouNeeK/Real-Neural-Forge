@@ -29,7 +29,7 @@ const NOUNS =
 const VERBS = "draw|paint|sketch|illustrate|generate|create|make|design|render|produce|imagine|show me|give me|whip up";
 
 const ASK_IMAGE = new RegExp(`\\b(${VERBS})\\b[^.?!]{0,40}?\\b(${NOUNS})\\b`, "i");
-const STARTS_DRAW = /^(?:(?:can|could|would|will) you\s+|please\s+|pls\s+|hey nous,?\s+|nous,?\s+)*(draw|paint|sketch|illustrate)\b/i;
+const STARTS_DRAW = /^(?:(?:can|could|would|will) you\s+|please\s+|pls\s+|hey henad,?\s+|henad,?\s+)*(draw|paint|sketch|illustrate)\b/i;
 const NOT_IMAGE =
   /\b(chart|graph|plot|forecast|predict|diagram of (?:the )?data|spreadsheet|csv)\b|^\s*(how|why|what|where|when|who|which)\b|\b(how (?:do|can|to|would) (?:i|you|we|one)?\s*(?:draw|make|create|design|paint))\b/i;
 
@@ -43,7 +43,7 @@ export function isImageRequest(question: string): boolean {
 /** Turn "can you draw me a picture of a red fox" into "a red fox". */
 export function imagePrompt(question: string): string {
   let q = question.replace(/\s+/g, " ").trim();
-  q = q.replace(/^(?:(?:hey )?nous,?\s+)?(?:(?:can|could|would|will) you\s+|please\s+|pls\s+|i want you to\s+|i'd like you to\s+)*/i, "");
+  q = q.replace(/^(?:(?:hey )?henad,?\s+)?(?:(?:can|could|would|will) you\s+|please\s+|pls\s+|i want you to\s+|i'd like you to\s+)*/i, "");
   const generic = "image|images|picture|pictures|pic|pics|photo|photos|drawing|illustration|painting|art|artwork|render|graphic";
   const lead = new RegExp(
     `^(?:${VERBS})\\s+(?:me\\s+|us\\s+)?(?:(?:(?:a|an|the|some|one|another)\\s+)?(?:(?:quick|cool|nice|new|realistic|cute|simple|detailed)\\s+)?(?:${generic})\\s*(?:of|showing|with|that shows|where|about)?\\s*)?`,
@@ -177,7 +177,7 @@ export async function generateImage(deps: ImageDeps, question: string): Promise<
       text:
         claim.reason === "user"
           ? `That's your ${claim.limit} images for today. New ones unlock at midnight UTC, and I can still describe or plan the picture in words.`
-          : "Image making is resting for today to keep Nous free. Text chat still works.",
+          : "Image making is resting for today to keep Henad free. Text chat still works.",
       capped: true,
     };
   }
@@ -233,7 +233,7 @@ export async function serveImage(
     headers: {
       "Content-Type": row.mime || "image/jpeg",
       "Cache-Control": "private, max-age=86400",
-      "Content-Disposition": `inline; filename="nous-${id}.jpg"`,
+      "Content-Disposition": `inline; filename="henad-${id}.jpg"`,
     },
   });
 }

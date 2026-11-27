@@ -521,7 +521,7 @@ export function buildArtifacts(plan: RequestPlan, results: ToolResult[]): TurnAr
   if (!chart) return {};
   const out: TurnArtifacts = {};
   if (wantsChart) out.chart = chart;
-  if (wantsCsv) out.csv = { filename: "neural-forge-data.csv", text: chartToCsv(chart) };
+  if (wantsCsv) out.csv = { filename: "henad-data.csv", text: chartToCsv(chart) };
   return out;
 }
 

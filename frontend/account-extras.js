@@ -1,4 +1,4 @@
-/* Nous account extras: forgot password, reset/confirm links, memory settings,
+/* Henad account extras: forgot password, reset/confirm links, memory settings,
    and the owner-only usage dashboard. Kept apart from app.js on purpose.
    The server decides everything; this file only shows what it is allowed to. */
 (function () {
@@ -225,7 +225,7 @@
         text: "Forget everything",
         on: {
           click: async () => {
-            if (!window.confirm("Forget everything Nous remembers about you?")) return;
+            if (!window.confirm("Forget everything Henad remembers about you?")) return;
             await call("/agent/memory", { method: "DELETE" });
             await render();
           },
@@ -237,8 +237,8 @@
         el("p", {
           class: "hint",
           text: on
-            ? "Nous remembers things you tell it, like your name or what you're working on, so later chats go faster. Only you can see this."
-            : "Memory is off. Nous won't remember anything new or use what's saved.",
+            ? "Henad remembers things you tell it, like your name or what you're working on, so later chats go faster. Only you can see this."
+            : "Memory is off. Henad won't remember anything new or use what's saved.",
         }),
         facts.length ? list : el("p", { class: "hint", text: "Nothing saved yet." }),
         facts.length ? clear : null,
@@ -255,11 +255,11 @@
     return section("Owner", [
       el("div", { class: "nx-row" }, [
         el("button", { class: "btn secondary btn-small", type: "button", text: "Usage dashboard", on: { click: () => openDashboard(probe.data) } }),
-        window.nousTraining
-          ? el("button", { class: "btn secondary btn-small", type: "button", text: "Training examples", on: { click: () => window.nousTraining.openList() } })
+        window.henadTraining
+          ? el("button", { class: "btn secondary btn-small", type: "button", text: "Training examples", on: { click: () => window.henadTraining.openList() } })
           : null,
-        window.nousTraining
-          ? el("button", { class: "btn secondary btn-small", type: "button", text: "Add example", on: { click: () => window.nousTraining.openAdd() } })
+        window.henadTraining
+          ? el("button", { class: "btn secondary btn-small", type: "button", text: "Add example", on: { click: () => window.henadTraining.openAdd() } })
           : null,
       ]),
     ]);

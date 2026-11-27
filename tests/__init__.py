@@ -1,1 +1,1 @@
-"""Tests for the Nous package."""
+"""Tests for the Henad package."""

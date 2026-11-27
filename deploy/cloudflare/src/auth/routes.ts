@@ -264,7 +264,7 @@ export async function handleAuthRoute(
 
   const rpId = rpIdFor(url);
   if (!rpId) {
-    return json({ detail: "Passkeys work on nous.youneek.dev and nous.youneek.xyz. Use an authenticator code here." }, 400);
+    return json({ detail: "Passkeys work on henad.youneek.dev and henad.youneek.xyz. Use an authenticator code here." }, 400);
   }
 
   if (path === "/auth/webauthn/register/options") {
@@ -278,7 +278,7 @@ export async function handleAuthRoute(
       challenge_id: id,
       publicKey: {
         challenge,
-        rp: { id: rpId, name: "Nous" },
+        rp: { id: rpId, name: "Henad" },
         user: {
           id: b64urlEncode(new TextEncoder().encode(session.userId)),
           name: session.email,

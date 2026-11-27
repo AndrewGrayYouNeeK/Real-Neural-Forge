@@ -1,5 +1,6 @@
 import { Container, ContainerProxy, getContainer, type State } from "@cloudflare/containers";
 import { authRequired, isPublicPath, legacyRedirect } from "./auth/gate";
+import { handleHandoff, legacyHandoffPage } from "./auth/handoff";
 import { handleAuthRoute } from "./auth/routes";
 import { resolveSession } from "./auth/session";
 import type { EmailBinding } from "./auth/email";
@@ -83,8 +84,9 @@ interface Env {
   NEURAL_FORGE_PUBLIC_URL?: string;
   /** Cloudflare Email Sending binding (account emails only). */
   EMAIL?: EmailBinding;
-  NOUS_EMAIL_FROM?: string;
+  HENAD_EMAIL_FROM?: string;
   /** Read-only bearer token for the weekly training-example backup (export only). */
+  HENAD_TRAINING_EXPORT_TOKEN?: string;
   NOUS_TRAINING_EXPORT_TOKEN?: string;
 }
 
@@ -411,8 +413,12 @@ export default {
     if (url.pathname === "/_bindings/sql" || url.pathname === "/_bindings/object") {
       return handleBindings(request, env);
     }
+    const handoffPage = await legacyHandoffPage(request, env);
+    if (handoffPage) return handoffPage;
     const moved = legacyRedirect(request);
     if (moved) return moved;
+    const handoff = await handleHandoff(request, env);
+    if (handoff) return handoff;
     const forward = (next: Request) => forwardToContainer(next, env);
     const authResponse = await handleAuthRoute(request, env, forward, ctx.waitUntil.bind(ctx));
     if (authResponse) return authResponse;

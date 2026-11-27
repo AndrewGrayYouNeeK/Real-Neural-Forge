@@ -8,8 +8,9 @@ import { clearKnowledgeMemoryCache } from "../src/agent/knowledge";
 import { GUARD_MODEL } from "../src/agent/safety";
 import type { ToolContext } from "../src/agent/tools";
 
-// Unhinged is locked byte-for-byte. The only change since it shipped: it says "Nous" instead of "Neural Forge".
-const UNHINGED_PROMPT_SHA256 = "419915705a15f529e9ffde7ef07200cd587c4e6590225483c32d6c27d0cc44ac";
+// Unhinged is locked byte-for-byte. The only change since it shipped: it says "Henad" instead of "Neural Forge".
+// Only change since it shipped: the name Nous became Henad (Nov 27, 2026).
+const UNHINGED_PROMPT_SHA256 = "b21059df32a8b05e6191d21c43e75aa58b5439ac6a9e4ff24eec7e95d14ece0b";
 
 /** Minimal D1 that always grants AI quota and knowledge lookups. */
 const openDb: D1Like = {
@@ -55,7 +56,7 @@ describe("default prompt: understanding, openness, creator", () => {
 });
 
 describe("agent turns", () => {
-  it("says Andrew Gray made Nous even if the model claims OpenAI", async () => {
+  it("says Andrew Gray made Henad even if the model claims OpenAI", async () => {
     const ai = { run: async () => ({ response: "I was created by OpenAI, obviously." }) };
     const result = await runAgentTurn("Who made you?", "normal", [], {
       ai,
@@ -206,20 +207,20 @@ describe("knowledge fallback", () => {
   });
 });
 
-describe("Nous identity and humor", () => {
-  it("says Nous when the model slips and uses the old name", async () => {
-    const { sayNous, sanitizeAgentAnswer } = await import("../src/agent/protocol");
-    expect(sayNous("I'm Neural Forge, aka Real Neural Forge.")).toBe("I'm Nous, aka Nous.");
-    expect(sanitizeAgentAnswer("Hi, I am neural   forge!")).toBe("Hi, I am Nous!");
-    expect(sayNous("see real-neural-forge.example")).toBe("see real-neural-forge.example");
+describe("Henad identity and humor", () => {
+  it("says Henad when the model slips and uses the old name", async () => {
+    const { sayHenad, sanitizeAgentAnswer } = await import("../src/agent/protocol");
+    expect(sayHenad("I'm Neural Forge, aka Real Neural Forge.")).toBe("I'm Henad, aka Henad.");
+    expect(sanitizeAgentAnswer("Hi, I am neural   forge!")).toBe("Hi, I am Henad!");
+    expect(sayHenad("see real-neural-forge.example")).toBe("see real-neural-forge.example");
   });
 
-  it("gives default Nous a funny country smooth nerd voice and names it Nous everywhere", async () => {
+  it("gives default Henad a funny country smooth nerd voice and names it Henad everywhere", async () => {
     const { SYSTEM_PROMPT, UNHINGED_PROMPT } = await import("../src/live/ai");
     expect(SYSTEM_PROMPT).toContain("country smooth nerd");
     expect(SYSTEM_PROMPT).toContain("at least one genuinely funny line");
-    expect(SYSTEM_PROMPT).toContain("Your name is Nous");
-    expect(UNHINGED_PROMPT).toContain("You are Nous in unhinged mode");
+    expect(SYSTEM_PROMPT).toContain("Your name is Henad");
+    expect(UNHINGED_PROMPT).toContain("You are Henad in unhinged mode");
     expect(UNHINGED_PROMPT).not.toMatch(/Neural Forge/);
   });
 });

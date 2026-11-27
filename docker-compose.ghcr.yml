@@ -2,7 +2,7 @@
 # docker compose -f docker-compose.ghcr.yml up
 services:
   api:
-    image: ghcr.io/andrewgrayyouneek/nous:latest
+    image: ghcr.io/andrewgrayyouneek/henad:latest
     ports:
       - "8000:8000"
     volumes:

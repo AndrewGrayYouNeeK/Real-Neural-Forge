@@ -1,9 +1,9 @@
 /**
- * Owner-only training-example collector for the Nous LoRA.
+ * Owner-only training-example collector for the Henad LoRA.
  *
  * Every route needs a D1 session with role=owner AND a fresh second factor
  * (session.owner), except the export, which also accepts a read-only bearer
- * token (NOUS_TRAINING_EXPORT_TOKEN) for the weekly GitHub backup.
+ * token (HENAD_TRAINING_EXPORT_TOKEN) for the weekly GitHub backup.
  *
  *   GET    /owner/training/status           {owner: true, counts}
  *   GET    /owner/training/examples?label=good|rejected|all
@@ -12,7 +12,7 @@
  *   DELETE /owner/training/examples/:id
  *   GET    /owner/training/export?label=good|rejected   (JSONL download)
  *
- * Good examples export in the same chat format as training/nous_chat.jsonl.
+ * Good examples export in the same chat format as training/henad_chat.jsonl.
  * Rejected ("That was bad") examples export separately and are never mixed in.
  */
 
@@ -21,7 +21,12 @@ import { resolveSession } from "../auth/session";
 import { json } from "../auth/util";
 import { TRAINING_SYSTEM_PROMPT } from "./trainingPrompt";
 
-export type TrainingEnv = { WORKSPACES_DB?: D1Like; NOUS_TRAINING_EXPORT_TOKEN?: string };
+export type TrainingEnv = {
+  WORKSPACES_DB?: D1Like;
+  HENAD_TRAINING_EXPORT_TOKEN?: string;
+  /** Pre-rename secret name; still read so the backup keeps working. */
+  NOUS_TRAINING_EXPORT_TOKEN?: string;
+};
 
 export type Turn = { role: "user" | "assistant"; content: string };
 export type Label = "good" | "rejected";
@@ -207,7 +212,7 @@ export async function deleteExample(db: D1Like, id: string): Promise<boolean> {
   return Number(result.meta?.changes || 0) > 0;
 }
 
-/** One JSON object per line, oldest first, same chat format as training/nous_chat.jsonl. */
+/** One JSON object per line, oldest first, same chat format as training/henad_chat.jsonl. */
 export function toJsonl(examples: TrainingExample[], label: Label): string {
   const rows = examples
     .filter((example) => example.label === label)
@@ -266,7 +271,7 @@ export async function handleTrainingRoute(request: Request, env: TrainingEnv): P
   const isExport = path === "export" && request.method === "GET";
   // Session tokens (also accepted as Bearer) never look like nte_…, so a
   // backup token is checked first and can only ever reach the export.
-  const viaToken = isExport && (await exportTokenOk(request, env.NOUS_TRAINING_EXPORT_TOKEN));
+  const viaToken = isExport && (await exportTokenOk(request, env.HENAD_TRAINING_EXPORT_TOKEN || env.NOUS_TRAINING_EXPORT_TOKEN));
   if (!viaToken) {
     const session = await resolveSession(request, db);
     if (!session) return json({ detail: "Sign in to continue.", auth_required: true }, 401);

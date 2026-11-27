@@ -855,10 +855,10 @@ class TestForecastDashboard:
         assert "Try it free" in html
         assert 'id="hero-signup-btn"' in html
         assert "Text chat is free" in html
-        assert "Nous Plus" in html
+        assert "Henad Plus" in html
         assert "voice credit" not in html.lower()
         assert 'id="capabilities"' in html
-        assert "What Nous can do" in html
+        assert "What Henad can do" in html
         assert "Forecast any number series" in html
         assert "Train on your own CSV" in html
         assert "Live answers" in html
@@ -879,7 +879,7 @@ class TestForecastDashboard:
         assert "Moon phase" in html
         assert "Train on my CSV" in html
         assert 'id="pricing"' in html
-        assert "What's free, and what's in Nous Plus" in html
+        assert "What's free, and what's in Henad Plus" in html
         assert "$9 a month" in html
         assert "no packs or add-ons" in html.lower()
         assert 'id="tools-roadmap"' in html
@@ -918,7 +918,7 @@ class TestForecastDashboard:
         assert 'id="gate-mfa"' in html
         assert 'id="gate-setup"' in html
         assert 'id="gate-recovery"' in html
-        assert "<title>Nous" in html
+        assert "<title>Henad" in html
         assert "The architecture of understanding." in html
         css = client.get("/assets/styles.css").text
         # The public landing must paint before JS; hiding it on auth-pending
@@ -932,13 +932,15 @@ class TestForecastDashboard:
             "The architecture of understanding."
         )
         assert 'rel="manifest"' in html
-        assert "/assets/brand/nous-s.webp" in html
-        assert "/assets/brand/nous-o.webp" in html
-        assert ">N</span>" in html and ">U</span>" in html
+        assert "/assets/brand/henad-s.webp" not in html
+        assert "/assets/brand/henad-o.webp" in html
+        assert ">HEN</span>" in html and ">D</span>" in html
+        assert 'class="henad-a-legs"' in html
+        assert "Nous" not in html
         assert "andrewgray@youneek.xyz" in html
         assert 'data-tool-view="about"' in html
         assert client.get("/app").status_code == 200
-        assert client.get("/manifest.webmanifest").json()["name"] == "Nous"
+        assert client.get("/manifest.webmanifest").json()["name"] == "Henad"
         for size in (16, 32, 180, 192, 512):
             icon = client.get(f"/assets/brand/icon-{size}.png")
             assert icon.status_code == 200
@@ -1145,7 +1147,7 @@ class TestLunarEndpoints:
         assert page.status_code == 200
         html = page.text
         assert "API docs and examples" in html
-        assert "curl -sS https://nous.youneek.dev/health" in html
+        assert "curl -sS https://henad.youneek.dev/health" in html
         assert "/starters/weather/forecast" in html
         assert "/workspace/limits" in html
         assert "/agent/chat" in html
@@ -1155,7 +1157,7 @@ class TestLunarEndpoints:
         assert "Daily limit reached, back tomorrow." in html
         assert '"mode":"unhinged"' in html
         assert "/openapi.json" in html
-        assert "Nous Plus subscription" in html
+        assert "Henad Plus subscription" in html
         assert "lottery" not in html.lower()
         schema = client.get("/openapi.json")
         assert schema.status_code == 200

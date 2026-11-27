@@ -65,15 +65,16 @@ describe("TOTP", () => {
 });
 
 describe("passkeys", () => {
-  it("only offers passkeys on the nous hostnames", () => {
-    expect(rpIdFor(new URL("https://nous.youneek.dev/app"))).toBe("nous.youneek.dev");
-    expect(rpIdFor(new URL("https://nous.youneek.xyz/"))).toBe("nous.youneek.xyz");
+  it("only offers passkeys on the henad hostnames", () => {
+    expect(rpIdFor(new URL("https://henad.youneek.dev/app"))).toBe("youneek.dev");
+    expect(rpIdFor(new URL("https://henad.youneek.xyz/"))).toBe("youneek.xyz");
+    expect(rpIdFor(new URL("https://nous.youneek.dev/"))).toBeNull();
     expect(rpIdFor(new URL("https://forge.youneek.dev/"))).toBeNull();
     expect(rpIdFor(new URL("https://evil.example/"))).toBeNull();
   });
 
   it("registers an ES256 passkey and verifies a signed login", async () => {
-    const rpId = "nous.youneek.dev";
+    const rpId = "henad.youneek.dev";
     const origin = `https://${rpId}`;
     const pair = (await crypto.subtle.generateKey({ name: "ECDSA", namedCurve: "P-256" }, true, ["sign", "verify"])) as CryptoKeyPair;
     const jwk = (await crypto.subtle.exportKey("jwk", pair.publicKey)) as JsonWebKey;
@@ -140,13 +141,13 @@ describe("passkeys", () => {
 });
 
 describe("front door", () => {
-  it("301s forge hosts to nous with path and query kept", () => {
+  it("301s forge hosts to henad with path and query kept", () => {
     const moved = legacyRedirect(new Request("https://forge.youneek.dev/app?x=1"));
     expect(moved?.status).toBe(301);
-    expect(moved?.headers.get("Location")).toBe("https://nous.youneek.dev/app?x=1");
+    expect(moved?.headers.get("Location")).toBe("https://henad.youneek.dev/app?x=1");
     const xyz = legacyRedirect(new Request("https://forge.youneek.xyz/docs"));
-    expect(xyz?.headers.get("Location")).toBe("https://nous.youneek.xyz/docs");
-    expect(legacyRedirect(new Request("https://nous.youneek.dev/"))).toBeNull();
+    expect(xyz?.headers.get("Location")).toBe("https://henad.youneek.xyz/docs");
+    expect(legacyRedirect(new Request("https://henad.youneek.dev/"))).toBeNull();
     expect(legacyRedirect(new Request("https://forge.youneek.dev/voice/stripe/webhook", { method: "POST" }))).toBeNull();
   });
 

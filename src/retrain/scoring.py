@@ -99,7 +99,7 @@ def _predictor(checkpoint: Path, device: torch.device) -> Predictor:
     except (OSError, RuntimeError, ValueError) as exc:
         raise ScoreError(f"Could not read {checkpoint}: {exc}") from exc
     if not isinstance(ckpt, dict) or "model_state_dict" not in ckpt:
-        raise ScoreError(f"{checkpoint} is not a Nous checkpoint.")
+        raise ScoreError(f"{checkpoint} is not a Henad checkpoint.")
     model_cfg = ckpt.get("config")
     if not isinstance(model_cfg, dict):
         raise ScoreError(f"{checkpoint} is missing the training config.")
