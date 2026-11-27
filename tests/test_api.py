@@ -919,6 +919,18 @@ class TestForecastDashboard:
         assert 'id="gate-setup"' in html
         assert 'id="gate-recovery"' in html
         assert "<title>Nous" in html
+        assert "The architecture of understanding." in html
+        css = client.get("/assets/styles.css").text
+        # The public landing must paint before JS; hiding it on auth-pending
+        # left Safari and slow phones on a blank black page.
+        assert "auth-pending .landing," not in css
+        assert "auth-pending .app-shell" in css
+        assert "What do you want to understand?" in html
+        assert "Forecast anything. Just ask." not in html
+        assert "What can I help you forecast?" not in html
+        assert client.get("/manifest.webmanifest").json()["description"] == (
+            "The architecture of understanding."
+        )
         assert 'rel="manifest"' in html
         assert "/assets/brand/nous-s.webp" in html
         assert "/assets/brand/nous-o.webp" in html
@@ -966,10 +978,10 @@ class TestForecastDashboard:
         assert "Saved chats in the sidebar" in tools_js
         assert "Saved scenarios" in tools_js
         assert "Manage your own data series" in tools_js
-        assert "PCA / eigenvectors" in tools_js
-        assert "K-Means clustering" in tools_js
+        assert "What moves together" in tools_js
+        assert "Patterns and unusual points" in tools_js
         assert "Diffusion forecaster" in tools_js
-        assert "JEPA pretraining" in tools_js
+        assert "Learn from your series" in tools_js
         assert 'id: "ml-tools"' in tools_js
         ml_tools = tools_js.split('id: "ml-tools"', 1)[1][:280]
         assert 'status: "live"' in ml_tools

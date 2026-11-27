@@ -1304,6 +1304,9 @@ td {
   cursor: pointer;
   font-size: 0.95rem;
   font-family: inherit;
+  text-decoration: none;
+  -webkit-appearance: none;
+  appearance: none;
 }
 
 .btn-small {
@@ -1534,12 +1537,15 @@ select {
 
 /* Auth state: landing for visitors, a gate before the app, the app after. */
 body.auth-pending .app-shell,
-body.auth-pending .landing,
 body.auth-out .app-shell,
 body.gate-open .app-shell,
 body.gate-open .landing,
 body.auth-in .landing,
 body.auth-in .auth-gate {
+  display: none !important;
+}
+
+body.auth-pending:not(.gate-open) .auth-gate {
   display: none !important;
 }
 
@@ -1595,9 +1601,10 @@ body.auth-pending #talk-start-overlay {
   position: relative;
   min-height: 100vh;
   min-height: 100dvh;
+  min-height: -webkit-fill-available;
   display: flex;
   flex-direction: column;
-  padding: 18px clamp(16px, 4vw, 40px);
+  padding: max(18px, env(safe-area-inset-top, 0px)) clamp(16px, 4vw, 40px) max(18px, env(safe-area-inset-bottom, 0px));
 }
 
 .landing-top {
@@ -1643,10 +1650,53 @@ body.auth-pending #talk-start-overlay {
   line-height: 1;
 }
 
-.landing-tag {
+.landing-tag,
+.gate-tag,
+.about-tag,
+.docs-tag {
   margin: 0;
   color: var(--muted);
-  font-size: clamp(1.05rem, 2.4vw, 1.3rem);
+  font-family: var(--display);
+  font-style: italic;
+  font-weight: 400;
+  letter-spacing: 0.01em;
+}
+
+.landing-tag {
+  font-size: clamp(0.95rem, 2vw, 1.15rem);
+}
+
+.gate-tag {
+  margin: -2px 0 4px;
+  font-size: 0.95rem;
+}
+
+.about-tag {
+  font-size: 1.05rem;
+}
+
+.docs-tag {
+  font-size: 0.72rem;
+  line-height: 1.2;
+}
+
+.about-brand {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 4px 0 18px;
+}
+
+.about-brand .nous-wordmark {
+  font-size: 42px;
+}
+
+.brand-with-tag {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
 }
 
 .landing-cta {
@@ -2150,6 +2200,10 @@ body:not(.has-chat) #chat-log {
   display: block;
   margin-top: 4px;
   color: inherit;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 
 /* ---- Chat abilities: attached files and images Nous makes ---- */
 .file-attachment {
@@ -2199,6 +2253,149 @@ body:not(.has-chat) #chat-log {
   font-size: 0.85rem;
   color: inherit;
   opacity: 0.75;
+}
+
+/* Simple landing: logo, slogan, one composer, a few chips. */
+.landing-composer {
+  width: min(640px, 100%);
+  margin: 18px auto 0;
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  padding: 12px 12px 12px 18px;
+  border-radius: 26px;
+  border: 1px solid var(--border-strong);
+  background: var(--composer);
+  box-shadow: var(--shadow);
+}
+.landing-composer textarea {
+  flex: 1;
+  min-width: 0;
+  min-height: 28px;
+  max-height: 120px;
+  resize: none;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 1.05rem;
+  line-height: 1.4;
+  padding: 8px 0;
+}
+.landing-composer textarea:focus {
+  outline: none;
+}
+.landing-composer .send-btn {
+  width: 38px;
+  height: 38px;
+  min-width: 38px;
+  border-radius: 999px;
+  border: 0;
+  background: var(--text);
+  color: #0b0c0f;
+  font-size: 1.2rem;
+  font-weight: 700;
+  cursor: pointer;
+  display: inline-grid;
+  place-items: center;
+  padding: 0;
+}
+.landing-chips {
+  justify-content: center;
+  margin-top: 16px;
+}
+.landing-note {
+  margin: 22px 0 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+#tool-nav,
+#tools-menu-btn {
+  display: none !important;
+}
+
+.profile-menu {
+  position: relative;
+}
+.profile-menu-list {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: calc(100% + 6px);
+  display: flex;
+  flex-direction: column;
+  padding: 6px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--panel-solid);
+  box-shadow: var(--shadow);
+  z-index: 6;
+}
+.profile-menu-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: 0;
+  color: var(--text);
+  font: inherit;
+  font-weight: 600;
+  font-size: 0.92rem;
+  padding: 10px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.profile-menu-item:hover,
+.profile-menu-item:focus-visible {
+  background: var(--accent-soft);
+}
+.owner-settings {
+  margin: 12px 0;
+  text-align: left;
+}
+.owner-tool-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.owner-tool-list button {
+  text-align: left;
+}
+
+/* Black hole O: still when idle; slow swirl while thinking; pulse while talking. */
+.nous-wordmark .nous-o,
+.brand-mark {
+  transform-origin: 50% 50%;
+}
+@media (prefers-reduced-motion: no-preference) {
+  body.nous-thinking .nous-wordmark .nous-o,
+  body.nous-thinking .brand-mark {
+    animation: nous-swirl 10s linear infinite;
+    will-change: transform;
+  }
+  body.nous-talking .nous-wordmark .nous-o,
+  body.nous-talking .brand-mark {
+    transform: scale(var(--nous-pulse, 1.07));
+    transition: transform 80ms linear;
+    will-change: transform;
+  }
+  body.nous-talking.nous-talk-pulse .nous-wordmark .nous-o,
+  body.nous-talking.nous-talk-pulse .brand-mark {
+    animation: nous-pulse 0.85s ease-in-out infinite;
+  }
+}
+@keyframes nous-swirl {
+  to { transform: rotate(360deg); }
+}
+@keyframes nous-pulse {
+  50% { transform: scale(1.1); }
+}
+
+.about-say {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 0.85rem;
 }
 
 /* ---- Code blocks and the in-browser Python runner ---- */

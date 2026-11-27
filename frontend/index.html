@@ -2,21 +2,21 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Nous — forecast anything, just ask</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>Nous — The architecture of understanding</title>
     <meta
       name="description"
-      content="Nous forecasts your numbers, weather and markets, reads charts, runs what-if simulations, and talks back. Text chat is free."
+      content="The architecture of understanding. Forecasts, live weather and markets, chart reading, what-if simulations and voice. Text chat is free."
     />
     <meta name="application-name" content="Nous" />
     <meta name="apple-mobile-web-app-title" content="Nous" />
     <meta name="theme-color" content="#000000" />
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="Nous" />
-    <meta property="og:title" content="Nous — forecast anything, just ask" />
+    <meta property="og:title" content="Nous — The architecture of understanding" />
     <meta
       property="og:description"
-      content="Forecasts, live data, chart reading, what-if simulations and voice. Text chat is free."
+      content="The architecture of understanding."
     />
     <meta property="og:url" content="https://nous.youneek.dev/" />
     <meta property="og:image" content="https://nous.youneek.dev/assets/brand/nous-og.png" />
@@ -24,8 +24,8 @@
     <meta property="og:image:height" content="630" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:image" content="https://nous.youneek.dev/assets/brand/nous-og.png" />
-    <meta name="twitter:title" content="Nous" />
-    <meta name="twitter:description" content="Forecast anything. Just ask." />
+    <meta name="twitter:title" content="Nous — The architecture of understanding" />
+    <meta name="twitter:description" content="The architecture of understanding." />
     <link rel="icon" href="/favicon.ico" sizes="any" />
     <link rel="icon" href="/assets/brand/icon-32.png" sizes="32x32" type="image/png" />
     <link rel="icon" href="/assets/brand/icon-16.png" sizes="16x16" type="image/png" />
@@ -52,8 +52,6 @@
           <span class="nous-wordmark" role="img" aria-label="Nous"><span class="nou" aria-hidden="true">N</span><img class="nous-o" src="/assets/brand/nous-o.webp" alt="" aria-hidden="true" /><span class="nou" aria-hidden="true">U</span><img class="nous-s" src="/assets/brand/nous-s.webp" alt="" aria-hidden="true" /></span>
         </a>
         <nav class="landing-links" aria-label="Site">
-          <a href="#landing-more">Pricing</a>
-          <a href="/docs">API</a>
           <a href="/app" class="btn secondary btn-small" data-open-gate="login">Log in</a>
         </nav>
       </header>
@@ -61,26 +59,20 @@
         <h1 id="landing-title" class="landing-wordmark">
           <span class="nous-wordmark" role="img" aria-label="Nous"><span class="nou" aria-hidden="true">N</span><img class="nous-o" src="/assets/brand/nous-o.webp" alt="" aria-hidden="true" /><span class="nou" aria-hidden="true">U</span><img class="nous-s" src="/assets/brand/nous-s.webp" alt="" aria-hidden="true" /></span>
         </h1>
-        <p class="landing-tag">Forecast anything. Just ask.</p>
-        <div class="landing-cta">
-          <a href="/app" class="btn primary" id="open-app-btn" data-open-gate="signup">Open app</a>
-          <a href="/app" class="btn secondary" data-open-gate="login">Log in</a>
-        </div>
-        <ul class="landing-pills" aria-label="What it does">
-          <li>Forecasts</li>
-          <li>Live weather &amp; markets</li>
-          <li>Read charts</li>
-          <li>What-if sims</li>
-          <li>Talk</li>
-        </ul>
+        <p class="landing-tag">The architecture of understanding.</p>
+        <form id="landing-composer" class="landing-composer" action="/app">
+          <label class="visually-hidden" for="landing-input">What do you want to understand?</label>
+          <textarea id="landing-input" name="question" rows="1" placeholder="What do you want to understand?"></textarea>
+          <button class="send-btn" id="open-app-btn" type="submit" aria-label="Ask" title="Ask">↑</button>
+        </form>
+        <nav class="chip-row landing-chips" aria-label="Try asking">
+          <button class="chip" type="button" data-landing-q="What's the weather tomorrow?">Weather</button>
+          <button class="chip" type="button" data-landing-q="What's happening in the markets?">Markets</button>
+          <button class="chip" type="button" data-landing-action="image">A chart</button>
+          <button class="chip" type="button" data-landing-action="talk">Talk</button>
+        </nav>
+        <p class="landing-note" id="landing-more">Text chat is free.</p>
       </div>
-      <footer class="landing-more" id="landing-more">
-        <p><strong>Text chat is free.</strong> Voice comes with Nous Plus.</p>
-        <p>
-          <a href="/docs">API docs</a> ·
-          <a href="mailto:andrewgray@youneek.xyz">andrewgray@youneek.xyz</a>
-        </p>
-      </footer>
     </section>
 
     <section id="auth-gate" class="auth-gate" aria-labelledby="gate-title">
@@ -88,6 +80,7 @@
         <a class="brand brand-center" href="/" aria-label="Nous home">
           <span class="nous-wordmark gate-wordmark" role="img" aria-label="Nous"><span class="nou" aria-hidden="true">N</span><img class="nous-o" src="/assets/brand/nous-o.webp" alt="" aria-hidden="true" /><span class="nou" aria-hidden="true">U</span><img class="nous-s" src="/assets/brand/nous-s.webp" alt="" aria-hidden="true" /></span>
         </a>
+        <p class="gate-tag">The architecture of understanding.</p>
         <h1 id="gate-title" class="gate-title">Sign up or log in</h1>
         <p id="gate-error" class="gate-error" role="alert" hidden></p>
 
@@ -156,13 +149,13 @@
         type="button"
         aria-expanded="true"
         aria-controls="sidebar"
-        aria-label="Open tools sidebar"
+        aria-label="Open menu"
       >
         <span class="sidebar-toggle-icon" aria-hidden="true">☰</span>
         <span class="sidebar-toggle-label">Menu</span>
       </button>
 
-      <aside class="sidebar" id="sidebar" aria-label="Tools and chat history">
+      <aside class="sidebar" id="sidebar" aria-label="Chats">
         <div class="sidebar-top">
           <div class="sidebar-head">
             <a class="sidebar-logo" href="/" aria-label="Nous home">
@@ -193,7 +186,7 @@
           </label>
         </div>
 
-        <nav class="tool-nav" id="tool-nav" aria-label="Tools"></nav>
+        <nav class="tool-nav" id="tool-nav" aria-label="Tools" hidden></nav>
 
         <div class="history-block" aria-label="Chat history">
           <p class="sidebar-section-label">Chats</p>
@@ -204,14 +197,16 @@
 
         <div class="sidebar-foot">
           <p id="status-line" class="status-line"></p>
-          <button id="account-btn" class="btn secondary account-btn" type="button">
-            Sign in
-          </button>
-          <nav class="sidebar-foot-links" aria-label="About">
-            <button type="button" class="linklike sidebar-foot-link" data-view-open="about">About &amp; pricing</button>
-            <a class="sidebar-foot-link" href="/docs">API docs</a>
-            <a class="sidebar-foot-link" href="mailto:andrewgray@youneek.xyz">Contact</a>
-          </nav>
+          <div class="profile-menu">
+            <button id="account-btn" class="btn secondary account-btn" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="profile-menu">
+              Account
+            </button>
+            <div id="profile-menu" class="profile-menu-list" role="menu" hidden>
+              <button type="button" class="profile-menu-item" id="profile-settings" role="menuitem">Settings</button>
+              <button type="button" class="profile-menu-item" id="profile-about" data-view-open="about" role="menuitem">About</button>
+              <button type="button" class="profile-menu-item" id="profile-sign-out" role="menuitem">Sign out</button>
+            </div>
+          </div>
         </div>
       </aside>
 
@@ -227,29 +222,26 @@
           <div class="chat-stage" id="chat-stage">
             <div class="empty-greeting" id="empty-greeting">
               <img class="brand-mark" src="/assets/brand/icon-192.png" alt="" width="56" height="56" />
-              <p class="greeting-line" id="greeting-line">What can I help you forecast?</p>
+              <p class="greeting-line" id="greeting-line">What do you want to understand?</p>
             </div>
 
             <div id="chat-log" class="chat-log" aria-live="polite"></div>
 
-            <nav class="chip-row action-chips" id="suggestion-chips" aria-label="Quick actions">
+            <nav class="chip-row action-chips" id="suggestion-chips" aria-label="Try asking">
               <button class="chip" type="button" data-question="What will the weather be tomorrow?">
-                <span aria-hidden="true">☀️</span> Forecast weather
+                Weather
               </button>
               <button class="chip" type="button" data-action="simulator">
-                <span aria-hidden="true">🧪</span> Simulate what-if
+                What if
               </button>
               <button class="chip" type="button" data-action="image">
-                <span aria-hidden="true">📈</span> Upload a chart
+                A chart
               </button>
               <button class="chip" type="button" data-action="talk">
-                <span aria-hidden="true">🎙️</span> Talk
+                Talk
               </button>
-              <button class="chip" type="button" data-question="Train on my CSV">
-                <span aria-hidden="true">🏋️</span> Train
-              </button>
-              <button class="chip" type="button" data-action="unhinged">
-                <span aria-hidden="true">😈</span> Unhinged
+              <button class="chip" type="button" data-question="Train on my CSV" hidden>
+                Train on my CSV
               </button>
             </nav>
 
@@ -303,7 +295,7 @@
                   name="question"
                   rows="1"
                   autocomplete="off"
-                  placeholder="Ask anything"
+                  placeholder="What do you want to understand?"
                 ></textarea>
               </div>
               <div class="composer-toolbar">
@@ -371,6 +363,11 @@
           </div>
 
           <section class="tool-view about-view" id="view-about" data-tool-view="about" hidden>
+            <div class="about-brand">
+              <span class="nous-wordmark" role="img" aria-label="Nous"><span class="nou" aria-hidden="true">N</span><img class="nous-o" src="/assets/brand/nous-o.webp" alt="" aria-hidden="true" /><span class="nou" aria-hidden="true">U</span><img class="nous-s" src="/assets/brand/nous-s.webp" alt="" aria-hidden="true" /></span>
+              <p class="about-tag">The architecture of understanding.</p>
+              <p class="about-say">Say it “noose.”</p>
+            </div>
             <header class="tool-view-head">
               <h2>About Nous</h2>
               <button type="button" class="btn secondary back-to-chat" data-view="chat">Back to chat</button>
@@ -421,7 +418,7 @@
               </li>
               <li>
                 <strong>Backtested accuracy</strong>
-                versus simple baselines (MAE, RMSE, and more).
+                versus simple baselines.
               </li>
               <li>
                 <strong>Talk hands-free</strong>
@@ -478,11 +475,11 @@
           <!-- Tool panels (driven by TOOL_REGISTRY) -->
           <section class="tool-view" id="view-forecast" data-tool-view="forecast" hidden>
             <header class="tool-view-head">
-              <h2>Forecast</h2>
+              <h2>What do you want to understand?</h2>
               <button type="button" class="btn secondary back-to-chat" data-view="chat">Back to chat</button>
             </header>
             <p class="hint">
-              Ask for a starter series forecast in chat, or try a sample below.
+              Ask in chat, or try a sample below.
             </p>
             <div id="forecast-panel-actions" class="chip-row"></div>
           </section>
@@ -569,7 +566,7 @@
               <button type="button" class="btn secondary back-to-chat" data-view="chat">Back to chat</button>
             </header>
             <p class="hint">
-              Ask “how accurate is the weather model” in chat for backtested MAE/RMSE
+              Ask “how accurate is the weather model” in chat for a plain-English accuracy check
               versus simple baselines. Weather accuracy is reported in °F.
             </p>
             <div class="chip-row">
@@ -756,7 +753,7 @@
             </header>
             <p class="hint">
               Every prediction now includes a short plain-English why: recent trend,
-              seasonality when it shows up, and PCA drivers or K-Means regimes when
+              seasonality when it shows up, and the main drivers or repeating patterns when
               those analyses are available.
             </p>
             <div id="why-empty" class="hint">
@@ -783,16 +780,16 @@
 
           <section class="tool-view" id="view-pca" data-tool-view="pca" hidden>
             <header class="tool-view-head">
-              <h2>Column analysis (PCA)</h2>
+              <h2>What moves together</h2>
               <button type="button" class="btn secondary back-to-chat" data-view="chat">Back to chat</button>
             </header>
             <p class="hint">
               Upload a multi-column CSV (Train on my CSV) or ask chat “which columns
-              move together” for a signed-in dataset. PCA uses eigenvectors of the
+              move together” for a signed-in dataset. It looks at how columns vary together in the
               covariance matrix — no heavy training on the request path.
             </p>
             <div id="pca-empty" class="hint">
-              No PCA report yet. Upload a CSV with at least two numeric columns, or
+              No column report yet. Upload a CSV with at least two numeric columns, or
               ask in chat after a workspace upload.
             </div>
             <div id="pca-report" hidden>
@@ -846,12 +843,12 @@
 
           <section class="tool-view" id="view-jepa" data-tool-view="jepa" hidden>
             <header class="tool-view-head">
-              <h2>JEPA pretraining</h2>
+              <h2>Learn from your series</h2>
               <button type="button" class="btn secondary back-to-chat" data-view="chat">Back to chat</button>
             </header>
             <p class="hint">
               Mask spans, predict embeddings, then fine-tune a forecast head.
-              Compare holdout MAE against a small default transformer on the
+              Compare accuracy against a small default model on the
               shipped weather sample — no account required.
             </p>
             <div class="chip-row">
@@ -864,11 +861,11 @@
             <div id="jepa-report" hidden>
               <div class="table-wrap table-scroll">
                 <table>
-                  <caption class="visually-hidden">JEPA vs transformer MAE</caption>
+                  <caption class="visually-hidden">Learned model versus default model accuracy</caption>
                   <thead>
                     <tr>
                       <th scope="col">Model</th>
-                      <th scope="col">Holdout MAE</th>
+                      <th scope="col">Accuracy</th>
                     </tr>
                   </thead>
                   <tbody id="jepa-compare-body"></tbody>
@@ -1017,7 +1014,7 @@
               <button type="button" class="btn secondary back-to-chat" data-view="chat">Back to chat</button>
             </header>
             <p class="hint">
-              A small learned world model of one series: a PCA latent state, learned
+              A small learned world model of one series: a compact state, learned
               dynamics, and K-Means regimes (weather also gets its yearly cycle). It rolls
               128 futures forward and compares your scenarios to the baseline, using the
               same random draws so the gap comes from your events, not luck. Every run
@@ -1095,17 +1092,17 @@
 
           <section class="tool-view" id="view-world-encoder" data-tool-view="world-encoder" hidden>
             <header class="tool-view-head">
-              <h2>Self-supervised world model (JEPA)</h2>
+              <h2>Learn a picture of your series</h2>
               <button type="button" class="btn secondary back-to-chat" data-view="chat">Back to chat</button>
             </header>
             <p class="hint">
-              Nous can learn its own picture of a series without labels. A small JEPA
-              encoder studies a window of the past and learns to predict the
+              Nous can learn its own picture of a series without labels. A small model
+              studies a window of the past and learns to predict the
               <em>embedding</em> of the window a few steps later, not the raw numbers.
-              Those learned features join the PCA state of the world model. Nous trains
-              three JEPA encoders and averages them, so one lucky seed can’t decide.
-              It then picks an encoder on older validation windows (JEPA must win by at
-              least 5%) and grades both on the newest holdouts the pick never saw. The
+              Those learned features join the compact state of the world model. Nous trains
+              three small models and averages them, so one lucky run can’t decide.
+              It then picks a model on older data (the learned one must win by at
+              least 5%) and grades both on the newest data the pick never saw. The
               80% range is calibrated so it really covers about 80% in backtests. Runs on
               the CPU in a few seconds, with no extra AI calls.
             </p>
@@ -1127,19 +1124,19 @@
               </div>
               <label for="wenc-horizon">Steps to roll forward</label>
               <input id="wenc-horizon" name="horizon" type="number" value="14" min="1" max="60" />
-              <button id="wenc-run" class="btn primary btn-small" type="submit">Train JEPA &amp; compare</button>
+              <button id="wenc-run" class="btn primary btn-small" type="submit">Train and compare</button>
             </form>
             <p id="wenc-status" class="hint" aria-live="polite" hidden></p>
             <div id="wenc-result" hidden>
               <p id="wenc-verdict" class="pca-summary"></p>
               <div class="table-wrap table-scroll">
                 <table>
-                  <caption class="visually-hidden">Encoder backtest: persistence vs PCA vs JEPA</caption>
+                  <caption class="visually-hidden">Backtest: last-value versus compact versus learned</caption>
                   <thead>
                     <tr>
-                      <th scope="col">Encoder</th>
-                      <th scope="col">Validation MAE (picks)</th>
-                      <th scope="col">Holdout MAE (graded)</th>
+                      <th scope="col">Model</th>
+                      <th scope="col">Accuracy on older data</th>
+                      <th scope="col">Accuracy on new data</th>
                       <th scope="col">In 80% range: raw → calibrated</th>
                     </tr>
                   </thead>
@@ -1156,7 +1153,7 @@
                 type="button"
                 data-question="Use the self-supervised JEPA world model on the moon illumination series: which encoder wins the backtest, and what does the next 14 days look like?"
               >
-                Ask chat: JEPA vs PCA on the moon
+                Ask chat: compare learned models on the moon
               </button>
             </div>
           </section>
@@ -1182,13 +1179,20 @@
         aria-labelledby="sign-in-heading"
       >
         <div class="modal-head">
-          <h2 id="sign-in-heading">Account</h2>
+          <h2 id="sign-in-heading">Settings</h2>
           <button id="modal-close" class="modal-close" type="button" aria-label="Close">
             ✕
           </button>
         </div>
         <div id="account-signed-in" class="modal-body" hidden>
           <p id="account-label"></p>
+          <button id="settings-voice-btn" class="btn secondary" type="button">Voice and plan</button>
+          <button id="settings-about-btn" class="btn secondary" type="button" data-view-open="about">About</button>
+          <div id="owner-settings" class="owner-settings" hidden>
+            <h3>Owner tools</h3>
+            <p class="hint">Only you can see this.</p>
+            <div id="owner-tool-list" class="owner-tool-list"></div>
+          </div>
           <button id="sign-out-btn" class="btn secondary" type="button">
             Sign out
           </button>

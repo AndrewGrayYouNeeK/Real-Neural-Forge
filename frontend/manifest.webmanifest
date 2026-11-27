@@ -1,7 +1,7 @@
 {
   "name": "Nous",
   "short_name": "Nous",
-  "description": "Forecast anything. Just ask.",
+  "description": "The architecture of understanding.",
   "start_url": "/app",
   "scope": "/",
   "display": "standalone",
