@@ -83,6 +83,9 @@ limits:
 # a $9.00 subscription.
 voice:
   voice_id: QMnwdN2oOwNXPcl9oXIl
+  # Second choice in the picker: ElevenLabs premade "Sarah", shown as "Ivy".
+  alt_voice_id: EXAVITQu4vr4xnSDxMaL
+  alt_voice_name: Ivy
   model_id: eleven_multilingual_v2
   stability: 0.7
   similarity_boost: 0.75

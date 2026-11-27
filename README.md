@@ -492,7 +492,7 @@ YouNeeK Time is **100 units / 100 minutes / 100 seconds** (not App Store 10/10/1
 ### GQ voice
 
 - `GET /voice/status` — balance, the Nous Plus plan and subscription, today's site-wide voice usage, and recent usage. Reports `signed_in: false` with a sign-up prompt without a session.
-- `POST /voice/speak` — `{"text": "..."}` → `audio/mpeg`. `401` signed out, `402` out of voice, `422` empty or too long, `429` daily site cap reached (free tier only), `502`/`503` voice unavailable. Identical text replays from cache without spending.
+- `POST /voice/speak` — `{"text": "...", "voice": "gq" | "female"}` → `audio/mpeg`. `voice` is optional and defaults to GQ; the second voice is ElevenLabs' premade "Sarah", shown as "Ivy" (`voice.alt_voice_id` / `voice.alt_voice_name` in `config.yaml`). Both voices draw on the same character balance, and an unknown voice is a `422`. `401` signed out, `402` out of voice, `422` empty or too long, `429` daily site cap reached (free tier only), `502`/`503` voice unavailable. Identical text replays from cache without spending.
 - `POST /voice/checkout` — no body → a Stripe Checkout URL for the one Nous Plus subscription, or `{"available": false}` ("coming soon") when Stripe is not configured. `409` when already subscribed.
 - `POST /voice/sync` — `{"session_id": "cs_..."}` → the new status. Confirms the buyer's own completed checkout so voice is on the moment they return.
 - `POST /voice/portal` — a Stripe customer-portal URL to update the card or cancel.

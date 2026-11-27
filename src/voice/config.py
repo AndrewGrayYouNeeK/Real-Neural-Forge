@@ -10,6 +10,14 @@ from typing import Any
 # Andrew's professional voice clone, "GQ", on ElevenLabs.
 DEFAULT_VOICE_ID = "QMnwdN2oOwNXPcl9oXIl"
 
+# The second choice: ElevenLabs' premade "Sarah" (warm, clear, natural American
+# female). Premade voices work on any plan, so this adds no ElevenLabs cost.
+# It is shown to people as "Ivy". Both voices share the same character quota.
+DEFAULT_ALT_VOICE_ID = "EXAVITQu4vr4xnSDxMaL"
+DEFAULT_ALT_VOICE_NAME = "Ivy"
+GQ_KEY = "gq"
+ALT_KEY = "female"
+
 VOICE_ID_ENV = "NEURAL_FORGE_VOICE_ID"
 FREE_CHARS_ENV = "NEURAL_FORGE_VOICE_FREE_CHARS"
 MAX_CHARS_ENV = "NEURAL_FORGE_VOICE_MAX_CHARS"
@@ -83,6 +91,8 @@ class VoiceConfig:
     """Resolved GQ voice limits and catalogue."""
 
     voice_id: str = DEFAULT_VOICE_ID
+    alt_voice_id: str = DEFAULT_ALT_VOICE_ID
+    alt_voice_name: str = DEFAULT_ALT_VOICE_NAME
     model_id: str = "eleven_multilingual_v2"
     free_chars: int = 5_000
     max_chars_per_request: int = 2_000
@@ -91,9 +101,25 @@ class VoiceConfig:
     settings: VoiceSettings = VoiceSettings()
     apply_text_normalization: str = "on"
 
+    def choices(self) -> list[dict[str, str]]:
+        """The voices a person can pick from. GQ is always first, the default."""
+        return [
+            {"key": GQ_KEY, "name": "GQ"},
+            {"key": ALT_KEY, "name": self.alt_voice_name},
+        ]
+
+    def voice_id_for(self, key: str | None) -> str | None:
+        """ElevenLabs voice id for a picker key, or None when the key is unknown."""
+        if key is None or key == "" or key == GQ_KEY:
+            return self.voice_id
+        if key == ALT_KEY:
+            return self.alt_voice_id
+        return None
+
     def as_dict(self) -> dict[str, Any]:
         return {
             "voice_id": self.voice_id,
+            "alt_voice_id": self.alt_voice_id,
             "free_chars": self.free_chars,
             "max_chars_per_request": self.max_chars_per_request,
             "daily_char_limit": self.daily_char_limit,
@@ -295,12 +321,22 @@ def load_voice_config(config: dict[str, Any] | None = None) -> VoiceConfig:
     env_voice_id = os.environ.get(VOICE_ID_ENV, "").strip()
     if env_voice_id:
         voice_id = env_voice_id
+    alt_voice_id = (
+        str(section.get("alt_voice_id", DEFAULT_ALT_VOICE_ID)).strip()
+        or DEFAULT_ALT_VOICE_ID
+    )
+    alt_voice_name = (
+        str(section.get("alt_voice_name", DEFAULT_ALT_VOICE_NAME)).strip()
+        or DEFAULT_ALT_VOICE_NAME
+    )
     model_id = str(section.get("model_id", "eleven_multilingual_v2")).strip()
     normalization = str(section.get("apply_text_normalization", "on")).strip().lower()
     if normalization not in {"on", "off", "auto"}:
         raise ValueError("voice.apply_text_normalization must be on, off, or auto.")
     return VoiceConfig(
         voice_id=voice_id,
+        alt_voice_id=alt_voice_id,
+        alt_voice_name=alt_voice_name,
         model_id=model_id or "eleven_multilingual_v2",
         free_chars=_int_value("free_chars", section.get("free_chars", 5_000), 0),
         max_chars_per_request=_int_value(
