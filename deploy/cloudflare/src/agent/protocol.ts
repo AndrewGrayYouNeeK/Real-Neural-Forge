@@ -366,6 +366,11 @@ export function collectToolCalls(result: unknown, text: string | null): ParsedTo
   return [];
 }
 
+/** The product is Nous. If the model slips and uses the old name, say Nous instead. */
+export function sayNous(text: string): string {
+  return text.replace(/\b(?:Real\s+)?Neural\s+Forge\b/gi, "Nous");
+}
+
 const TOOL_JSON_LINE =
   /^\s*\{[\s\S]*"(?:tool|name|tool_calls)"\s*:[\s\S]*\}\s*$/;
 
@@ -383,6 +388,7 @@ export function sanitizeAgentAnswer(text: string): string {
     "",
   );
   value = value.replace(/\bforecast\s+failed\s*:\s*[^\n]*/gi, "");
+  value = sayNous(value);
   return stripLeadingPlanning(tidyAnswerWhitespace(value));
 }
 
