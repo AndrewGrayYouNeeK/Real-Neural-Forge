@@ -1046,6 +1046,32 @@ body.has-chat #suggestion-chips {
   font-size: 0.95rem;
 }
 
+.voice-picker {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  margin: 4px 0 8px;
+}
+
+.voice-picker-option {
+  min-width: 92px;
+  min-height: 40px;
+  padding: 8px 18px;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+}
+
+.voice-picker-option[aria-checked="true"] {
+  border-color: transparent;
+  background: var(--accent);
+  color: #0b0c0f;
+  font-weight: 700;
+}
+
 .composer-row textarea,
 .chat-form input,
 .chat-form textarea {

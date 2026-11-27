@@ -150,7 +150,7 @@ describe("AI quota", () => {
       expect(text).toContain("minors");
       expect(text).toContain("illegal instructions");
     }
-    expect(SYSTEM_PROMPT.toLowerCase()).toContain("witty");
+    expect(SYSTEM_PROMPT.toLowerCase()).toContain("warm");
     expect(SYSTEM_PROMPT.toLowerCase()).toContain("dry humor");
     expect(SYSTEM_PROMPT.toLowerCase()).toContain("answer first");
     expect(SYSTEM_PROMPT.toLowerCase()).toContain("answer exactly what was asked");
