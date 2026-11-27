@@ -112,6 +112,20 @@ describe("web_search", () => {
     expect(collectSources([{ ok: true, name: "web_search", data }]).length).toBe(results.length);
   });
 
+  it("reads the top news story so answers have real details", async () => {
+    const article = `<html><head><title>Zelda hits Tampa</title></head><body><article><p>${"Hurricane Zelda came ashore near Tampa with 120 mph winds, officials said on Wednesday. ".repeat(6)}</p></article></body></html>`;
+    const { fetcher } = fakeFetch([
+      [/apnews\.com/, article],
+      [/action=parse.*2026%20November%2025/, { parse: { wikitext: CE_WIKITEXT } }],
+      [/action=parse/, { parse: { wikitext: "" } }],
+      [/list=search/, { query: { search: [] } }],
+    ]);
+    const data = await runWebSearch(ctx({ fetcher }), { query: "hurricane zelda", recent: true });
+    const story = data.top_story as { url: string; text: string };
+    expect(story.url).toBe("https://apnews.com/article/zelda");
+    expect(story.text).toContain("120 mph winds");
+  });
+
   it("caches repeat searches", async () => {
     const { fetcher, calls } = fakeFetch([[/list=search/, { query: { search: [{ title: "Ada Lovelace", snippet: "math" }] } }]]);
     await runWebSearch(ctx({ fetcher }), { query: "Ada Lovelace" });

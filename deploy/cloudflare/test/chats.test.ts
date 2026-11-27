@@ -138,3 +138,13 @@ describe("persistent chat threads", () => {
     expect(stranger.id).not.toBe(first.id);
   });
 });
+
+import { normalizeChatContent as keepLines } from "../src/agent/chats";
+
+describe("saved chat text", () => {
+  it("keeps line breaks and indentation so code blocks survive a reopened chat", () => {
+    const text = "Here:\r\n```python\nfor i in range(3):\n    print(i)   \n```\n\n\n\nDone.";
+    expect(keepLines(text)).toBe("Here:\n```python\nfor i in range(3):\n    print(i)\n```\n\nDone.");
+    expect(keepLines("   ")).toBeNull();
+  });
+});

@@ -163,3 +163,44 @@ describe("agent turns", () => {
     expect(result.sources?.[0]).toEqual({ title: "AP", url: "https://apnews.com/article/zelda" });
   });
 });
+
+describe("knowledge fallback", () => {
+  it("searches instead of giving up when the model returns nothing for a factual question", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url.includes("list=search")) {
+          return Response.json({
+            query: { search: [{ title: "Voynich manuscript", snippet: "carbon-dated to the early 15th century (1404–1438)" }] },
+          });
+        }
+        return Response.json({ parse: { wikitext: "" } });
+      }),
+    );
+    let calls = 0;
+    const ai = {
+      async run(_model: string, inputs: Record<string, unknown>) {
+        calls += 1;
+        const parts = (inputs.input || inputs.messages) as { content: string }[];
+        const text = parts.map((part) => part.content).join("\n");
+        if (!text.includes("Tool result for web_search")) return { response: "" };
+        return {
+          response:
+            "The vellum was carbon-dated to 1404–1438 ([Wikipedia](https://en.wikipedia.org/wiki/Voynich_manuscript)).",
+        };
+      },
+    };
+    const result = await runAgentTurn("What year was the Voynich manuscript carbon-dated to?", "normal", [], {
+      ai,
+      db: openDb,
+      ip: "1.2.3.4",
+      owner: false,
+      toolContext: toolContext(),
+    });
+    expect(calls).toBeGreaterThan(1);
+    expect(result.toolsUsed).toContain("web_search");
+    expect(result.text).toContain("1404");
+    expect(result.text).not.toContain("could not finish");
+  });
+});
